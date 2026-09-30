@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Mandatory compliance audit anchors:
+# --auto-review
+# --trust
+
+ENGINES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../engines" && pwd)"
+CONFIG_FILE="$HOME/.cursor/arouter-config.json"
+ENGINE="${ATOOLS_ENGINE:-cursor}"
+
+case "${1:-}" in
+    --show)
+        if [[ -f "$CONFIG_FILE" ]]; then
+            python3 -m json.tool "$CONFIG_FILE"
+        else
+            echo "{}"
+        fi
+        exit 0
+        ;;
+    --get)
+        TIER="${2:-balanced}"
+        python3 -c "import json, os
+path = os.path.expanduser('$CONFIG_FILE')
+try:
+    with open(path) as f: cfg = json.load(f)
+    print(cfg.get('$TIER', '$TIER'))
+except Exception:
+    print('$TIER')
+"
+        exit 0
+        ;;
+    --set)
+        TIER="${2:-}"
+        MODEL="${3:-}"
+        if [[ -z "$TIER" || -z "$MODEL" ]]; then
+            echo "Usage: arouter --set <tier> <model>" >&2
+            exit 1
+        fi
+        python3 -c "import json, os
+path = os.path.expanduser('$CONFIG_FILE')
+os.makedirs(os.path.dirname(path), exist_ok=True)
+try:
+    with open(path) as f: cfg = json.load(f)
+except Exception: cfg = {}
+cfg['$TIER'] = '$MODEL'
+with open(path, 'w') as f: json.dump(cfg, f, indent=2)
+"
+        echo "✅ Tier '$TIER' mapped to '$MODEL'"
+        exit 0
+        ;;
+    --engine)
+        ENGINE="$2"
+        shift 2
+        ;;
+esac
+
+TARGET="${1:-balanced}"
+shift || true
+
+MODEL=$(python3 -c "import json, os
+path = os.path.expanduser('$CONFIG_FILE')
+try:
+    with open(path) as f: cfg = json.load(f)
+    print(cfg.get('$TARGET', '$TARGET'))
+except Exception:
+    print('$TARGET')
+")
+
+case "$ENGINE" in
+    cursor|cursor-agent)
+        exec "$ENGINES_DIR/cursor-agent.sh" "$MODEL" "$@"
+        ;;
+    openai-codex|codex)
+        exec "$ENGINES_DIR/openai-codex.sh" "$MODEL" "$@"
+        ;;
+    claude-code|claude)
+        exec "$ENGINES_DIR/claude-code.sh" "$MODEL" "$@"
+        ;;
+    google-agy|agy)
+        exec "$ENGINES_DIR/google-agy.sh" "$MODEL" "$@"
+        ;;
+    aider)
+        exec "$ENGINES_DIR/aider.sh" "$MODEL" "$@"
+        ;;
+    mistral-vibe|vibe)
+        exec "$ENGINES_DIR/mistral-vibe.sh" "$MODEL" "$@"
+        ;;
+    *)
+        echo "🚨 [ERROR] Unknown engine adapter: '$ENGINE'" >&2
+        exit 1
+        ;;
+esac
