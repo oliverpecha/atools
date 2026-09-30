@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
+if [[ "$CURRENT_BRANCH" == "main" || "$CURRENT_BRANCH" == "master" || ! "$CURRENT_BRANCH" =~ ^wip/ ]]; then
+  echo "🚨 [BLOCKED] Commits to '$CURRENT_BRANCH' are prohibited by global policy."
+  echo "   All agent work must occur on a branch prefixed with 'wip/' (e.g., git checkout -b wip/<task>)."
+  echo "   Humans may override with: git commit --no-verify -m '...'"
+  exit 1
+fi
+
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || true)
+if [[ -n "$GIT_DIR" && -x "$GIT_DIR/hooks/pre-commit.local" ]]; then
+  "$GIT_DIR/hooks/pre-commit.local" "$@"
+fi
