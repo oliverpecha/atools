@@ -1,0 +1,7 @@
+# Ephemeral proof logs & execution traces
+proof/out/
+*.log
+
+# Cache artifacts
+__pycache__/
+*.pyc
