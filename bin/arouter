@@ -5,7 +5,15 @@ set -euo pipefail
 # --auto-review
 # --trust
 
-ENGINES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../engines" && pwd)"
+# Canonical symlink resolution (portable Linux & macOS)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+REPO_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+ENGINES_DIR="$REPO_DIR/engines"
 CONFIG_FILE="$HOME/.cursor/arouter-config.json"
 ENGINE="${ATOOLS_ENGINE:-cursor}"
 
