@@ -5,7 +5,6 @@ set -euo pipefail
 # --auto-review
 # --trust
 
-# Canonical symlink resolution (portable Linux & macOS)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
     DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
@@ -16,15 +15,18 @@ REPO_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
 ENGINES_DIR="$REPO_DIR/engines"
 CONFIG_FILE="$HOME/.cursor/arouter-config.json"
 ENGINE="${ATOOLS_ENGINE:-cursor}"
+export ATOOLS_CONFIG="$CONFIG_FILE"
+
+if [[ $# -eq 0 ]]; then
+    exec python3 "$REPO_DIR/src/tier_router.py"
+fi
 
 case "${1:-}" in
+    --help|-h)
+        exec python3 "$REPO_DIR/src/tier_router.py" --help
+        ;;
     --show)
-        if [[ -f "$CONFIG_FILE" ]]; then
-            python3 -m json.tool "$CONFIG_FILE"
-        else
-            echo "{}"
-        fi
-        exit 0
+        exec python3 "$REPO_DIR/src/tier_router.py" --show
         ;;
     --get)
         TIER="${2:-balanced}"
@@ -34,8 +36,7 @@ try:
     with open(path) as f: cfg = json.load(f)
     print(cfg.get('$TIER', '$TIER'))
 except Exception:
-    print('$TIER')
-"
+    print('$TIER')"
         exit 0
         ;;
     --set)
@@ -52,19 +53,69 @@ try:
     with open(path) as f: cfg = json.load(f)
 except Exception: cfg = {}
 cfg['$TIER'] = '$MODEL'
-with open(path, 'w') as f: json.dump(cfg, f, indent=2)
-"
+with open(path, 'w') as f: json.dump(cfg, f, indent=2)"
         echo "✅ Tier '$TIER' mapped to '$MODEL'"
         exit 0
         ;;
-    --engine)
-        ENGINE="$2"
-        shift 2
-        ;;
 esac
 
-TARGET="${1:-balanced}"
-shift || true
+WATCHDOG_TIMEOUT="${ATOOLS_TIMEOUT:-12m}"
+KILL_GRACE="${ATOOLS_KILL_GRACE:-3s}"
+
+parse_duration() {
+    local raw="$1"
+    if [[ "$raw" =~ ^[0-9]+$ ]]; then
+        echo "${raw}m"
+        return
+    fi
+    if [[ "$raw" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
+        echo "$raw"
+        return
+    fi
+    local total=0 matched=0
+    if [[ "$raw" =~ ([0-9]+)d ]]; then total=$(( total + BASH_REMATCH[1] * 86400 )); matched=1; fi
+    if [[ "$raw" =~ ([0-9]+)h ]]; then total=$(( total + BASH_REMATCH[1] * 3600 )); matched=1; fi
+    if [[ "$raw" =~ ([0-9]+)m ]]; then total=$(( total + BASH_REMATCH[1] * 60 )); matched=1; fi
+    if [[ "$raw" =~ ([0-9]+)s ]]; then total=$(( total + BASH_REMATCH[1] )); matched=1; fi
+    if [[ $matched -eq 1 ]]; then
+        echo "${total}s"
+        return
+    fi
+    echo "$raw"
+}
+
+FILTERED_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t|--timeout)
+            WATCHDOG_TIMEOUT=$(parse_duration "$2")
+            shift 2
+            ;;
+        --timeout=*)
+            WATCHDOG_TIMEOUT=$(parse_duration "${1#*=}")
+            shift
+            ;;
+        --engine)
+            ENGINE="$2"
+            shift 2
+            ;;
+        --engine=*)
+            ENGINE="${1#*=}"
+            shift
+            ;;
+        *)
+            FILTERED_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+TARGET="${FILTERED_ARGS[0]:-balanced}"
+if [[ ${#FILTERED_ARGS[@]} -gt 1 ]]; then
+    PROMPT_ARGS=("${FILTERED_ARGS[@]:1}")
+else
+    PROMPT_ARGS=()
+fi
 
 MODEL=$(python3 -c "import json, os
 path = os.path.expanduser('$CONFIG_FILE')
@@ -72,30 +123,61 @@ try:
     with open(path) as f: cfg = json.load(f)
     print(cfg.get('$TARGET', '$TARGET'))
 except Exception:
-    print('$TARGET')
-")
+    print('$TARGET')")
+
+PIPED_INPUT=""
+if [[ ! -t 0 ]]; then
+    PIPED_INPUT=$(cat)
+fi
+
+run_supervised() {
+    local engine_script="$1"
+    shift
+    local ec=0
+
+    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" ]]; then
+        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE)"
+    else
+        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: off"
+    fi
+
+    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" && -x /usr/bin/timeout ]]; then
+        set +e
+        /usr/bin/timeout --foreground -k "$KILL_GRACE" "$WATCHDOG_TIMEOUT" "$engine_script" "$@"
+        ec=$?
+        set -e
+        if [[ $ec -eq 124 || $ec -eq 137 ]]; then
+            echo >&2 ""
+            echo >&2 "🚨 [TIMEOUT] Execution exceeded watchdog limit of $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE) and was terminated (exit $ec)."
+        fi
+        exit $ec
+    else
+        exec "$engine_script" "$@"
+    fi
+}
+
+DISPATCH_ARGS=("$MODEL")
+if [[ -n "$PIPED_INPUT" ]]; then
+    if [[ ${#PROMPT_ARGS[@]} -gt 0 ]]; then
+        USER_PROMPT="${PROMPT_ARGS[*]}
+
+Context / Input:
+$PIPED_INPUT"
+    else
+        USER_PROMPT="Context / Input:
+$PIPED_INPUT"
+    fi
+    DISPATCH_ARGS+=("$USER_PROMPT")
+else
+    DISPATCH_ARGS+=("${PROMPT_ARGS[@]}")
+fi
 
 case "$ENGINE" in
-    cursor|cursor-agent)
-        exec "$ENGINES_DIR/cursor-agent.sh" "$MODEL" "$@"
-        ;;
-    openai-codex|codex)
-        exec "$ENGINES_DIR/openai-codex.sh" "$MODEL" "$@"
-        ;;
-    claude-code|claude)
-        exec "$ENGINES_DIR/claude-code.sh" "$MODEL" "$@"
-        ;;
-    google-agy|agy)
-        exec "$ENGINES_DIR/google-agy.sh" "$MODEL" "$@"
-        ;;
-    aider)
-        exec "$ENGINES_DIR/aider.sh" "$MODEL" "$@"
-        ;;
-    mistral-vibe|vibe)
-        exec "$ENGINES_DIR/mistral-vibe.sh" "$MODEL" "$@"
-        ;;
-    *)
-        echo "🚨 [ERROR] Unknown engine adapter: '$ENGINE'" >&2
-        exit 1
-        ;;
+    cursor|cursor-agent) run_supervised "$ENGINES_DIR/cursor-agent.sh" "${DISPATCH_ARGS[@]}" ;;
+    openai-codex|codex)   run_supervised "$ENGINES_DIR/openai-codex.sh" "${DISPATCH_ARGS[@]}" ;;
+    claude-code|claude)   run_supervised "$ENGINES_DIR/claude-code.sh" "${DISPATCH_ARGS[@]}" ;;
+    google-agy|agy)       run_supervised "$ENGINES_DIR/google-agy.sh" "${DISPATCH_ARGS[@]}" ;;
+    aider)                run_supervised "$ENGINES_DIR/aider.sh" "${DISPATCH_ARGS[@]}" ;;
+    mistral-vibe|vibe)    run_supervised "$ENGINES_DIR/mistral-vibe.sh" "${DISPATCH_ARGS[@]}" ;;
+    *) echo "🚨 [ERROR] Unknown engine adapter: '$ENGINE'" >&2; exit 1 ;;
 esac
