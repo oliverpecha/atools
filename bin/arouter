@@ -52,6 +52,14 @@ Configuration Commands:
 EOF
 }
 
+# Global help interception across any flag position
+for arg in "$@"; do
+    if [[ "$arg" == "--help" || "$arg" == "-h" || "$arg" == "help" ]]; then
+        show_help
+        exit 0
+    fi
+done
+
 if [[ $# -eq 0 ]]; then
     exec python3 -m router.cli
 fi

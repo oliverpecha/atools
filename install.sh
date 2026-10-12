@@ -20,6 +20,22 @@ $SUDO ln -sf "$ROOT_DIR/bin/arouter" /usr/local/bin/arouter
 for tier in acheap abalanced asmart; do
     $SUDO tee "/usr/local/bin/$tier" >/dev/null <<EOF
 #!/usr/bin/env bash
+for arg in "\$@"; do
+    if [[ "\$arg" == "--help" || "\$arg" == "-h" || "\$arg" == "help" ]]; then
+        echo "CURSOR TIER WRAPPER: $tier"
+        echo "======================================================================"
+        echo "Default Tier : ${tier#a}"
+        echo "Usage        : $tier [options] [\"prompt...\"]"
+        echo ""
+        echo "Examples:"
+        echo "  $tier \"Explain this module\""
+        echo "  $tier -d -n my-task -t 30m \"Run test suites and fix regressions\""
+        echo "  git diff | $tier \"Review staged changes\""
+        echo "======================================================================"
+        echo ""
+        exec /usr/local/bin/arouter --help
+    fi
+done
 exec /usr/local/bin/arouter "${tier#a}" "\$@"
 EOF
     $SUDO chmod +x "/usr/local/bin/$tier"

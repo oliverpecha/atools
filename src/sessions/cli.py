@@ -635,9 +635,47 @@ def interactive_explorer() -> int:
         return 0
 
 
+def print_sessions_help() -> None:
+    help_text = """
+CURSOR AGENT SESSIONS (asessions) - Help & Telemetry Reference
+======================================================================
+Usage: asessions [options]
+       asessions <session_id | row_#> [--summary]
+       asessions rm [-f] [-n] <session_id | row_#> [session_id...]
+
+Commands & Modes:
+  asessions                     Launch interactive workspace explorer
+  asessions --list, -l          Display static session history table
+  asessions <id | #>            View full formatted dialogue & tool calls
+  asessions <id | #> --summary  View metadata, duration, and token economics
+  asessions rm <id | #...>      Delete session transcripts and sqlite records
+  asessions --help, -h          Show this help overview
+
+Interactive Explorer Controls:
+  [Enter] / [o]                 Open full session transcript
+  [s]                           Toggle between compact (5 runs) & full view
+  [d]                           Delete highlighted session (with confirmation)
+  [q] / [Ctrl+C]                Quit explorer and return to shell prompt
+
+Options:
+  -f, --force                   Bypass confirmation prompt on delete
+  -n, --dry-run                 Preview files to be deleted without removing
+======================================================================
+"""
+    print(help_text.strip())
+
+
 def main() -> None:
     try:
         args = sys.argv[1:]
+        if any(a.lower() in ("--help", "-h", "help") for a in args):
+            print_sessions_help()
+            sys.exit(0)
+
+        if any(a.lower() in ("--list", "-l", "list") for a in args):
+            list_sessions()
+            sys.exit(0)
+
         if not args:
             if sys.stdin.isatty() and sys.stdout.isatty():
                 sys.exit(interactive_explorer())
