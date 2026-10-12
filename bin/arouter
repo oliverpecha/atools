@@ -16,17 +16,70 @@ ENGINES_DIR="$REPO_DIR/engines"
 CONFIG_FILE="$HOME/.cursor/arouter-config.json"
 ENGINE="${ATOOLS_ENGINE:-cursor}"
 export ATOOLS_CONFIG="$CONFIG_FILE"
+export PYTHONPATH="$REPO_DIR/src:${PYTHONPATH:-}"
+
+show_help() {
+    cat <<'EOF'
+CURSOR AGENT ROUTER (arouter) - Help & Reference
+======================================================================
+Usage: arouter [options] [run] [tier] [prompt...]
+       arouter <command> [args...]
+
+Tier resolution profiles:
+  cheap       Fast, low-cost model for routine edits
+  balanced    Standard model for multi-file work and debugging
+  smart       Frontier model for multi-file refactoring and architecture
+  auto        Automatic tier selection
+
+Process Management Commands:
+  ps, list              List running background agent sessions
+  attach <session>      Attach interactively to a running agent session (PTY)
+  logs <session> [-f]   View or live-tail session log file
+  kill <session>        Terminate an active agent session and clean up
+
+Execution Options:
+  -d, --detach          Launch run inside headless tmux session
+  -n, --name <tag>      Session identifier name (default: arun-<tier>-<timestamp>)
+  -t, --timeout <dur>   Watchdog timeout limit (e.g. 5s, 12m, 1h; default: 12m)
+  --engine <adapter>    Engine adapter (cursor, codex, claude, agy, aider, vibe)
+
+Configuration Commands:
+  --show                Show current tier mappings
+  --get [tier]          Print model mapped to tier
+  --set <tier> <model>  Map tier to model
+  -h, --help            Show this help message
+======================================================================
+EOF
+}
 
 if [[ $# -eq 0 ]]; then
-    exec python3 "$REPO_DIR/src/tier_router.py"
+    exec python3 -m router.cli
 fi
 
 case "${1:-}" in
     --help|-h)
-        exec python3 "$REPO_DIR/src/tier_router.py" --help
+        show_help
+        exit 0
+        ;;
+    ps|list)
+        shift
+        exec python3 -m router.cli ps "$@"
+        ;;
+    attach)
+        shift
+        exec python3 -m router.cli attach "$@"
+        ;;
+    logs)
+        shift
+        exec python3 -m router.cli logs "$@"
+        ;;
+    kill)
+        shift
+        exec python3 -m router.cli kill "$@"
         ;;
     --show)
-        exec python3 "$REPO_DIR/src/tier_router.py" --show
+        shift
+        exec python3 -m router.cli --show "$@"
         ;;
     --get)
         TIER="${2:-balanced}"
@@ -84,9 +137,24 @@ parse_duration() {
     echo "$raw"
 }
 
+DETACH=0
+SESSION_NAME=""
 FILTERED_ARGS=()
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -d|--detach)
+            DETACH=1
+            shift
+            ;;
+        -n|--name)
+            SESSION_NAME="$2"
+            shift 2
+            ;;
+        --name=*)
+            SESSION_NAME="${1#*=}"
+            shift
+            ;;
         -t|--timeout)
             WATCHDOG_TIMEOUT=$(parse_duration "$2")
             shift 2
@@ -110,6 +178,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ ${#FILTERED_ARGS[@]} -gt 0 && "${FILTERED_ARGS[0]}" == "run" ]]; then
+    FILTERED_ARGS=("${FILTERED_ARGS[@]:1}")
+fi
+
 TARGET="${FILTERED_ARGS[0]:-balanced}"
 if [[ ${#FILTERED_ARGS[@]} -gt 1 ]]; then
     PROMPT_ARGS=("${FILTERED_ARGS[@]:1}")
@@ -130,32 +202,6 @@ if [[ ! -t 0 ]]; then
     PIPED_INPUT=$(cat)
 fi
 
-run_supervised() {
-    local engine_script="$1"
-    shift
-    local ec=0
-
-    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" ]]; then
-        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE)"
-    else
-        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: off"
-    fi
-
-    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" && -x /usr/bin/timeout ]]; then
-        set +e
-        /usr/bin/timeout --foreground -k "$KILL_GRACE" "$WATCHDOG_TIMEOUT" "$engine_script" "$@"
-        ec=$?
-        set -e
-        if [[ $ec -eq 124 || $ec -eq 137 ]]; then
-            echo >&2 ""
-            echo >&2 "🚨 [TIMEOUT] Execution exceeded watchdog limit of $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE) and was terminated (exit $ec)."
-        fi
-        exit $ec
-    else
-        exec "$engine_script" "$@"
-    fi
-}
-
 DISPATCH_ARGS=("$MODEL")
 if [[ -n "$PIPED_INPUT" ]]; then
     if [[ ${#PROMPT_ARGS[@]} -gt 0 ]]; then
@@ -173,11 +219,74 @@ else
 fi
 
 case "$ENGINE" in
-    cursor|cursor-agent) run_supervised "$ENGINES_DIR/cursor-agent.sh" "${DISPATCH_ARGS[@]}" ;;
-    openai-codex|codex)   run_supervised "$ENGINES_DIR/openai-codex.sh" "${DISPATCH_ARGS[@]}" ;;
-    claude-code|claude)   run_supervised "$ENGINES_DIR/claude-code.sh" "${DISPATCH_ARGS[@]}" ;;
-    google-agy|agy)       run_supervised "$ENGINES_DIR/google-agy.sh" "${DISPATCH_ARGS[@]}" ;;
-    aider)                run_supervised "$ENGINES_DIR/aider.sh" "${DISPATCH_ARGS[@]}" ;;
-    mistral-vibe|vibe)    run_supervised "$ENGINES_DIR/mistral-vibe.sh" "${DISPATCH_ARGS[@]}" ;;
+    cursor|cursor-agent) ENGINE_SCRIPT="$ENGINES_DIR/cursor-agent.sh" ;;
+    openai-codex|codex)   ENGINE_SCRIPT="$ENGINES_DIR/openai-codex.sh" ;;
+    claude-code|claude)   ENGINE_SCRIPT="$ENGINES_DIR/claude-code.sh" ;;
+    google-agy|agy)       ENGINE_SCRIPT="$ENGINES_DIR/google-agy.sh" ;;
+    aider)                ENGINE_SCRIPT="$ENGINES_DIR/aider.sh" ;;
+    mistral-vibe|vibe)    ENGINE_SCRIPT="$ENGINES_DIR/mistral-vibe.sh" ;;
     *) echo "🚨 [ERROR] Unknown engine adapter: '$ENGINE'" >&2; exit 1 ;;
 esac
+
+if [[ "$DETACH" -eq 1 || ( -t 1 && "$ENGINE" == "cursor" ) ]]; then
+    if [[ -z "$SESSION_NAME" ]]; then
+        SESSION_NAME="arun-${TARGET}-$(date +%s)"
+    fi
+    AUTO_STREAM=$(( 1 - DETACH ))
+    SERIALIZED_ARGS=$(python3 -c "import json, sys; print(json.dumps(sys.argv[1:]))" "${DISPATCH_ARGS[@]}")
+    python3 -c "
+import sys, json
+from router.process import spawn_detached_session
+
+session_name = sys.argv[1]
+tier = sys.argv[2]
+model = sys.argv[3]
+engine = sys.argv[4]
+engine_script = sys.argv[5]
+watchdog_timeout = sys.argv[6]
+kill_grace = sys.argv[7]
+dispatch_args = json.loads(sys.argv[8])
+auto_stream = (sys.argv[9] == '1')
+
+sys.exit(spawn_detached_session(
+    session_name=session_name,
+    tier=tier,
+    model=model,
+    engine=engine,
+    engine_script=engine_script,
+    dispatch_args=dispatch_args,
+    watchdog_timeout=watchdog_timeout,
+    kill_grace=kill_grace,
+    auto_stream=auto_stream,
+))
+" "$SESSION_NAME" "$TARGET" "$MODEL" "$ENGINE" "$ENGINE_SCRIPT" "$WATCHDOG_TIMEOUT" "$KILL_GRACE" "$SERIALIZED_ARGS" "$AUTO_STREAM"
+    exit $?
+fi
+
+run_supervised() {
+    local script="$1"
+    shift
+    local ec=0
+
+    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" ]]; then
+        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE)"
+    else
+        echo >&2 "ℹ️  [arouter] Engine: $ENGINE | Model: $MODEL (tier: $TARGET) | Watchdog: off"
+    fi
+
+    if [[ "$WATCHDOG_TIMEOUT" != "0" && "$WATCHDOG_TIMEOUT" != "off" && -x /usr/bin/timeout ]]; then
+        set +e
+        /usr/bin/timeout --foreground -k "$KILL_GRACE" "$WATCHDOG_TIMEOUT" "$script" "$@"
+        ec=$?
+        set -e
+        if [[ $ec -eq 124 || $ec -eq 137 ]]; then
+            echo >&2 ""
+            echo >&2 "🚨 [TIMEOUT] Execution exceeded watchdog limit of $WATCHDOG_TIMEOUT (kill grace: $KILL_GRACE) and was terminated (exit $ec)."
+        fi
+        exit $ec
+    else
+        exec "$script" "$@"
+    fi
+}
+
+run_supervised "$ENGINE_SCRIPT" "${DISPATCH_ARGS[@]}"
