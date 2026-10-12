@@ -267,37 +267,411 @@ def list_sessions() -> None:
     print("💡 Run 'asessions <uuid> --summary' for metadata and token economics.")
     print("💡 Run 'asessions rm <uuid...>' to delete test sessions.\n")
 
-def main() -> None:
-    args = sys.argv[1:]
-    if not args:
-        list_sessions()
-        sys.exit(0)
+def get_all_history_records():
+    files = get_unique_session_files()
+    records = []
+    for idx, p in enumerate(files, 1):
+        uid = Path(p).parent.name[:8]
+        full_id = Path(p).parent.name
+        meta = get_session_meta(uid)
+        meta = enrich_meta_from_transcript(meta, p)
+        dt_str = format_table_utc(meta["created_ms"]) if meta.get("created_ms") else "N/A"
+        date_short = dt_str[:12].strip() if dt_str != "N/A" else "N/A"
+        query = "N/A"
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    entry = json.loads(line)
+                    if entry.get("role") in ("user", "human"):
+                        cleaned = clean_text(entry.get("message", entry.get("content", {})))
+                        if cleaned:
+                            query = cleaned.replace("\n", " ").strip()
+                            break
+        except Exception:
+            pass
+        records.append({
+            "idx": idx,
+            "uuid": uid,
+            "full_id": full_id,
+            "date": date_short,
+            "model": meta.get("model", "-")[:16],
+            "duration": meta.get("duration", "-"),
+            "query": query,
+        })
+    return records
 
-    cmd = args[0].lower()
-    if cmd in ("rm", "del", "delete"):
-        targets = []
-        force = False
-        dry_run = False
-        for a in args[1:]:
-            if a in ("-f", "--force"):
-                force = True
-            elif a in ("-n", "--dry-run"):
-                dry_run = True
+
+def get_recent_history(limit: int = 5):
+    return get_all_history_records()[:limit]
+
+
+def interactive_explorer() -> int:
+    import contextlib
+    import io
+    import termios
+    import tty
+    import time
+    import shutil
+    try:
+        from router.process import get_running_sessions, kill_session, stream_session
+    except ImportError:
+        get_running_sessions = lambda: []
+        kill_session = lambda s: 0
+        stream_session = lambda s: 0
+
+    fd = sys.stdin.fileno()
+    view_mode = "main"
+    selected_idx = 0
+    scroll_offset = 0
+    prev_lines = 0
+
+    def read_key() -> str:
+        old_attr = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":
+                seq = sys.stdin.read(2)
+                return ch + seq
+            return ch
+        except KeyboardInterrupt:
+            return "\x03"
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
+
+    def confirm_delete_prompt(session_id: str, query: str = "") -> bool:
+        q_disp = f' (\"{query[:28]}...\")' if query else ""
+        sys.stdout.write(f"\r\033[2K\033[1;33m⚠️  Are you sure you want to delete session '{session_id[:8]}'{q_disp}? [y/N]: \033[0m")
+        sys.stdout.flush()
+        old_attr = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            ch = sys.stdin.read(1)
+            confirmed = ch in ("y", "Y")
+            if confirmed:
+                sys.stdout.write(f"\r\033[2K\033[1;32m✅ Session '{session_id[:8]}' deleted.\033[0m")
+                sys.stdout.flush()
+                time.sleep(0.3)
             else:
-                targets.append(a)
-        if not targets:
-            print("Usage: asessions rm [-f] [-n] <session_id|#_index> [session_id...]")
-            sys.exit(1)
-        delete_sessions(targets, dry_run=dry_run, force=force)
+                sys.stdout.write(f"\r\033[2K\033[1;30mDeletion canceled.\033[0m")
+                sys.stdout.flush()
+                time.sleep(0.2)
+            sys.stdout.write("\r\033[2K")
+            sys.stdout.flush()
+            return confirmed
+        except Exception:
+            return False
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
+
+    def wait_for_return(prompt_msg: str = "") -> str:
+        sys.stdout.write(f"\n{C.GRAY}{'─' * 80}{C.RESET}\n")
+        msg = prompt_msg or f"{C.BOLD}[Enter/Space]{C.RESET} Return to explorer   {C.BOLD}[d]{C.RESET} Delete   {C.BOLD}[q/Ctrl+C]{C.RESET} Exit"
+        sys.stdout.write(f" {msg}: ")
+        sys.stdout.flush()
+        old_attr = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch in ("\r", "\n", " "):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return "return"
+                elif ch in ("q", "Q", "\x03", "\x04"):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return "quit"
+                elif ch in ("d", "D"):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return "delete"
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return "quit"
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
+
+    try:
+        while True:
+            _, term_rows = shutil.get_terminal_size((80, 24))
+            term_rows = max(14, term_rows)
+
+            buf = []
+            items = []
+
+            if view_mode == "main":
+                active = get_running_sessions()
+                recent = get_recent_history(limit=5)
+
+                for a in active:
+                    items.append({"type": "active", "id": a["session"], "data": a})
+                for r in recent:
+                    items.append({"type": "history", "id": r["uuid"], "data": r})
+                items.append({"type": "switch_full", "id": "full", "label": "[h] View all past sessions (full table)"})
+                items.append({"type": "quit", "id": "quit", "label": "[q] Quit to shell"})
+
+                if selected_idx >= len(items):
+                    selected_idx = max(0, len(items) - 1)
+
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+                buf.append(f" {C.BOLD}⚡ AROUTER & ASESSIONS WORKSPACE EXPLORER{C.RESET}")
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+
+                buf.append(f" {C.BOLD}[● ACTIVE SESSIONS]{C.RESET}")
+                if not active:
+                    buf.append(f"   {C.GRAY}(No active background sessions running){C.RESET}")
+                else:
+                    for idx, a in enumerate(active):
+                        is_sel = (idx == selected_idx)
+                        prefix = f" {C.CYAN}❯{C.RESET} " if is_sel else "   "
+                        color = C.GREEN if is_sel else C.RESET
+                        name_tag = f"[{a['session'][:22]}]"
+                        tier_str = a.get("tier", "-")[:13]
+                        elapsed_str = a.get("elapsed", "-")[:7]
+                        p_text = a.get("prompt", "")
+                        p_disp = (p_text[:38] + "..") if len(p_text) > 38 else (p_text if p_text else "(running)")
+                        line = (
+                            f"{prefix}🟢 {color}{name_tag:<24}{C.RESET}  "
+                            f"{C.YELLOW}{tier_str:<14}{C.RESET}  "
+                            f"{elapsed_str:<8}  "
+                            f'\"{p_disp}\"'
+                        )
+                        buf.append(line)
+
+                buf.append("")
+                buf.append(f" {C.BOLD}[○ RECENT HISTORY (Last 5)]{C.RESET}")
+                if not recent:
+                    buf.append(f"   {C.GRAY}(No recent session history){C.RESET}")
+                else:
+                    for idx, r in enumerate(recent):
+                        item_idx = len(active) + idx
+                        is_sel = (item_idx == selected_idx)
+                        prefix = f" {C.CYAN}❯{C.RESET} " if is_sel else "   "
+                        color = C.BOLD if is_sel else C.RESET
+                        uid_tag = f"[{r['uuid'][:8]}]"
+                        date_str = r['date'][:11]
+                        model_str = r.get("model", "-")[:13]
+                        dur_str = r.get("duration", "-")[:7]
+                        q_text = r.get("query", "")
+                        q_disp = (q_text[:38] + "..") if len(q_text) > 38 else q_text
+                        line = (
+                            f"{prefix}⚪ {color}{uid_tag:<11}{C.RESET}{C.GRAY}{date_str:<13}{C.RESET}  "
+                            f"{C.CYAN}{model_str:<14}{C.RESET}  "
+                            f"{dur_str:<8}  "
+                            f'\"{q_disp}\"'
+                        )
+                        buf.append(line)
+
+                buf.append("")
+                buf.append(f" {C.BOLD}[OPTIONS & BUTTONS]{C.RESET}")
+                btn_start = len(active) + len(recent)
+                for idx in range(btn_start, len(items)):
+                    is_sel = (idx == selected_idx)
+                    prefix = f" {C.CYAN}❯{C.RESET} " if is_sel else "   "
+                    color = C.CYAN if is_sel else C.RESET
+                    buf.append(f"{prefix}{color}{items[idx]['label']}{C.RESET}")
+
+                buf.append(f"{C.GRAY}{'─' * 92}{C.RESET}")
+                buf.append(f" {C.BOLD}Keys:{C.RESET} [↑/↓] Navigate  |  [Enter] Open  |  [d] Delete  |  [k] Kill active  |  [q] Quit")
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+
+            else:  # view_mode == "full"
+                all_records = get_all_history_records()
+                for r in all_records:
+                    items.append({"type": "full_history", "id": r["uuid"], "data": r})
+                items.append({"type": "switch_main", "id": "main", "label": "[b] Back to main explorer"})
+                items.append({"type": "quit", "id": "quit", "label": "[q] Quit to shell"})
+
+                if selected_idx >= len(items):
+                    selected_idx = max(0, len(items) - 1)
+
+                max_visible = max(6, min(14, term_rows - 8))
+                rec_count = len(all_records)
+
+                if selected_idx < rec_count:
+                    if selected_idx < scroll_offset:
+                        scroll_offset = selected_idx
+                    elif selected_idx >= scroll_offset + max_visible:
+                        scroll_offset = selected_idx - max_visible + 1
+                else:
+                    scroll_offset = max(0, rec_count - max_visible)
+
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+                buf.append(f" {C.BOLD}⚡ AROUTER & ASESSIONS — ALL PAST SESSIONS ({rec_count} total){C.RESET}")
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+
+                if not all_records:
+                    buf.append(f"   {C.GRAY}(No historical sessions found){C.RESET}")
+                else:
+                    visible_slice = all_records[scroll_offset : scroll_offset + max_visible]
+                    for idx_rel, r in enumerate(visible_slice):
+                        real_idx = scroll_offset + idx_rel
+                        is_sel = (real_idx == selected_idx)
+                        prefix = f" {C.CYAN}❯{C.RESET} " if is_sel else "   "
+                        color = C.BOLD if is_sel else C.RESET
+                        uid_tag = f"[{r['uuid'][:8]}]"
+                        date_str = r['date'][:11]
+                        model_str = r.get("model", "-")[:13]
+                        dur_str = r.get("duration", "-")[:7]
+                        q_text = r.get("query", "")
+                        q_disp = (q_text[:38] + "..") if len(q_text) > 38 else q_text
+                        line = (
+                            f"{prefix}⚪ {color}{uid_tag:<11}{C.RESET}{C.GRAY}{date_str:<13}{C.RESET}  "
+                            f"{C.CYAN}{model_str:<14}{C.RESET}  "
+                            f"{dur_str:<8}  "
+                            f'\"{q_disp}\"'
+                        )
+                        buf.append(line)
+
+                buf.append("")
+                buf.append(f" {C.BOLD}[OPTIONS & BUTTONS]{C.RESET}")
+                btn_start = rec_count
+                for idx in range(btn_start, len(items)):
+                    is_sel = (idx == selected_idx)
+                    prefix = f" {C.CYAN}❯{C.RESET} " if is_sel else "   "
+                    color = C.CYAN if is_sel else C.RESET
+                    buf.append(f"{prefix}{color}{items[idx]['label']}{C.RESET}")
+
+                buf.append(f"{C.GRAY}{'─' * 92}{C.RESET}")
+                buf.append(f" {C.BOLD}Keys:{C.RESET} [↑/↓] Navigate  |  [Enter] Open  |  [d] Delete  |  [b] Back  |  [q] Quit")
+                buf.append(f"{C.BOLD}{'=' * 92}{C.RESET}")
+
+            # Rewind and erase previous frame in place, then draw clean buffer
+            content = "\n".join(f"\r\033[2K{line}" for line in buf)
+            if prev_lines > 0:
+                sys.stdout.write(f"\r\033[{prev_lines}A\033[J")
+            sys.stdout.write(content + "\n")
+            sys.stdout.flush()
+            prev_lines = len(buf)
+
+            k = read_key()
+            if k in ("\x1b[A", "w"):
+                selected_idx = max(0, selected_idx - 1)
+            elif k in ("\x1b[B", "s"):
+                selected_idx = min(len(items) - 1, selected_idx + 1)
+            elif k in ("\r", "\n"):
+                sel_item = items[selected_idx]
+                if sel_item["type"] == "active":
+                    if prev_lines > 0:
+                        sys.stdout.write(f"\r\033[{prev_lines}A\033[J")
+                        sys.stdout.flush()
+                        prev_lines = 0
+                    sys.exit(stream_session(sel_item["id"]))
+                elif sel_item["type"] in ("history", "full_history"):
+                    if prev_lines > 0:
+                        sys.stdout.write(f"\r\033[{prev_lines}A\033[J")
+                        sys.stdout.flush()
+                        prev_lines = 0
+                    show_session(sel_item["id"])
+                    prompt = f"{C.BOLD}[Enter/Space]{C.RESET} Return to explorer   {C.BOLD}[d]{C.RESET} Delete session   {C.BOLD}[q/Ctrl+C]{C.RESET} Quit"
+                    action = wait_for_return(prompt)
+                    if action == "delete":
+                        full_id = sel_item["data"].get("full_id", sel_item["id"])
+                        q_t = sel_item["data"].get("query", "")
+                        if confirm_delete_prompt(sel_item["id"], q_t):
+                            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                                delete_sessions([full_id], force=True)
+                    elif action == "quit":
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        sys.exit(0)
+                    continue
+                elif sel_item["type"] == "switch_full":
+                    view_mode = "full"
+                    selected_idx = 0
+                    scroll_offset = 0
+                    continue
+                elif sel_item["type"] == "switch_main":
+                    view_mode = "main"
+                    selected_idx = 0
+                    scroll_offset = 0
+                    continue
+                elif sel_item["type"] == "quit":
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    sys.exit(0)
+            elif k in ("d", "D"):
+                sel_item = items[selected_idx]
+                if sel_item["type"] in ("history", "full_history"):
+                    full_id = sel_item["data"].get("full_id", sel_item["id"])
+                    q_t = sel_item["data"].get("query", "")
+                    if confirm_delete_prompt(sel_item["id"], q_t):
+                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                            delete_sessions([full_id], force=True)
+                    continue
+                elif sel_item["type"] == "active":
+                    sys.stdout.write(f"\r\033[2K⚠️  Cannot delete active session. Press [k] to kill first.")
+                    sys.stdout.flush()
+                    time.sleep(0.9)
+                    sys.stdout.write("\r\033[2K")
+                    sys.stdout.flush()
+            elif k in ("k", "K"):
+                sel_item = items[selected_idx]
+                if sel_item["type"] == "active":
+                    kill_session(sel_item["id"])
+                    time.sleep(0.3)
+                    continue
+            elif k in ("h", "H"):
+                if view_mode != "full":
+                    view_mode = "full"
+                    selected_idx = 0
+                    scroll_offset = 0
+                continue
+            elif k in ("b", "B", "\x1b"):
+                if view_mode != "main":
+                    view_mode = "main"
+                    selected_idx = 0
+                    scroll_offset = 0
+                continue
+            elif k in ("q", "Q", "\x03"):
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                sys.exit(0)
+    except KeyboardInterrupt:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        return 0
+
+
+def main() -> None:
+    try:
+        args = sys.argv[1:]
+        if not args:
+            if sys.stdin.isatty() and sys.stdout.isatty():
+                sys.exit(interactive_explorer())
+            list_sessions()
+            sys.exit(0)
+
+        cmd = args[0].lower()
+        if cmd in ("rm", "del", "delete"):
+            targets = []
+            force = False
+            dry_run = False
+            for a in args[1:]:
+                if a in ("-f", "--force"):
+                    force = True
+                elif a in ("-n", "--dry-run"):
+                    dry_run = True
+                else:
+                    targets.append(a)
+            if not targets:
+                print("Usage: asessions rm [-f] [-n] <session_id|#_index> [session_id...]")
+                sys.exit(1)
+            delete_sessions(targets, dry_run=dry_run, force=force)
+            sys.exit(0)
+
+        summary_flag = any(a in ("--summary", "-s", "summary") for a in args)
+        target = next((a for a in args if not a.startswith("-") and a != "summary"), None)
+        if not target:
+            list_sessions()
+            sys.exit(0)
+
+        show_session(target, summary_only=summary_flag)
+    except KeyboardInterrupt:
         sys.exit(0)
 
-    summary_flag = any(a in ("--summary", "-s", "summary") for a in args)
-    target = next((a for a in args if not a.startswith("-") and a != "summary"), None)
-    if not target:
-        list_sessions()
-        sys.exit(0)
-
-    show_session(target, summary_only=summary_flag)
 
 if __name__ == "__main__":
     main()
