@@ -197,7 +197,8 @@ else
     PROMPT_ARGS=()
 fi
 
-MODEL=$(python3 -c "import json, os
+# Resolve tier model via arouter --get
+MODEL=$(arouter --get "$TARGET" 2>/dev/null || python3 -c "import json, os
 path = os.path.expanduser('$CONFIG_FILE')
 try:
     with open(path) as f: cfg = json.load(f)
