@@ -1,6 +1,6 @@
 # actl Guide: Running Agent Loops with the atools Suite (and, as it lands, actl)
 
-**Revision:** Oct 14, 2026. **Baseline:** `atools` `main` at `a9b3a4e` (`VERSION` v0.1.2), which includes persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
+**Revision:** Oct 14, 2026. **Baseline:** `atools` `main` at `4da9394` (`VERSION` v0.1.4), which adds the modular audit runner and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
 
 **Where this guide fits.** It tells agents how to run loops that get the build Stages implemented. The plan lives in `actl_Build_Plan-Stages0to2.md` (core) and `actl_Build_Plan-Stages0to2_addendum.md` (Stage specifications, branch protocol in its §11, guide update schedule in its §12); the long-term design is `actl_Design.md`. This guide is updated on the schedule in §10 below.
 
@@ -20,7 +20,7 @@ Manual patch application through web chats is error-prone, hallucination-heavy a
 
 1. **Decoupled model tiering.** Tiers (`cheap`, `balanced`, `smart`) are independent of prompts.
 2. **Exit codes as objective functions.** Only `exit 0` from an unmocked script counts as success.
-3. **Executable runbook grounding.** A pre-verified `/tmp/Runbook_<title>.md` keeps the model on task.
+3. **Executable specification grounding.** A pre-verified specification file named in the prompt (by convention `/tmp/Runbook_<title>.md`) keeps the model on task.
 4. **Hard blast-radius envelopes.** Immutable directories, isolated worktrees, wall-clock watchdogs, tool allow/deny lists and pre-commit branch guards bound every run.
 
 ### Taxonomy
@@ -59,12 +59,12 @@ Manual patch application through web chats is error-prone, hallucination-heavy a
 - **Watchdog (always on).** Every engine runs under `/usr/bin/timeout --foreground -k <grace> <duration>`. Default `12m` (`ATOOLS_TIMEOUT`), grace `3s` (`ATOOLS_KILL_GRACE`); override with `-t/--timeout` (`45s`, `12m`, `1h30m`, bare minutes). On exit `124` or `137` a `[TIMEOUT]` notice is printed (and appears in the log).
 - **Permissions.** `install.sh` merges an allowlist (read-only commands, git inspection/branching/commit, `pytest`, `bash proof/run_suite_*.sh`) and a denylist (`rm -rf /`, `git push*`, `git clean -fdx`, `mkfs*`, `dd if=*`, hook bypasses) into `~/.cursor/cli-config.json`; anything else goes to Cursor's `--auto-review` classifier.
 - **Branch boundary.** A global pre-commit hook blocks commits outside `wip/*`; the global rules forbid `git push`.
-- **Compliance anchors.** `bin/arouter` carries "compliance audit anchors" (`--auto-review`, `--trust`); `audit/atools-compliance_audit.sh` checks 36 invariants.
+- **Compliance anchors.** `bin/arouter` carries "compliance audit anchors" (`--auto-review`, `--trust`); `audit/atools-compliance_audit.sh --cursor` runs the 46-check audit and `--self-test` verifies the audit itself (spec in `audit/README.md`).
 - **Linger.** Every session start runs `loginctl enable-linger $USER` (best effort) so background runs survive logout.
 
 ### B. The runtime feedback cycle
 
-1. **Extraction:** the agent reads `/tmp/Runbook_<title>.md`.
+1. **Extraction:** the agent reads the specification named in the prompt (by convention `/tmp/Runbook_<title>.md`).
 2. **First pass:** `python3 -m compileall`, then `bash proof/run_suite_<title>.sh`.
 3. **Diagnosis:** read only the failing `proof/out/<test>.log`.
 4. **Surgical patch:** edit the needed lines, never whole files.
@@ -133,12 +133,13 @@ Anti-recursion boundary: the loop runs under one worker skill, `.cursor/skills/a
 ## Objective
 Execute iterative code changes against deterministic test suites without user intervention.
 ## Operational Protocol
-1. Read the provided specification runbook (/tmp/Runbook_<title>.md).
-2. Edit target implementation files within scope. Never touch out-of-scope files or immutable directories.
-3. Make all test scripts executable (`chmod +x proof/*.sh`).
-4. Execute `bash proof/run_suite_<title>.sh`.
-5. If failures occur, inspect logs under `proof/out/`, apply minimal surgical fixes, and re-run.
-6. Once all checks output PASS, run `git status` and conclude.
+1. Read the provided specification and implementation requirements.
+2. NEVER edit, create, modify or mock oracle files, proofs or test fixtures.
+3. All progress must be staged and committed on an isolated wip/* branch.
+4. Commit messages must be tagged with a valid (WI-<id>) work item identifier.
+5. Execute the designated test suite directly via bash or python runner without modifying file permissions.
+6. If failures occur, inspect test logs, apply minimal surgical fixes, and re-run.
+7. Once all checks output PASS, verify branch isolation with git status and conclude.
 ```
 
 ---
@@ -148,13 +149,13 @@ Execute iterative code changes against deterministic test suites without user in
 ### A. Preparing a run
 
 1. Create an isolated worktree on a `wip/*` branch and `cd` into it: `git worktree add ../<name> -b wip/<task> && cd ../<name>`. Branch names, merge gates and parallel rules for the build are in the addendum §11.
-2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), and the proof command.
+2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits `(WI-<id>)`.
 3. Confirm the suite is **Red on base**: it must exit `1` before the agent starts.
 
 ### B. Foreground run
 
 ```bash
-abalanced -t 45m "Follow the 'atools-repair' skill protocol using /tmp/Runbook_<title>.md as your specification."
+abalanced -t 45m "Follow the 'atools-repair' skill. Specification: /tmp/Runbook_<title>.md. Designated test suite: bash proof/run_suite_<title>.sh. Tag commits (WI-<id>)."
 ```
 
 In a terminal this streams a tmux-backed session (path 2). `asmart` is for architectural work. Piped context is accepted: `git diff | asmart "Review staged changes"`. Do not wrap the call in another `timeout`.
@@ -163,7 +164,7 @@ In a terminal this streams a tmux-backed session (path 2). `asmart` is for archi
 
 ```bash
 cd ../<worktree>
-arouter -d -n s1-verifier -t 45m balanced "Follow the 'atools-repair' skill protocol using /tmp/Runbook_actl_s1.md as your specification." < /dev/null
+arouter -d -n s1-verifier -t 45m balanced "Follow the 'atools-repair' skill. Specification: /tmp/Runbook_actl_s1.md. Designated test suite: bash proof/run_suite_actl_s1.sh. Tag commits (WI-<id>)." < /dev/null
 ```
 
 | Flag | Meaning |
@@ -268,13 +269,13 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 | Global rules, guardrails, hook | `~/.cursor/rules/`, `~/.cursor/cli-config.json`, `~/.config/git/hooks/pre-commit` | Policy |
 | Tier mapping | `~/.cursor/arouter-config.json` | Edit only via `arouter --set` |
 | Proof suites | `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh` | 5 + 6 assertions |
-| Compliance audit | `audit/atools-compliance_audit.sh` | 36 invariants |
+| Compliance audit | `audit/atools-compliance_audit.sh --cursor` | 46 checks (18 planned SKIPs); `--self-test`; spec in `audit/README.md` |
 
 ---
 
 ## 7. Known Limitations
 
-- The skill lets the agent run the proof suite and edit anything in scope. Where the agent must not see the checks, this loop is not sufficient (fine for tooling with public proofs).
+- The skill forbids editing proofs and fixtures but still lets the agent run the designated suite, so where the agent must not see the checks this loop is not sufficient (fine for tooling with public proofs).
 - One OS user: `arouter ps` sees only that user's tmux server; paths default to `/root/.cursor` when it exists.
 - The persistence suite starts a real detached run (`cheap`, prompt `sleep 1`, `-t 5s`), hard-codes `/root/.cursor/logs`, and so needs `tmux` and the `agent` CLI installed. It does not test working-directory propagation.
 - For deterministic detached tests use a private tmux server (`TMUX_TMPDIR`, so your real sessions are never touched), private `ATOOLS_LOG_DIR`/`ATOOLS_SESSION_DIR`, and stubs for `agent` and `loginctl` first in `PATH` (as the Stage 0B suite `proof/run_suite_exit_code.sh` does). tmux gives a new pane the dispatching client's `PATH` (measured on the VPS), so PATH stubs work with a fresh or an existing server; do not rely on other environment variables reaching the pane.
@@ -286,7 +287,8 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 ```bash
 bash proof/run_suite_engines.sh
 bash proof/run_suite_session_persistence.sh
-bash audit/atools-compliance_audit.sh
+bash audit/atools-compliance_audit.sh --cursor
+bash audit/atools-compliance_audit.sh --self-test
 diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit
 # after Stage 0B: bash proof/run_suite_exit_code.sh
 # after Stage 0A: bash proof/run_suite_actl_s0.sh

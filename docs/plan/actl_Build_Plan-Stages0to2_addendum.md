@@ -1,6 +1,6 @@
 # actl_Build_Plan-Stages0to2_addendum — Addendum to the core document
 
-**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `a9b3a4e`, `VERSION` v0.1.2.
+**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `4da9394`, `VERSION` v0.1.4 (the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
 **Relation to other files**
 
 | File | Role |
@@ -19,7 +19,7 @@
 
 | Core document says | Now |
 |---|---|
-| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `a9b3a4e`, `VERSION` v0.1.2, on top of `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
+| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `4da9394`, `VERSION` v0.1.4 (modular audit runner adopted), on top of `a9b3a4e`, `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
 | `arouter` is a tier router with a watchdog (§2.2) | It also has detached tmux sessions, `ps/attach/logs/kill`, three execution paths, and `src/router/process.py`. Background execution **exists** and is consumed, not built (Stage 6 shrinks). |
 | Stage 4 or 6 builds tmux supervision (Stage map §4; My/Chi agreement rows) | Consume the existing layer. One small change is added to Stage 0 (exit-code persistence, S0-R16). |
 | Stage map §4 | Same Stages; Stage 0 has two workstreams (0A foundations, 0B exit-code persistence); Stages 1 and 2 run in parallel after Stage 0; see §11. |
@@ -30,7 +30,7 @@
 
 ## B. Verified and measured facts
 
-Sources: shared diffs of `5cb7f30`, `759a0ca`, `a9b3a4e` (code facts); checks run on the VPS `root@MochiClaw` on Oct 14, 2026 (marked **measured**); one sandbox observation (marked **sandbox**, to be re-measured).
+Sources: shared diffs of `5cb7f30`, `759a0ca`, `a9b3a4e` (code facts); checks run on the VPS `root@MochiClaw` on Oct 18, 2026 (marked **measured**); one sandbox observation (marked **sandbox**, to be re-measured).
 
 | # | Fact | Consequence |
 |---|---|---|
@@ -89,7 +89,7 @@ atools/
 
 ### 5.4 Numbered requirements
 
-**S0-R1 Baseline capture (`actl doctor [--json]`).** MUST report and write to `ACTL_ROOT/baseline.json` (first run only; `--refresh` overwrites): `VERSION` (expected `v0.1.2` or later); `git rev-parse HEAD`; dirty/clean; whether `5cb7f30`, `759a0ca`, `a9b3a4e` are ancestors; `python3`, `git`, `tmux` (including `tmux -V`) and `bash` versions; `pytest` and `jsonschema` availability; presence of the `agent` CLI (the persistence suite needs it) and of the other engine CLIs; `timeout`; effective user; `ACTL_ROOT`; the resolved `LOG_DIR` and `METADATA_DIR` (F4); linger state (`loginctl show-user`); a feature probe whether `router.process` exposes `read_exit_code` (S0-R16; absent is a recorded warning in 0A, and a precondition failure for Stage 1); the result (exit code and tail) of `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh`, `proof/run_suite_exit_code.sh` (when present) and `audit/atools-compliance_audit.sh`; and the output of `diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit` (non-empty is a recorded warning). It exits `4` if `tmux` is missing or the audit script is not found (recorded `not_found`) and never modifies the repo.
+**S0-R1 Baseline capture (`actl doctor [--json]`).** MUST report and write to `ACTL_ROOT/baseline.json` (first run only; `--refresh` overwrites): `VERSION` (expected `v0.1.4` or later); `git rev-parse HEAD`; dirty/clean; whether `5cb7f30`, `759a0ca`, `a9b3a4e`, `4da9394` are ancestors; `python3`, `git`, `tmux` (including `tmux -V`) and `bash` versions; `pytest` and `jsonschema` availability; presence of the `agent` CLI (the persistence suite needs it) and of the other engine CLIs; `timeout`; effective user; `ACTL_ROOT`; the resolved `LOG_DIR` and `METADATA_DIR` (F4); linger state (`loginctl show-user`); a feature probe whether `router.process` exposes `read_exit_code` (S0-R16; absent is a recorded warning in 0A, and a precondition failure for Stage 1); the result (exit code and tail) of `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh`, `proof/run_suite_exit_code.sh` (when present) and `audit/atools-compliance_audit.sh --cursor` plus its `--self-test` (record the pass, fail, skip and warn counts; skips are expected and `--strict` is not used); and the output of `diff -u` between each repo file and its installed copy (`hooks/pre-commit`, `rules/git-safety.md`, `.cursor/skills/atools-repair/SKILL.md`) (non-empty is a recorded warning). It exits `4` if `tmux` is missing or the audit script is not found (recorded `not_found`) and never modifies the repo.
 
 **S0-R2 Additive-change rule.** Measured against the workstream's fork point, workstream 0A consists of new files plus (at most) patches to `install.sh` (link `bin/actl`; loop copying `skills/*`) and `README.md`; workstream 0B changes only `src/router/process.py` plus its new proof suite. The three `atools` suites and the audit keep their results.
 
@@ -722,7 +722,7 @@ Runbook titles: `actl_s0`, `exit_code`, `actl_s1`, `actl_s2`; suites `proof/run_
 - **PB-2 Immutable proofs.** The implementer's Runbook lists `proof/`, `fixtures/`, `test/actl/` and `src/actl/INTERFACES.md` as immutable. After every run `git diff --name-only <start>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md` MUST be empty, else the run is discarded.
 - **PB-3 Registries and fragments** (S0-R13, S0-R14): after Stage 0 no Stage edits `cli.py`, `next.py` or another Stage's `expected.d` fragment.
 - **PB-4 Interface freeze** (S0-R15): changes after Stage 0 need the Owner's approval.
-- **PB-5 Merge gates.** Every merge: the engines, session-persistence and exit-code suites green, the compliance audit green, the stage suites green, empty `diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit`; Stages 1 and 2 also rebase on `main` and run `run_suite_actl_s0.sh`; every implementation merge also passes the post-implementation mutation review (§10 item 5).
+- **PB-5 Merge gates.** Every merge: the engines, session-persistence and exit-code suites green, the compliance audit green (`audit/atools-compliance_audit.sh --cursor` exits 0 and `--self-test` passes; skips are expected), the stage suites green, empty `diff -u` between the repo and installed copies of the hook, the rules and the worker skill; Stages 1 and 2 also rebase on `main` and run `run_suite_actl_s0.sh`; every implementation merge also passes the post-implementation mutation review (§10 item 5).
 - **PB-6 Unique names** for sessions (`s0a-foundations`, `s0b-exit-code`, `s1-verifier`, `s2-bridge`), runbook titles and scratch directories (`mktemp -d`).
 - **PB-7 Run from inside the worktree** (detached runs inherit the cwd; F1, F4).
 - **PB-8 Hygiene.** Archive or delete `~/.cursor/logs/<session>.log` and the exit-code files when a task ends; `asessions rm` does not remove them.
@@ -735,7 +735,7 @@ git worktree add ../atools-s1 -b wip/s1-verifier && cd ../atools-s1
 cp spec-S1.md /tmp/Runbook_actl_s1.md
 bash proof/run_suite_actl_s1.sh; echo $?          # must be 1 (Red on base)
 arouter -d -n s1-verifier -t 45m balanced \
-  "Follow the 'atools-repair' skill protocol using /tmp/Runbook_actl_s1.md as your specification." < /dev/null
+  "Follow the 'atools-repair' skill. Specification: /tmp/Runbook_actl_s1.md. Designated test suite: bash proof/run_suite_actl_s1.sh. Tag commits (WI-<id>)." < /dev/null
 arouter ps ; arouter logs -f s1-verifier          # observe; arouter attach s1-verifier to join
 ```
 
