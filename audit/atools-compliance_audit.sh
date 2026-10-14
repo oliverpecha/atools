@@ -94,6 +94,11 @@ PY
 2. NEVER edit, create or mock oracle files, proofs or test fixtures.
 3. Commit progress on a wip/* branch with a (WI-<id>) tag.
 MD
+    mkdir -p "$F/repo/rules" "$F/repo/hooks" "$F/home/.cursor/skills/atools-repair"
+    touch "$F/repo/install.sh"
+    cp "$F/home/.cursor/rules/git-safety.md" "$F/repo/rules/git-safety.md"
+    cp "$F/home/.config/git/hooks/pre-commit" "$F/repo/hooks/pre-commit"
+    cp "$F/repo/.cursor/skills/atools-repair/SKILL.md" "$F/home/.cursor/skills/atools-repair/SKILL.md"
     git init -q "$F/repo" >/dev/null 2>&1
   }
 
@@ -161,6 +166,8 @@ PY
   expect_fail SKILL-10 "worker doc chmods proof files" mut_proof_chmod
   expect_fail SKILL-05 "worker doc references an outer dispatcher" mut_recursion
   expect_fail INST-WRAPD-acheap "tier entry point does not delegate to arouter" mut_wrapper
+  mut_stale_skill() { printf '\n# stale mutation\n' >> "$T/f/home/.cursor/skills/atools-repair/SKILL.md"; }
+  expect_fail SYNC-03 "installed worker skill differs from repo copy" mut_stale_skill
   [[ $fails -eq 0 ]] && { echo "Self-test OK"; return 0; } || { echo "Self-test: $fails failure(s)"; return 1; }
 }
 
@@ -168,6 +175,7 @@ if [[ $SELFTEST -eq 1 ]]; then selftest; exit $?; fi
 
 # ---------------------------------------------------------------- core
 AH="${ATOOLS_AUDIT_HOME:-$HOME}"
+[[ -z "$REPO" ]] && REPO="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 SYS_BIN="${ATOOLS_SYS_BIN:-/usr/local/bin}"
 USER_BIN="${ATOOLS_USER_BIN:-$AH/.local/bin}"
 PASS=0; FAIL=0; SKIP=0; WARN=0
@@ -309,6 +317,25 @@ else
 fi
 
 # ---------------------------------------------------------------- PROF
+section "SYNC  Installed copies match the repo (atools repo only)"
+if [[ -n "$REPO" && -f "$REPO/install.sh" ]]; then
+  if [[ "$ADAPTER" == "cursor" ]]; then
+    check SYNC-01 "Installed rules match rules/git-safety.md" diff -q "$REPO/rules/git-safety.md" "$AH/.cursor/rules/git-safety.md"
+  else
+    skip SYNC-01 "Installed rules match rules/git-safety.md" "adapter ${ADAPTER:-none}"
+  fi
+  check SYNC-02 "Installed global hook matches hooks/pre-commit" diff -q "$REPO/hooks/pre-commit" "$AH/.config/git/hooks/pre-commit"
+  if [[ "$ADAPTER" == "cursor" ]]; then
+    check SYNC-03 "Installed worker skill matches the repo copy" diff -q "$REPO/.cursor/skills/atools-repair/SKILL.md" "$AH/.cursor/skills/atools-repair/SKILL.md"
+  else
+    skip SYNC-03 "Installed worker skill matches the repo copy" "adapter ${ADAPTER:-none}"
+  fi
+else
+  for i in 01 02 03; do
+    skip "SYNC-$i" "Installed copy matches repo" "not the atools repo"
+  done
+fi
+
 section "PROF  Security profile ($PROFILE)"
 if [[ "$PROFILE" == "dev" ]]; then
   warn PROF-00 "Development profile: same-user isolation; not the unattended trust boundary"
