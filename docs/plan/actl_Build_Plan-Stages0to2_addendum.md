@@ -1,6 +1,6 @@
 # actl_Build_Plan-Stages0to2_addendum — Addendum to the core document
 
-**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `4da9394`, `VERSION` v0.1.4 (the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
+**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `4221952`, `VERSION` v0.1.4 (audit runner `4da9394`; the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
 **Relation to other files**
 
 | File | Role |
@@ -19,7 +19,7 @@
 
 | Core document says | Now |
 |---|---|
-| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `4da9394`, `VERSION` v0.1.4 (modular audit runner adopted), on top of `a9b3a4e`, `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
+| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `4221952`, `VERSION` v0.1.4 (modular audit runner adopted in `4da9394`, installed-copy sync checks added), on top of `a9b3a4e`, `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
 | `arouter` is a tier router with a watchdog (§2.2) | It also has detached tmux sessions, `ps/attach/logs/kill`, three execution paths, and `src/router/process.py`. Background execution **exists** and is consumed, not built (Stage 6 shrinks). |
 | Stage 4 or 6 builds tmux supervision (Stage map §4; My/Chi agreement rows) | Consume the existing layer. One small change is added to Stage 0 (exit-code persistence, S0-R16). |
 | Stage map §4 | Same Stages; Stage 0 has two workstreams (0A foundations, 0B exit-code persistence); Stages 1 and 2 run in parallel after Stage 0; see §11. |
@@ -670,6 +670,7 @@ From Stage 4, personas run under separate Linux accounts. tmux's default socket 
 - D-18 The former separate task "T1" is Stage 0B; there is no separate runbook file.
 - D-19 `actl_Guide-*` is maintained on the schedule of §12.
 - D-20 Mutation interpretation: before implementation, reviewers apply the three-stand-in vacuity review; after implementation, a cross-family reviewer plants mutants (§10 item 5).
+- D-21 Work-item tag protocol: guide §4I (PB-10). The tag is mandatory for agents (rules, skill, audit) and is not checked by the hook.
 
 ### 9.2 OPEN (spec agents propose an answer; the Owner decides where noted)
 
@@ -722,11 +723,12 @@ Runbook titles: `actl_s0`, `exit_code`, `actl_s1`, `actl_s2`; suites `proof/run_
 - **PB-2 Immutable proofs.** The implementer's Runbook lists `proof/`, `fixtures/`, `test/actl/` and `src/actl/INTERFACES.md` as immutable. After every run `git diff --name-only <start>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md` MUST be empty, else the run is discarded.
 - **PB-3 Registries and fragments** (S0-R13, S0-R14): after Stage 0 no Stage edits `cli.py`, `next.py` or another Stage's `expected.d` fragment.
 - **PB-4 Interface freeze** (S0-R15): changes after Stage 0 need the Owner's approval.
-- **PB-5 Merge gates.** Every merge: the engines, session-persistence and exit-code suites green, the compliance audit green (`audit/atools-compliance_audit.sh --cursor` exits 0 and `--self-test` passes; skips are expected), the stage suites green, empty `diff -u` between the repo and installed copies of the hook, the rules and the worker skill; Stages 1 and 2 also rebase on `main` and run `run_suite_actl_s0.sh`; every implementation merge also passes the post-implementation mutation review (§10 item 5).
+- **PB-5 Merge gates.** Every merge: the engines, session-persistence and exit-code suites green, the compliance audit green (`audit/atools-compliance_audit.sh --cursor` exits 0 and `--self-test` passes, SYNC-01..03 pass; skips are expected), the stage suites green, empty `diff -u` between the repo and installed copies of the hook, the rules and the worker skill; Stages 1 and 2 also rebase on `main` and run `run_suite_actl_s0.sh`; every implementation merge also passes the post-implementation mutation review (§10 item 5).
 - **PB-6 Unique names** for sessions (`s0a-foundations`, `s0b-exit-code`, `s1-verifier`, `s2-bridge`), runbook titles and scratch directories (`mktemp -d`).
 - **PB-7 Run from inside the worktree** (detached runs inherit the cwd; F1, F4).
 - **PB-8 Hygiene.** Archive or delete `~/.cursor/logs/<session>.log` and the exit-code files when a task ends; `asessions rm` does not remove them.
 - **PB-9 Author independence.** Spec/proof authors use a different model family from the implementing agent where available (the Design's `F`, applied to the build); the challenger differs from the authors.
+- **PB-10 Work-item tags.** Every commit subject ends with one `(WI-<id>)` tag in the format defined in the guide §4I: `WI-S<n>-R<k>` for implementation, `WI-S<n>-SPEC` / `WI-S<n>-PROOF` / `WI-IFACE` for the authoring pass, `WI-<AREA>-<n>` for housekeeping.
 
 ### 11.3 Per-branch execution (how agents run it)
 

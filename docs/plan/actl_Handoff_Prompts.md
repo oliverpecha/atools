@@ -92,6 +92,7 @@ RULES
 7. Traceability: every requirement ID maps to at least one proof ID; every proof ID maps back to a requirement.
 8. Be concrete: exact commands, exact file paths, exact expected exit codes and substrings. No placeholders such as "TBD" or "etc.".
 9. Stay in scope: produce only the deliverables listed for your prompt.
+10. COMMITS: if you commit, end each commit subject with exactly one work-item tag: (WI-S<n>-SPEC) for specification text, (WI-S<n>-PROOF) for proofs, tests, fixtures and stubs, (WI-IFACE) for INTERFACES.md.
 
 OUTPUT FORMAT
 - If you have a filesystem: write the files in place and finish by printing the tree of what you created plus the self-check below.

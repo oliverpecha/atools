@@ -1,6 +1,6 @@
 # actl Guide: Running Agent Loops with the atools Suite (and, as it lands, actl)
 
-**Revision:** Oct 14, 2026. **Baseline:** `atools` `main` at `4da9394` (`VERSION` v0.1.4), which adds the modular audit runner and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
+**Revision:** Oct 14, 2026. **Baseline:** `atools` `main` at `4221952` (`VERSION` v0.1.4), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
 
 **Where this guide fits.** It tells agents how to run loops that get the build Stages implemented. The plan lives in `actl_Build_Plan-Stages0to2.md` (core) and `actl_Build_Plan-Stages0to2_addendum.md` (Stage specifications, branch protocol in its §11, guide update schedule in its §12); the long-term design is `actl_Design.md`. This guide is updated on the schedule in §10 below.
 
@@ -59,7 +59,7 @@ Manual patch application through web chats is error-prone, hallucination-heavy a
 - **Watchdog (always on).** Every engine runs under `/usr/bin/timeout --foreground -k <grace> <duration>`. Default `12m` (`ATOOLS_TIMEOUT`), grace `3s` (`ATOOLS_KILL_GRACE`); override with `-t/--timeout` (`45s`, `12m`, `1h30m`, bare minutes). On exit `124` or `137` a `[TIMEOUT]` notice is printed (and appears in the log).
 - **Permissions.** `install.sh` merges an allowlist (read-only commands, git inspection/branching/commit, `pytest`, `bash proof/run_suite_*.sh`) and a denylist (`rm -rf /`, `git push*`, `git clean -fdx`, `mkfs*`, `dd if=*`, hook bypasses) into `~/.cursor/cli-config.json`; anything else goes to Cursor's `--auto-review` classifier.
 - **Branch boundary.** A global pre-commit hook blocks commits outside `wip/*`; the global rules forbid `git push`.
-- **Compliance anchors.** `bin/arouter` carries "compliance audit anchors" (`--auto-review`, `--trust`); `audit/atools-compliance_audit.sh --cursor` runs the 46-check audit and `--self-test` verifies the audit itself (spec in `audit/README.md`).
+- **Compliance anchors.** `bin/arouter` carries "compliance audit anchors" (`--auto-review`, `--trust`); `audit/atools-compliance_audit.sh --cursor` runs the 49-check audit (including SYNC-01..03: installed copies must match the repo) and `--self-test` verifies the audit itself (spec in `audit/README.md`).
 - **Linger.** Every session start runs `loginctl enable-linger $USER` (best effort) so background runs survive logout.
 
 ### B. The runtime feedback cycle
@@ -149,7 +149,7 @@ Execute iterative code changes against deterministic test suites without user in
 ### A. Preparing a run
 
 1. Create an isolated worktree on a `wip/*` branch and `cd` into it: `git worktree add ../<name> -b wip/<task> && cd ../<name>`. Branch names, merge gates and parallel rules for the build are in the addendum §11.
-2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits `(WI-<id>)`.
+2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits, `(WI-<id>)` (convention in §4I).
 3. Confirm the suite is **Red on base**: it must exit `1` before the agent starts.
 
 ### B. Foreground run
@@ -230,6 +230,19 @@ One worktree, one branch, one runbook title and one `-n` name per run; suites us
 
 ---
 
+### I. Work-item tags
+
+Every commit subject ends with exactly one work-item tag `(WI-<id>)`. The rules file, the worker skill and the audit (HARD-05, SKILL-08) require it; the pre-commit hook does not check it. `WI` means *work item*. Ids:
+
+| Tag | Meaning | Example |
+|---|---|---|
+| `WI-S<n>-R<k>` | Implements requirement `R<k>` of Stage `<n>` (the addendum ids `S0-R16`, `S1-R9`, `S2-R4`; workstreams 0A and 0B both use `S0`) | `feat(router): persist exit code of detached runs (WI-S0-R16)` |
+| `WI-S<n>-SPEC`, `WI-S<n>-PROOF` | Authoring pass for Stage `<n>`: specification text; proofs, tests, fixtures and stubs | `test(stage0): add exit-code proof suite (WI-S0-PROOF)` |
+| `WI-IFACE` | `src/actl/INTERFACES.md` | `docs(actl): freeze interfaces (WI-IFACE)` |
+| `WI-<AREA>-<n>` | Housekeeping, with `AREA` one of `AUDIT`, `DOCS`, `RULES`, `TOOLS` (router, sessions, engines, installer) and `n` the next free number | `docs(plan): refresh baseline (WI-DOCS-2)` |
+
+Rules: one tag per commit (name any other requirements in the body); the tag goes at the end of the subject line; do not retag old commits. Next free housekeeping number: `git log --format=%s | grep -o '(WI-AUDIT-[0-9]*)' | sort -V | tail -1` (change `AUDIT` as needed). Used so far: `AUDIT-2`, `AUDIT-3`, `DOCS-1`. A mechanical commit-level check (audit `SCP-02`) is planned.
+
 ## 5. Machine-Wide Safety Configuration **[updated]**
 
 Sections 5A and 5B are applied by `install.sh`.
@@ -269,7 +282,7 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 | Global rules, guardrails, hook | `~/.cursor/rules/`, `~/.cursor/cli-config.json`, `~/.config/git/hooks/pre-commit` | Policy |
 | Tier mapping | `~/.cursor/arouter-config.json` | Edit only via `arouter --set` |
 | Proof suites | `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh` | 5 + 6 assertions |
-| Compliance audit | `audit/atools-compliance_audit.sh --cursor` | 46 checks (18 planned SKIPs); `--self-test`; spec in `audit/README.md` |
+| Compliance audit | `audit/atools-compliance_audit.sh --cursor` | 49 checks (18 planned SKIPs); `--self-test`; spec in `audit/README.md` |
 
 ---
 
