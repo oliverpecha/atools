@@ -197,6 +197,7 @@ def print_sessions() -> int:
 ANSI_SANITIZE_RE = re.compile(
     r'\x1b\[3J'
     r'|\x1b\](?:10|11|12);\?[^\x07\x1b]*(?:\x07|\x1b\\)'
+    r'|\x1b\[\?1004[hl]'
 )
 
 
@@ -230,11 +231,49 @@ def stream_session(session_name: str, watchdog_timeout: str = "", kill_grace: st
         sys.stderr.write(f"🚨 [ERROR] Log file not found: {log_path}\n")
         return 1
 
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+    old_stdin_attr = None
+    if fd is not None:
+        try:
+            old_stdin_attr = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+        except Exception:
+            old_stdin_attr = None
+
+    def forward_keys() -> None:
+        if fd is None:
+            return
+        try:
+            r_in, _, _ = select.select([fd], [], [], 0)
+            if r_in:
+                key_bytes = os.read(fd, 1024)
+                if key_bytes:
+                    hex_args = [f"{b:02x}" for b in key_bytes]
+                    res = subprocess.run(
+                        ["tmux", "send-keys", "-t", session_name, "-H", *hex_args],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    if res.returncode != 0:
+                        subprocess.run(
+                            ["tmux", "send-keys", "-t", session_name, "-l", key_bytes.decode("utf-8", errors="replace")],
+                            check=False,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+        except Exception:
+            pass
+
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             while True:
                 try:
                     while True:
+                        forward_keys()
                         chunk = f.read(4096)
                         if chunk:
                             cleaned = ANSI_SANITIZE_RE.sub("", chunk)
@@ -261,7 +300,15 @@ def stream_session(session_name: str, watchdog_timeout: str = "", kill_grace: st
                                 except Exception:
                                     print(f"✅ [arouter] Session \"{session_name}\" finished.")
                                 return 0
-                            time.sleep(0.03)
+                            if fd is not None:
+                                try:
+                                    r_wait, _, _ = select.select([fd], [], [], 0.03)
+                                    if r_wait:
+                                        forward_keys()
+                                except Exception:
+                                    time.sleep(0.03)
+                            else:
+                                time.sleep(0.03)
                 except KeyboardInterrupt:
                     set_title(f"⏸️ [{session_name}] Paused")
                     choice = "leave"
@@ -337,6 +384,15 @@ def stream_session(session_name: str, watchdog_timeout: str = "", kill_grace: st
                         return 0
     finally:
         set_title("")
+        if old_stdin_attr is not None and fd is not None:
+            try:
+                import termios
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_stdin_attr)
+            except Exception:
+                pass
+        if sys.stdout.isatty():
+            sys.stdout.write("\033[?1004l")
+            sys.stdout.flush()
 def attach_session(session_name: str, force_tmux: bool = False) -> int:
     """Attach to session: defaults to stream proxy for unlimited scrollback, or raw tmux PTY if forced."""
     active = list_active_tmux_sessions()

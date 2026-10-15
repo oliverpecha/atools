@@ -90,7 +90,7 @@ case "${1:-}" in
         exec python3 -m router.cli --show "$@"
         ;;
     --get)
-        TIER="${2:-balanced}"
+        TIER="${2:-auto}"
         python3 -c "import json, os
 path = os.path.expanduser('$CONFIG_FILE')
 try:
@@ -190,12 +190,16 @@ if [[ ${#FILTERED_ARGS[@]} -gt 0 && "${FILTERED_ARGS[0]}" == "run" ]]; then
     FILTERED_ARGS=("${FILTERED_ARGS[@]:1}")
 fi
 
-TARGET="${FILTERED_ARGS[0]:-balanced}"
-if [[ ${#FILTERED_ARGS[@]} -gt 1 ]]; then
-    PROMPT_ARGS=("${FILTERED_ARGS[@]:1}")
-else
-    PROMPT_ARGS=()
-fi
+case "${FILTERED_ARGS[0]:-}" in
+    cheap|balanced|smart|auto|acheap|abalanced|asmart|aauto)
+        TARGET="${FILTERED_ARGS[0]#a}"
+        PROMPT_ARGS=("${FILTERED_ARGS[@]:1}")
+        ;;
+    *)
+        TARGET="auto"
+        PROMPT_ARGS=("${FILTERED_ARGS[@]}")
+        ;;
+esac
 
 # Resolve tier model via arouter --get
 MODEL=$(arouter --get "$TARGET" 2>/dev/null || python3 -c "import json, os

@@ -83,11 +83,13 @@ def main() -> None:
         elif arg in ('ps', 'list'):
             sys.exit(print_sessions())
         elif arg == 'attach':
-            session = sys.argv[2] if len(sys.argv) > 2 else ""
+            force_tmux = '-t' in sys.argv or '--tmux' in sys.argv
+            targets = [a for a in sys.argv[2:] if not a.startswith('-')]
+            session = targets[0] if targets else ""
             if not session:
-                print("Usage: arouter attach <session>", file=sys.stderr)
+                print("Usage: arouter attach <session> [-t|--tmux]", file=sys.stderr)
                 sys.exit(1)
-            sys.exit(attach_session(session))
+            sys.exit(attach_session(session, force_tmux=force_tmux))
         elif arg == 'logs':
             if len(sys.argv) < 3:
                 print("Usage: arouter logs <session> [-f]", file=sys.stderr)
