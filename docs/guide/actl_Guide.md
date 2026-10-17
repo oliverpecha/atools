@@ -136,7 +136,7 @@ Execute iterative code changes against deterministic test suites without user in
 1. Read the provided specification and implementation requirements.
 2. NEVER edit, create, modify or mock oracle files, proofs or test fixtures.
 3. All progress must be staged and committed on an isolated wip/* branch.
-4. Commit messages must be tagged with a valid (WI-<id>) work item identifier.
+4. Commit format: `<type>(<scope>): <summary> (WI-<id>)` with non-empty `Why:` (bare SHAs), `What changed:` (`- file:` bullets), and `Result:` (metrics/invariants) sections. Never use `--no-verify` or touch other worktrees; adapt from hook stderr if rejected.
 5. Execute the designated test suite directly via bash or python runner without modifying file permissions.
 6. If failures occur, inspect test logs, apply minimal surgical fixes, and re-run.
 7. Once all checks output PASS, verify branch isolation with git status and conclude.
@@ -230,9 +230,9 @@ One worktree, one branch, one runbook title and one `-n` name per run; suites us
 
 ---
 
-### I. Work-item tags
+### I. Work-item tags & mechanical commit protocol
 
-Every commit subject ends with exactly one work-item tag `(WI-<id>)`. The rules file, the worker skill and the audit (HARD-05, SKILL-08) require it; the pre-commit hook does not check it. `WI` means *work item*. Ids:
+Every commit subject ends with exactly one work-item tag `(WI-<id>)`. The rules file, the worker skill, the audit (HARD-05, SKILL-08), and the mechanical `hooks/commit-msg` hook require it. `WI` means *work item*. Ids:
 
 | Tag | Meaning | Example |
 |---|---|---|
@@ -241,7 +241,11 @@ Every commit subject ends with exactly one work-item tag `(WI-<id>)`. The rules 
 | `WI-IFACE` | `src/actl/INTERFACES.md` | `docs(actl): freeze interfaces (WI-IFACE)` |
 | `WI-<AREA>-<n>` | Housekeeping, with `AREA` one of `AUDIT`, `DOCS`, `RULES`, `TOOLS` (router, sessions, engines, installer) and `n` the next free number | `docs(plan): refresh baseline (WI-DOCS-2)` |
 
-Rules: one tag per commit (name any other requirements in the body); the tag goes at the end of the subject line; do not retag old commits. Next free housekeeping number: `git log --format=%s | grep -o '(WI-AUDIT-[0-9]*)' | sort -V | tail -1` (change `AUDIT` as needed). Used so far: `AUDIT-2`, `AUDIT-3`, `DOCS-1`. A mechanical commit-level check (audit `SCP-02`) is planned.
+Rules: one tag per commit (name any other requirements in the body); the tag goes at the end of the subject line; do not retag old commits. Next free housekeeping number: `git log --format=%s | grep -o '(WI-AUDIT-[0-9]*)' | sort -V | tail -1` (change `AUDIT` as needed). Used so far: `AUDIT-2`, `AUDIT-3`, `DOCS-1`, `RULES-1`.
+
+**Mechanical commit format** (`hooks/commit-msg`): subject must match `<type>(<scope>): <summary> (WI-<id>)` where type is one of `feat|fix|refactor|perf|test|proof|audit|eval|spec|chore|docs` (synonyms rejected with a canonical hint). Scope must name a module/subsystem (never `s0`, `stage*`, `v1.2`, `wip`, `main`, `master`). Body must include non-empty `Why:` (cite prior work as bare SHAs like `85523a0`, never `commit <sha>`), `What changed:` with at least one `- <file>: <change>` bullet, and `Result:` with metrics/invariants. Never bypass with `--no-verify` / `-n`.
+
+**Parallel worktree merge policy:** never checkout, rebase, or mutate a branch checked out in another linked worktree. Integrate exclusively via `--no-ff` merge gates on the integration branch.
 
 ## 5. Machine-Wide Safety Configuration **[updated]**
 
@@ -258,9 +262,9 @@ Sections 5A and 5B are applied by `install.sh`.
 
 Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./install.sh` to re-merge non-destructively.
 
-### C. Dual pre-commit hook
+### C. Dual Git hooks (`pre-commit` and `commit-msg`)
 
-`install.sh` copies `hooks/pre-commit` to the global path, so both are identical after each install; verify with `diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit`. The hook blocks commits outside `wip/*` and delegates to `.git/hooks/pre-commit.local` when present. It has **no** `/tmp` bypass (an earlier guide's version did), so scratch repositories under `/tmp` are subject to the policy: commit on a `wip/*` branch or use `git -c core.hooksPath=/dev/null commit ...`.
+`install.sh` copies `hooks/pre-commit` and `hooks/commit-msg` to the global path, so repo and installed copies are identical after each install; verify with `diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit` and `diff -u hooks/commit-msg ~/.config/git/hooks/commit-msg`. The pre-commit hook blocks commits outside `wip/*` and delegates to `.git/hooks/pre-commit.local` when present. The commit-msg hook enforces the mechanical subject/body protocol (§4I). Neither has a `/tmp` bypass, so scratch repositories under `/tmp` are subject to the policy: commit on a `wip/*` branch or use `git -c core.hooksPath=/dev/null commit ...`.
 
 ---
 
@@ -279,7 +283,7 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 | Session auditing | `bin/asessions` → `src/sessions/` | Explorer, static list, transcripts, economics, `rm` |
 | Engines | `engines/*.sh` | Cursor supported; others stubs |
 | Worker skill | `.cursor/skills/atools-repair/SKILL.md` | Headless repair protocol |
-| Global rules, guardrails, hook | `~/.cursor/rules/`, `~/.cursor/cli-config.json`, `~/.config/git/hooks/pre-commit` | Policy |
+| Global rules, guardrails, hooks | `~/.cursor/rules/`, `~/.cursor/cli-config.json`, `~/.config/git/hooks/{pre-commit,commit-msg}` | Policy |
 | Tier mapping | `~/.cursor/arouter-config.json` | Edit only via `arouter --set` |
 | Proof suites | `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh` | 5 + 6 assertions |
 | Compliance audit | `audit/atools-compliance_audit.sh --cursor` | 49 checks (18 planned SKIPs); `--self-test`; spec in `audit/README.md` |
