@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+set -u
+
+MSG_FILE="${1:-}"
+if [[ -z "$MSG_FILE" || ! -f "$MSG_FILE" ]]; then
+  printf 'COMMIT_REJECTED errors=1\n' >&2
+  printf 'INPUT: (missing commit message file)\n' >&2
+  printf 'VIOLATIONS:\n' >&2
+  printf '  - E_HEADER: Header must match '"'"'<type>(<scope>): <summary> (WI-<id>)'"'"'\n' >&2
+  exit 1
+fi
+
+FIRST_LINE=$(head -n 1 "$MSG_FILE" | tr -d '\r')
+
+# Exempt automated merges and reverts
+if [[ "$FIRST_LINE" =~ ^Merge\  || "$FIRST_LINE" =~ ^Revert\ \" ]]; then
+  exit 0
+fi
+
+# Comment-stripped body for section analysis
+STRIPPED=$(mktemp)
+trap 'rm -f "$STRIPPED"' EXIT
+grep -v '^[[:space:]]*#' "$MSG_FILE" | tr -d '\r' > "$STRIPPED" || true
+
+errs=()
+
+HEADER_RE='^([a-z]+)\(([a-z0-9_-]+)\): ([^ ].*) \((WI-[A-Za-z0-9_-]+)\)$'
+if [[ ! "$FIRST_LINE" =~ $HEADER_RE ]]; then
+  errs+=("E_HEADER: Header must match '<type>(<scope>): <summary> (WI-<id>)'")
+else
+  TYPE="${BASH_REMATCH[1]}"
+  SCOPE="${BASH_REMATCH[2]}"
+  SUMMARY="${BASH_REMATCH[3]}"
+
+  syn_hit=0
+  case "$TYPE" in
+    performance|optimize|speed)
+      errs+=("E_SYNONYM: Use canonical type 'perf' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+    documentation|doc|guide)
+      errs+=("E_SYNONYM: Use canonical type 'docs' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+    tests|testing|unittest)
+      errs+=("E_SYNONYM: Use canonical type 'test' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+    specification|contract|iface)
+      errs+=("E_SYNONYM: Use canonical type 'spec' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+    bugfix|hotfix)
+      errs+=("E_SYNONYM: Use canonical type 'fix' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+    feature)
+      errs+=("E_SYNONYM: Use canonical type 'feat' instead of '$TYPE'")
+      syn_hit=1
+      ;;
+  esac
+
+  if [[ $syn_hit -eq 0 ]]; then
+    if [[ ! "$TYPE" =~ ^(feat|fix|refactor|perf|test|proof|audit|eval|spec|chore|docs)$ ]]; then
+      errs+=("E_HEADER: Unknown type '$TYPE' (allowed: feat|fix|refactor|perf|test|proof|audit|eval|spec|chore|docs)")
+    fi
+  fi
+
+  if [[ "$SCOPE" =~ ^(s[0-9]+|stage[0-9]*|v[0-9.]+|wip|main|master)$ ]]; then
+    errs+=("E_SCOPE: Scope '$SCOPE' must name a module/subsystem (e.g. router, actl, proof, rules), never a stage or version")
+  fi
+
+  FIRST_WORD="${SUMMARY%% *}"
+  FIRST_WORD=$(printf '%s' "$FIRST_WORD" | tr '[:upper:]' '[:lower:]')
+  if [[ "$FIRST_WORD" =~ ^(update|updated|modify|modified|change|changed|wip|temp|misc|patch|clean|fix-tests)$ ]]; then
+    errs+=("E_LAZY_VERB: Summary starts with vague verb '$FIRST_WORD'; use a specific action verb")
+  fi
+fi
+
+# --- Body sections on comment-stripped text ---
+has_why=0
+has_what=0
+has_result=0
+grep -q '^Why:' "$STRIPPED" && has_why=1
+grep -q '^What changed:' "$STRIPPED" && has_what=1
+grep -q '^Result:' "$STRIPPED" && has_result=1
+
+why_text=$(awk '
+  /^Why:/ {
+    inwhy=1
+    sub(/^Why:[[:space:]]*/, "")
+    if (length($0) > 0) print
+    next
+  }
+  inwhy && /^What changed:/ { exit }
+  inwhy { print }
+' "$STRIPPED")
+why_compact=$(printf '%s' "$why_text" | tr -d '[:space:]')
+if [[ $has_why -eq 0 || -z "$why_compact" ]]; then
+  errs+=("E_SECTION_WHY: Missing or empty 'Why:' section")
+fi
+
+if [[ $has_what -eq 0 ]]; then
+  errs+=("E_SECTION_WHAT: Missing 'What changed:' section")
+else
+  what_block=$(awk '
+    /^What changed:/ { inwhat=1; next }
+    inwhat && /^Result:/ { exit }
+    inwhat { print }
+  ' "$STRIPPED")
+  if ! printf '%s\n' "$what_block" | grep -qE '^[[:space:]]*-[[:space:]]+[^[:space:]]'; then
+    errs+=("E_BULLETS: 'What changed:' must contain at least one '- <file>: <change>' bullet")
+  fi
+fi
+
+result_text=$(awk '
+  /^Result:/ {
+    inres=1
+    sub(/^Result:[[:space:]]*/, "")
+    if (length($0) > 0) print
+    next
+  }
+  inres { print }
+' "$STRIPPED")
+result_compact=$(printf '%s' "$result_text" | tr -d '[:space:]')
+if [[ $has_result -eq 0 || -z "$result_compact" ]]; then
+  errs+=("E_SECTION_RESULT: Missing or empty 'Result:' section")
+fi
+
+if grep -qiE '(\bcommit[[:space:]]+[0-9a-f]{7,40}\b|\(commit[[:space:]]+[0-9a-f]{7,40}\))' "$STRIPPED"; then
+  errs+=("E_BARE_SHA: Reference prior commits as bare SHAs (e.g. 85523a0), never 'commit <sha>'")
+fi
+
+# Selective SHA requirement: fix and revert must cite a prior commit in Why:
+if [[ "${TYPE:-}" == "fix" || "${TYPE:-}" == "revert" ]]; then
+  WHY_BLOCK=$(printf '%s\n' "$STRIPPED" | sed -n '/^Why:/,/^What changed:/p' | grep -v '^What changed:')
+  if ! echo "$WHY_BLOCK" | grep -qE '[0-9a-f]{7,40}'; then
+    errs+=("E_FIX_NO_SHA: '${TYPE}' commits must reference the prior commit SHA (7-40 hex chars) in 'Why:'")
+  fi
+fi
+
+if [[ ${#errs[@]} -gt 0 ]]; then
+  printf 'COMMIT_REJECTED errors=%d\n' "${#errs[@]}" >&2
+  printf 'INPUT: %s\n' "$FIRST_LINE" >&2
+  printf 'VIOLATIONS:\n' >&2
+  for e in "${errs[@]}"; do
+    printf '  - %s\n' "$e" >&2
+  done
+  printf 'TEMPLATE: <type>(<scope>): <summary> (WI-<id>) | Body: Why: (bare SHAs) / What changed: (- file: diff) / Result: (metrics)\n' >&2
+  printf 'EXAMPLE:\n' >&2
+  printf '  feat(router): isolate prompt tiers from flag parsing (WI-TOOLS-2)\n' >&2
+  printf '  Why: Fixes argument truncation on 2acaf3c.\n' >&2
+  printf '  What changed:\n' >&2
+  printf '  - src/router/cli.py: Guard positional arguments.\n' >&2
+  printf '  Result: 11 passed, 0 failed in proof suite.\n' >&2
+  printf 'DIRECTIVE: Re-run git commit with a corrected message. NEVER use --no-verify, -n, edit hooks, or change core.hooksPath.\n' >&2
+  exit 1
+fi
+
+exit 0

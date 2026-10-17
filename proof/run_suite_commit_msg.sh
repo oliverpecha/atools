@@ -27,64 +27,71 @@ check "T1_hook_executable" check_hook_exists
 
 # Gate 2: Hook catches malformed header syntax (E_HEADER)
 check_bad_header() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "bad: header\n\nWhy:\nValid context.\n\nWhat changed:\n- file.py: change\n\nResult:\n1 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_HEADER"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_HEADER"
 }
 check "T2_reject_bad_header" check_bad_header
 
 # Gate 3: Hook catches synonym types and suggests canonical root (E_SYNONYM)
 check_synonym_type() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "performance(router): speed up polling (WI-RULES-1)\n\nWhy:\nValid context.\n\nWhat changed:\n- file.py: change\n\nResult:\n1 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_SYNONYM.*perf"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_SYNONYM.*perf"
 }
 check "T3_reject_synonym_type" check_synonym_type
 
 # Gate 4: Hook rejects stage/version pseudonyms in scope (E_SCOPE)
 check_stage_scope() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "chore(s0): pin baseline fixtures (WI-RULES-1)\n\nWhy:\nValid context.\n\nWhat changed:\n- file.py: change\n\nResult:\n1 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_SCOPE"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_SCOPE"
 }
 check "T4_reject_stage_scope" check_stage_scope
 
 # Gate 5: Hook rejects lazy verbs in summary (E_LAZY_VERB)
 check_lazy_verb() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "feat(actl): update the configuration parser (WI-RULES-1)\n\nWhy:\nValid context.\n\nWhat changed:\n- file.py: change\n\nResult:\n1 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_LAZY_VERB"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_LAZY_VERB"
 }
 check "T5_reject_lazy_verb" check_lazy_verb
 
 # Gate 6: Hook rejects missing or empty sections (E_SECTION_RESULT)
 check_missing_section() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "feat(router): isolate flag parsing (WI-RULES-1)\n\nWhy:\nValid context.\n\nWhat changed:\n- file.py: change\n\nResult:\n# only a comment\n   \n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_SECTION_RESULT"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_SECTION_RESULT"
 }
 check "T6_reject_missing_or_empty_section" check_missing_section
 
 # Gate 7: Hook rejects 'What changed:' lacking bullet points (E_BULLETS)
 check_bullets() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "feat(router): isolate flag parsing (WI-RULES-1)\n\nWhy:\nValid context.\n\nWhat changed:\nNo bullets here\n\nResult:\n1 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_BULLETS"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_BULLETS"
 }
 check "T7_reject_missing_bullets" check_bullets
 
 # Gate 8: Hook rejects non-bare SHA references in Why: (E_BARE_SHA)
 check_bare_sha() {
-  local f=$(mktemp)
+  local f=$(mktemp) rc=0
   printf "fix(router): guard auto tier (WI-RULES-1)\n\nWhy:\nRegression introduced in commit 85523a0 during refactor.\n\nWhat changed:\n- bin/arouter: guard prefix.\n\nResult:\n6 passed, 0 failed.\n" > "$f"
-  if "$HOOK" "$f" 2>&1 | grep -q "E_BARE_SHA"; then rm -f "$f"; return 0; fi
-  rm -f "$f"; return 1
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_BARE_SHA"
 }
 check "T8_reject_non_bare_sha" check_bare_sha
 
@@ -145,6 +152,36 @@ check_governance_texts() {
   grep -q 'worktree' "$REPO_DIR/.cursor/skills/atools-repair/SKILL.md" || return 1
 }
 check "T13_governance_contracts_present" check_governance_texts
+
+# Gate 14: Hook rejects 'fix' commits missing a prior commit SHA in Why: (E_FIX_NO_SHA)
+check_fix_without_sha() {
+  local f=$(mktemp) rc=0
+  printf "fix(router): guard auto tier (WI-RULES-1)\n\nWhy:\nRegression fixed but omitted prior sha.\n\nWhat changed:\n- bin/arouter: guard prefix.\n\nResult:\n6 passed, 0 failed.\n" > "$f"
+  local out; out=$("$HOOK" "$f" 2>&1) || rc=$?
+  rm -f "$f"
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "E_FIX_NO_SHA"
+}
+check "T14_reject_fix_without_sha" check_fix_without_sha
+
+# Gate 15: Hook accepts 'feat' commit without prior SHA
+check_feat_without_sha() {
+  local f=$(mktemp)
+  cat << 'MSG' > "$f"
+feat(router): add new telemetry filter option (WI-TOOLS-2)
+
+Why: Introduces optional log verbosity flag requested by operator.
+
+What changed:
+- src/router/cli.py: Add --verbose flag.
+
+Result: 11 passed, 0 failed in engine proof suite.
+MSG
+  "$HOOK" "$f" >/dev/null 2>&1
+  local res=$?
+  rm -f "$f"
+  return $res
+}
+check "T15_accept_feat_without_sha" check_feat_without_sha
 
 echo "--- Suite Results: $PASS passed, $FAIL failed ---"
 [[ $FAIL -eq 0 ]]

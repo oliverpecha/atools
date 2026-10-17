@@ -46,6 +46,8 @@ mkdir -p "$HOME/.cursor/rules" "$HOME/.config/git/hooks"
 cp "$ROOT_DIR/rules/git-safety.md" "$HOME/.cursor/rules/git-safety.md"
 cp "$ROOT_DIR/hooks/pre-commit" "$HOME/.config/git/hooks/pre-commit"
 chmod +x "$HOME/.config/git/hooks/pre-commit"
+cp "$ROOT_DIR/hooks/commit-msg" "$HOME/.config/git/hooks/commit-msg"
+chmod +x "$HOME/.config/git/hooks/commit-msg"
 git config --global core.hooksPath "$HOME/.config/git/hooks"
 
 # 4. Synchronize In-Repo Worker Skill to global Cursor store
