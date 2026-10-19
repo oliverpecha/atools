@@ -26,7 +26,7 @@ bash -n "$REPO_DIR/bin/arouter" >> "$OUT_DIR/p0.log" 2>&1
 report "P0_syntax_validation" $?
 
 # P1: Help and CLI flags presence
-"$REPO_DIR/bin/arouter" --help 2>&1 \vert{} grep -E "(--detach\vert{}-d\vert{}ps\vert{}attach\vert{}logs\vert{}kill)" > "$OUT_DIR/p1.log" 2>&1
+"$REPO_DIR/bin/arouter" --help 2>&1 | grep -E "(--detach|-d|ps|attach|logs|kill)" > "$OUT_DIR/p1.log" 2>&1
 report "P1_cli_subcommands_and_flags" $?
 
 # P2: Log directory initialization
