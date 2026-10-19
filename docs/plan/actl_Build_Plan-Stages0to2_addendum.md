@@ -1,6 +1,6 @@
 # actl_Build_Plan-Stages0to2_addendum — Addendum to the core document
 
-**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `4221952`, `VERSION` v0.1.4 (audit runner `4da9394`; the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
+**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `2acaf3c`, `VERSION` v0.1.7 (audit runner `4da9394`; the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
 **Relation to other files**
 
 | File | Role |
@@ -19,7 +19,7 @@
 
 | Core document says | Now |
 |---|---|
-| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `4221952`, `VERSION` v0.1.4 (modular audit runner adopted in `4da9394`, installed-copy sync checks added), on top of `a9b3a4e`, `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
+| Baseline is v0.1.0 / the Oct 4 commits (§2.1) | Baseline is `2acaf3c`, `VERSION` v0.1.7 (modular audit runner adopted in `4da9394`, installed-copy sync checks added), on top of `a9b3a4e`, `5cb7f30` (persistent sessions) and `759a0ca` (explorer). `docs/` and `audit/` are excluded from the dump on purpose; the Owner guarantees the audit script is reachable. |
 | `arouter` is a tier router with a watchdog (§2.2) | It also has detached tmux sessions, `ps/attach/logs/kill`, three execution paths, and `src/router/process.py`. Background execution **exists** and is consumed, not built (Stage 6 shrinks). |
 | Stage 4 or 6 builds tmux supervision (Stage map §4; My/Chi agreement rows) | Consume the existing layer. One small change is added to Stage 0 (exit-code persistence, S0-R16). |
 | Stage map §4 | Same Stages; Stage 0 has two workstreams (0A foundations, 0B exit-code persistence); Stages 1 and 2 run in parallel after Stage 0; see §11. |
@@ -295,7 +295,7 @@ def _wait_pids_gone(pids, timeout: float = 2.0) -> bool:
     return False
 ```
 
-*(In `kill_session()`, after the `kill -9` loop: if `_wait_pids_gone(pids)` returns `True`, call `_record_exit(session_name, 143, overwrite=False)`; if it returns `False`, unlink `<session>.exit` so a stuck runner is classified as `session_lost`.)*
+*(In `kill_session()`, after the `kill -9` loop: if `_wait_pids_gone(pids)` returns `True`, call `_record_exit(session_name, 143, overwrite=True)`; if it returns `False`, unlink `<session>.exit` so a stuck runner is classified as `session_lost`.)*
 
 Proof suite `proof/run_suite_exit_code.sh` (authored first, immutable for the implementer). It isolates itself from the real environment: a private tmux server (so the Owner's real sessions are never touched and `kill-server` is safe), private log and session directories, stub `agent` and stub `loginctl` first in `PATH` (F13).
 
