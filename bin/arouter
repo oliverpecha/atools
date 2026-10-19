@@ -192,7 +192,7 @@ fi
 
 case "${FILTERED_ARGS[0]:-}" in
     cheap|balanced|smart|auto|acheap|abalanced|asmart|aauto)
-        TARGET="${FILTERED_ARGS[0]#a}"
+        TARGET="${FILTERED_ARGS[0]}"; if [[ "$TARGET" != auto ]]; then TARGET="${TARGET#a}"; fi
         PROMPT_ARGS=("${FILTERED_ARGS[@]:1}")
         ;;
     *)
