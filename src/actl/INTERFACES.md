@@ -4,6 +4,7 @@
 Authored-by: Gemini Argon 4 High (Challengers: GPT-6 Sol, Claude Sonnet 5.5)
 Baseline: `atools` commit `2acaf3c`, `VERSION` `v0.1.7`
 Revision note: 2026-10-19 baseline header moved to 2acaf3c / v0.1.7; no interface changed; approved by Owner (PB-4).
+Revision note: 2026-10-19 error types, scope parse/validate split, validator error paths, state_lock threading, reserve highwater, run_id rule and verify_impl effects clarified; `actl.errors` added (3 entries); no signature removed; applied at Owner request (PB-4).
 Status: Normative interface contract for `S0-R15` (`PB-2`, `PB-4`). Changes after Owner acceptance require explicit Owner approval and a revision note in this file.
 
 ---
@@ -144,21 +145,21 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Preconditions:** `layout.sprint_dir(tag)` exists.
 * **Return value:** Context manager yielding `None`.
 * **Errors raised:** `FileNotFoundError` if sprint directory does not exist; `OSError` on lock failure.
-* **Side effects:** Manages process-local re-entrancy depth keyed on `layout.state_lock(tag)`. Acquires `fcntl.flock(fd, fcntl.LOCK_EX)` on `0 -> 1` transition; releases on `1 -> 0`.
-* **Idempotence:** Re-entrant within a process.
+* **Side effects:** Keeps a re-entrancy depth counter in `threading.local()` keyed on the resolved path of `layout.state_lock(tag)`, so only the thread holding the lock can re-enter; other threads and other processes block in `fcntl.flock(fd, fcntl.LOCK_EX)` on their own descriptors. Acquires the `flock` on the `0 -> 1` transition and releases it on `1 -> 0`. The depth table and any open lock descriptor are discarded in a forked child (`os.register_at_fork(after_in_child=...)`), which must re-acquire the lock. The lock MUST NOT be held while waiting on a tmux session, an LLM or a network call.
+* **Idempotence:** Re-entrant within a thread.
 
 
 * **`reserve(layout: Layout, tag: str, kind: str) -> int`** (`kind: function`)
 * **Preconditions:** `layout.state_file(tag)` exists; `kind` is a valid artifact kind for `format_artifact_id` (or `"implementer"` for attempt workspaces).
 * **Return value:** Newly allocated monotonic integer `seq >= 1`.
 * **Errors raised:** `FileNotFoundError` if sprint state does not exist; `ValueError` on invalid `tag` or `kind`; `OSError` on lock/write failure.
-* **Side effects:** Executes inside `with state_lock(layout, tag):`. Acquires `fcntl.flock(..., LOCK_EX)` on `runs/state.lock`; reads `runs/state.json`; increments `state["seq"]`; writes temp file in `runs/`, `os.fsync`, `os.replace` onto `runs/state.json`, `os.fsync` on `runs/`; releases lock.
-* **Idempotence:** Non-idempotent (strictly increments `seq` by 1 per call).
+* **Side effects:** Executes inside `with state_lock(layout, tag):`. Acquires `fcntl.flock(..., LOCK_EX)` on `runs/state.lock`; reads `runs/state.json`; reads `runs/seq.highwater` (absent means `0`); computes `new_seq = max(state["seq"], highwater) + 1`; writes `new_seq` to `runs/seq.highwater` (temp file, `os.fsync`, `os.replace`, directory `os.fsync`) before touching `state.json`, so a crash leaves a gap and never a duplicate (S0-R5); then sets `state["seq"] = new_seq`; writes temp file in `runs/`, `os.fsync`, `os.replace` onto `runs/state.json`, `os.fsync` on `runs/`; releases lock.
+* **Idempotence:** Non-idempotent (strictly increases `seq` on every call).
 
 
 * **`reconstruct(layout: Layout, tag: str) -> int`** (`kind: function`)
 * **Preconditions:** `layout.sprint_dir(tag)` exists.
-* **Return value:** Highest `seq` integer (`>= 0`) across `runs/seq.highwater` (written by `reserve` before returning), `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*`, and `$ACTL_ROOT/workspaces/{tag}/implementer-*` via `parse_seq_from_name`. Replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` in `seq` order to deterministically restore `active_spec`, `active_solution_key`, `active_oracle_draft`, `active_oracle`, `active_contract`, `epoch`, `status`, `active_stage`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
+* **Return value:** Highest `seq` integer (`>= 0`) across `runs/seq.highwater` (written by `reserve` before returning), `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*/*` (two levels, file names only), and `$ACTL_ROOT/workspaces/{tag}/implementer-*` via `parse_seq_from_name`. Replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` in `seq` order to deterministically restore `run_id`, `sprint_tag`, `active_spec`, `active_solution_key`, `active_oracle_draft`, `active_oracle`, `active_contract`, `epoch`, `status`, `active_stage`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
 * **Errors raised:** `FileNotFoundError` if `sprint_dir(tag)` is missing; `OSError` on write failure.
 * **Side effects:** Under `runs/state.lock`, rebuilds or updates `runs/state.json` atomically with `seq = max_seq`.
 * **Idempotence:** Idempotent when no new artifacts are created between calls.
@@ -213,7 +214,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`validate(kind: str, obj: Any) -> list[dict[str, str]]`** (`kind: function`)
 * **Preconditions:** `kind` is in `("common", "state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt")`.
-* **Return value:** List of `{"path": str, "message": str}` dicts sorted by `(path, message)` produced exclusively by the in-tree stdlib validator (never delegating to `jsonschema`). `path` is `"/"` for root type errors and `"/<prop>"` (or `"/<parent>/<prop>"`) for missing `required` properties and rejected `additionalProperties`. Raises `ValueError` at schema load if a schema contains an unsupported keyword. Empty list `[]` iff `obj` conforms to `schemas/{kind}.json`.
+* **Return value:** List of `{"path": str, "message": str}` dicts sorted by `(path, message)` produced exclusively by the in-tree stdlib validator (never delegating to `jsonschema`). `path` is the RFC 6901 JSON Pointer of the failing instance location (decimal array indices; `~` escaped as `~0`, `/` as `~1`), with the root written as `"/"`. A `type`, `enum`, `const`, `pattern`, `minimum`, `minLength` or `maxLength` violation reports the offending value (for example `/steps/0/exit_code`); a missing `required` property reports the property that should exist (`/<parent>/<prop>`); a rejected `additionalProperties` reports the extra property; `anyOf`/`oneOf` report one entry at the instance with all branch failures in `message`. Raises `ValueError` at schema load if a schema contains an unsupported keyword. Empty list `[]` iff `obj` conforms to `schemas/{kind}.json`.
 * **Errors raised:** `ValueError` ONLY if `kind` is unknown or schema load fails. Never raises on invalid `obj` data.
 * **Side effects:** Reads `schemas/*.json`. **Idempotence:** Pure / idempotent.
 
@@ -248,13 +249,13 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **`parse(text: str) -> list[ScopeRule]`** (`kind: function`)
 * **Preconditions:** `text` is a `str`.
 * **Return value:** Ordered list of `ScopeRule` objects (blank lines and `#` comments ignored).
-* **Errors raised:** `ValueError` if any non-comment line fails `^(ALLOW|FROZEN):\s*(\S.*)$` or has a leading `/`, `\`, NUL, or `..` segment.
+* **Errors raised:** `ValueError` if any non-comment line fails `^(ALLOW|FROZEN):\s*(\S.*)$`, or whose pattern has a leading `/`, a `\`, a NUL, an inline `#` comment, or any `.`, `..` or empty segment (for example `a//b` or a trailing `/`).
 * **Side effects:** None. **Idempotence:** Pure.
 
 
 * **`validate(rules: list[ScopeRule]) -> list[str]`** (`kind: function`)
 * **Preconditions:** `rules` is a `list[ScopeRule]`.
-* **Return value:** List of human-readable error strings (`[]` if valid). Never calls `match(rules, ...)` (uses internal `_match_unchecked` to prevent recursion). Strips trailing whitespace on parse; rejects inline `#` comments, empty `ALLOW` sets, missing `FROZEN: test/**`, literal-vs-literal conflicts on the same path, metacharacters outside `*` and `**`, `**` not bounded by `/` or string ends, and any non-literal `ALLOW` rule under which `_match_unchecked(allow_only_rules, "__root_probe__") == "allowed"`, `_match_unchecked(allow_only_rules, "test/__probe__.py") == "allowed"`, or `_match_unchecked(allow_only_rules, "test/sub/__probe__.py") == "allowed"` where `allow_only_rules = [r for r in rules if r.kind == "ALLOW"]`. `**` matches zero or more path segments (`a/**/b` matches `a/b` and `a/x/b`).
+* **Return value:** List of human-readable error strings (`[]` if valid). Never calls `match(rules, ...)` (uses internal `_match_unchecked` to prevent recursion). Trailing whitespace is stripped and inline `#` comments are rejected by `parse`, not here; rejects empty `ALLOW` sets, missing `FROZEN: test/**`, literal-vs-literal conflicts on the same path, metacharacters outside `*` and `**`, `**` not bounded by `/` or string ends, and any non-literal `ALLOW` rule under which `_match_unchecked(allow_only_rules, "__root_probe__") == "allowed"`, `_match_unchecked(allow_only_rules, "test/__probe__.py") == "allowed"`, or `_match_unchecked(allow_only_rules, "test/sub/__probe__.py") == "allowed"` where `allow_only_rules = [r for r in rules if r.kind == "ALLOW"]`. `**` matches zero or more path segments (`a/**/b` matches `a/b` and `a/x/b`).
 * **Errors raised:** None. **Side effects:** None. **Idempotence:** Pure.
 
 
@@ -314,10 +315,15 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Side effects:** Imports all `actl.cmd_*` modules and invokes `mod.register(subparsers)`. **Idempotence:** Idempotent per parser instance.
 
 
+* **`UsageError(message: str) -> None`** / **`StateIntegrityError(message: str) -> None`** / **`EnvError(message: str) -> None`** (`actl.errors`, `kind: class`; each subclasses `Exception`; Owning Stage: Stage 0A, `S0-R10`)
+* **Preconditions:** `message` is a `str`.
+* **Return value:** Exception instance. `UsageError` maps to exit code `2`, `StateIntegrityError` to `3`, `EnvError` to `4` (named `EnvError` because `EnvironmentError` is an alias of `OSError` in Python 3).
+* **Errors raised:** None. **Side effects:** None. **Idempotence:** Pure.
+
 * **`main(argv: list[str] | None = None) -> int`** (`actl.cli`, `kind: function`)
 * **Preconditions:** `argv` is a list of CLI argument strings or `None` (`sys.argv[1:]`). Subparsers use `required=True`.
 * **Return value:** Exit code in `{0, 1, 2, 3, 4}` (`S0-R10`).
-* **Errors raised:** None. Pre-scans `argv` for `--json` before `argparse` execution. Explicitly maps exception types: `UsageError -> 2`, `StateIntegrityError -> 3`, `EnvironmentError -> 4`. Catches `SystemExit(code)` (`0` preserved for `--help`/`--version`, which always emit plain text; `code in (1,2,3,4)` preserved from handlers; other non-zero `argparse` exits mapped to `2`). Catches unhandled exceptions: missing external tools (`tmux`, `git`, `bash`, `pytest`, audit script) → `4`; `ValueError` or input `FileNotFoundError` → `2`; integrity/state/storage `OSError` or `RuntimeError` → `3` (never `1`). Preserves exit code `3` across CLI tables for corrupt state/integrity halts. When `--json` is present on any error exit, emits `{"ok": false, "exit_code": int, "error": str}` to stdout.
+* **Errors raised:** None. Pre-scans `argv` for `--json` before `argparse` execution. Explicitly maps exception types: `UsageError -> 2`, `StateIntegrityError -> 3`, `EnvError -> 4` (all three defined in `actl.errors`). Catches `SystemExit(code)` (`0` preserved for `--help`/`--version`, which always emit plain text; `code in (1,2,3,4)` preserved from handlers; other non-zero `argparse` exits mapped to `2`). Command handlers MUST translate library failures (`ValueError`, `FileNotFoundError`, `OSError`) into `UsageError`, `StateIntegrityError` or `EnvError`; `main` maps only those three types. Any other unhandled exception maps to `3` (never `1`, which is reserved for red results) and its type name is placed in the `--json` `error` field. Preserves exit code `3` across CLI tables for corrupt state/integrity halts. When `--json` is present on any error exit, emits `{"ok": false, "exit_code": int, "error": str}` to stdout.
 * **Side effects:** Executes the selected subcommand. **Idempotence:** Depends on subcommand.
 
 
@@ -393,10 +399,10 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 
 * **`verify_impl(layout: Layout, tag: str, closure_path: Path | None = None, worktree: Path | None = None, fail_fast: bool = True, session_info: dict[str, Any] | None = None, strict_tripwire: bool = False) -> dict[str, Any]`** (`actl.verify`, `kind: function`)
-* **Preconditions:** Sprint `tag` has an active contract and oracle.
+* **Preconditions:** Sprint `tag` has an active contract and oracle. `closure_path=None` evaluates no closure (`G2` and the blocked-precondition check are skipped, nothing is stamped, `closures_submitted` is unchanged); `worktree=None` resolves to the attempt workspace `layout.workspace(f"implementer-{attempt_seq:03d}", tag)` (proposed; Owner to confirm).
 * **Return value:** Validated `ev-{seq}.json` dict (`exit_code` in `{0, 1, 3}`).
 * **Errors raised:** `FileNotFoundError`, `ValueError`.
-* **Side effects:** Accepts `closure_path` at either `implementer-outputs/closure.json` or `closure-{seq:03d}.json`, stamps `kind="closure"`, `seq`, `parent=contract_id` into `runs/closure-{seq:03d}.json`, sets `ev.parent = f"closure-{attempt_seq:03d}.json"`, forces `G2` red if `session_info` has `lost=True` or `hard_cap=True`, evaluates post-`O2` blocked preconditions when `reason == "blocked"`, writes `runs/ev-{seq:03d}.json`, and only then unlinks original `<LOG_DIR>/<session>.log` and `<METADATA_DIR>/<session>.exit`.
+* **Side effects:** Accepts `closure_path` at either `implementer-outputs/closure.json` or `closure-{seq:03d}.json`, stamps `kind="closure"`, `seq`, `parent=contract_id` into `runs/closure-{seq:03d}.json`, sets `ev.parent = f"closure-{attempt_seq:03d}.json"`, forces `G2` red if `session_info` has `lost=True` or `hard_cap=True`, evaluates post-`O2` blocked preconditions when `reason == "blocked"`, writes `runs/ev-{seq:03d}.json` (plus `handoff/{tag}/implementer-inputs/prior_attempt.json` when `exit_code == 1`, S1-R7), increments `closures_submitted` once per stamped closure via `update_state`, merges `scan_tripwires` output into `ev.tripwires` (a non-empty result makes the run red when `strict_tripwire=True`), and only then unlinks original `<LOG_DIR>/<session>.log` and `<METADATA_DIR>/<session>.exit`.
 * **Idempotence:** Non-idempotent (reserves a new `seq` and writes `runs/ev-{seq}.json` per call; deterministic outputs modulo `seq`, `id`, and `duration_ms`).
 
 
@@ -495,7 +501,7 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 
 ### 3.1 `state.json` (`specs/{sprint_tag}/runs/state.json` — `schemas/state.json`)
 
-* `run_id`: `str` (non-empty unique identifier)
+* `run_id`: `str` (`run-` followed by the first 12 hex characters of the SHA-256 of `sprint_tag`; deterministic so `reconstruct` can rebuild it; proposed, Owner to confirm)
 * `sprint_tag`: `str` (`^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-z0-9][a-z0-9-]{1,40}$`)
 * `seq`: `int >= 0` (monotonic counter; only field mutated in Stage 0)
 * `epoch`: `int >= 1` (initialized to `1`)
@@ -628,6 +634,9 @@ Introspection contract for `P-S0-26`:
 
 ```json
 [
+  {"module": "actl.errors", "name": "UsageError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
+  {"module": "actl.errors", "name": "StateIntegrityError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
+  {"module": "actl.errors", "name": "EnvError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
   {"module": "actl.layout", "name": "Layout", "kind": "class", "stage": "0A", "params": [{"name": "root", "type": "Path | str | None"}], "returns": "None"},
   {"module": "actl.layout", "name": "Layout.actl_repo", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.target_repo", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
