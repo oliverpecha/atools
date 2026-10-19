@@ -106,17 +106,17 @@ $ACTL_ROOT/
 
 Modes from §1.5 are *applied* (`700`, `0750`/`0770`) even though local mode cannot make them effective. Path inputs are validated (no `..`, no absolute path where a relative one is expected).
 
-**S0-R4 Sprint creation.** `actl init --target <git path|url>` creates the tree and clones the target (`git clone --local --no-hardlinks` for a path). `actl sprint new <slug> [--spec file]` MUST: validate `slug` against `^[a-z0-9][a-z0-9-]{1,40}$`; mint `sprint_tag = YYYY-MM-DD_{slug}` from the local date (refuse if it exists); pin `base_sha` as the full 40-char HEAD of the target's default branch; create the sprint and handoff directories, `runs/state.json` (S0-R5), `runs/sessions.tsv` with a header, and a draft `sprint.toml` with every default resolved from `config/graph.toml`, `live_run` left **unset** (no default per Design §4.1) and `status = "draft"`. With `--spec`, it is copied as `spec-{seq}.md` using a newly allocated `seq`, and `spec_source = "imported"` is recorded.
+**S0-R4 Sprint creation.** `actl init --target <git path|url>` creates the tree and clones the target (`git clone --local --no-hardlinks` for a path). `actl sprint new <slug> [--spec file]` MUST: validate `slug` against `^[a-z0-9][a-z0-9-]{1,40}\Z`; mint `sprint_tag = YYYY-MM-DD_{slug}` from `$ACTL_TODAY` (if set to `YYYY-MM-DD`) else the local date (refuse if it exists); pin `base_sha` as the full 40-char HEAD of the target's default branch; create the sprint and handoff directories, `runs/state.json` (S0-R5), `runs/sessions.tsv` with header `seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n`, and a deterministically formatted draft `sprint.toml` with every default resolved from `config/graph.toml`, `live_run` left **unset** (no default per Design §4.1) and `status = "draft"`. With `--spec`, it is copied as `spec-{seq}.md` using a newly allocated `seq`, and `spec_source = "imported"` and `active_spec = "spec-001.md"` are recorded.
 
-**S0-R5 Sequence allocator and state.** `seq.reserve(layout, tag, kind) -> int` MUST: take an exclusive `fcntl.flock` on `runs/state.lock`; read `state.json`; increment `seq`; write it atomically (temp file in the same directory, `fsync`, `os.replace`, `fsync` of the directory); release the lock; and return the number **before** any artifact is written (a crash leaves a gap, never a duplicate; Design §5.1). Numbers are never reused. 50 parallel reservations MUST yield 50 distinct numbers. `state.json` is initialized with every field named in Design §5.1 (`seq`, `epoch`, `attempts.{oracle,implementer,live,curator}`, `closures_submitted`, `hard_caps_tripped`, `active_stage`, `active_spec`, `active_oracle`, `active_contract`, `status`, `tmux` session refs, `grants`) but in Stage 0 **only `seq` is mutated**. `seq.reconstruct(layout, tag)` rebuilds `seq` as the highest number found in artifact filenames and is tested by deleting `state.json`.
+**S0-R5 Sequence allocator and state.** `seq.reserve(layout, tag, kind) -> int` MUST: take an exclusive `fcntl.flock` on `runs/state.lock`; read `state.json` and `runs/seq.highwater` (if present); set `next_seq = max(state["seq"], highwater) + 1`; write `f"{next_seq}\n"` + `fsync` to `runs/seq.highwater`; write `state.json` atomically (temp file in `runs/`, `fsync`, `os.replace`, `fsync` of `runs/`); release the lock; and return `next_seq` **before** any artifact is written. Numbers are never reused. 50 parallel reservations MUST yield 50 distinct numbers. `state.json` includes `active_solution_key` and `active_oracle_draft` alongside `active_spec`, `active_oracle`, `active_contract`. `seq.reconstruct(layout, tag)` rebuilds `seq = max(highwater, max_artifact_seq)` across `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*`, and sprint-scoped `workspaces/{tag}/implementer-*`, and replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` files in `seq` order to restore `active_*` pointers, `epoch`, `status`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
 
 **S0-R6 Canonical hashing.** `hashing` defines once:
-- `file_sha256(path)`: SHA-256 of raw bytes, lowercase hex.
-- `manifest_sha256(dir)`: SHA-256 of the UTF-8 text formed, for every regular file under `dir` sorted by POSIX relative path (bytewise), by the line `"{relpath}\0{file_sha256}\n"` extended with an `x`/`-` flag for the executable bit (so `proofs/*.sh` stay executable). Symlinks and special files are errors; empty directories are ignored unless the spec defines a `.keep` rule.
-- `canonical_json(obj)` (UTF-8, sorted keys, separators `(",", ":")`, no NaN) and `json_sha256(obj)`.
-Used for `G1`, `contract` fields and tamper detection. The spec MUST include at least six independently computed test vectors (for example with `sha256sum`).
+- `file_sha256(path)`: SHA-256 of raw on-disk file bytes, lowercase 64-char hex. This is the universal digest domain for `sprint_sha256`, `contract_sha256`, `spec.sha256`, `qual.sha256`, and `scope.sha256`.
+- `manifest_sha256(dir)`: SHA-256 of the UTF-8 text formed, for every regular file under `dir` sorted by POSIX relative path (`relpath.encode("utf-8")`), by the line `f"{relpath}\0{exec_flag}\0{file_sha256}\n"` where `exec_flag` is `"x"` if `(st_mode & 0o111) != 0` else `"-"`. Symlinks and special files are errors; empty directories are ignored.
+- `canonical_json(obj)` (UTF-8, sorted keys, separators `(",", ":")`, `ensure_ascii=False`, `allow_nan=False`) and `json_sha256(obj)`.
+The spec MUST include at least six independently computed test vectors.
 
-**S0-R7 Schemas.** One JSON Schema (draft 2020-12, `additionalProperties: false`) per kind. Every artifact schema requires `kind`, `seq` and `parent` (nullable) via `common.json`. Field lists come from Design §4.2–4.3; where the Design gives only an example, the spec agent infers types and records the inference:
+**S0-R7 Schemas.** One JSON Schema (draft 2020-12, `additionalProperties: false`) per kind, validated by a single deterministic stdlib validator in `actl.schemas` (no delegation to third-party `jsonschema`). Sequenced `actl`-stamped artifacts (`ev`, `qual`, `contract`) require `kind`, `seq`, and `parent` (nullable) via `common.json#/$defs/artifact_meta`. In `closure`, `kind`, `seq`, and `parent` are optional so agent-authored drafts validate before promotion. Unsequenced files (`state`, `sprint`, `sprint-proposal`, `oracle-decision`, `prior_attempt`) omit `kind` and `parent`. `sprint` allows `live_run` to be omitted only when `status == "draft"` and requires it when `status == "frozen"`; `sprint-proposal` permits only proposable policy keys (`live_run` required, `approval_live_run`, `solution_key_exposure`, `owner_review_triggers`, `min_attempts_before_block`, `max_epochs`, `max_attempts`, `hard_cap`) and rejects `sprint_tag`, `base_sha`, `status`, `spec_source`, and `repo_test_cmd`. Field lists come from Design §4.2–4.3; where the Design gives only an example, the spec agent infers types and records the inference:
 - `closure`: `reason` (`done|blocked`), `blocking_step` (string|null), `notes` (string[]), `backlog` (string[]), `solution_key_divergence` (`{requirement_id, rationale}`|null).
 - `ev`: `id`, `stage` (`guards|offline|live|blocked_check`), `oracle`, `contract`, `head`, `exit_code`, `steps[]` (`id`, `cmd`, `exit_code`, `output_sha256`), `failing_step`, `failing_line`, `tripwires[]`, `halt` (null or `{reason}`), `session` (null or `{name, exit_code, hard_cap, lost, log_sha256}`).
 - `qual`: all fields of the Design example in §4.2, with `mutants[]` = `{name, killed, apply_error}`, `null_base` (`red|green`), `solution_key_guards`, `solution_key_repo_test` (`green|red`), `solution_key_green` (`"3/3"` or `"n/3"`), `diagnostic_case` (`none|pure_oracle_failure|solution_key_conflict`), `manifest_sha256`.
@@ -128,13 +128,13 @@ Used for `G1`, `contract` fields and tamper detection. The spec MUST include at 
 
 **S0-R8 Defaults.** `config/graph.toml` holds the installation defaults used to resolve a draft `sprint.toml`: `max_attempts` (oracle 3, implementer 2, live 2, curator 2), `min_attempts_before_block = 2`, `max_epochs = 3`, `solution_key_exposure = "full"`, `approval_live_run = "architect"`, `owner_review_triggers = []`, `[hard_cap.implementer]` (`wall_clock = "45m"`, `turns = 60`), `repo_test_cmd`. A comment states these are the Design's illustrative numbers.
 
-**S0-R9 Golden fixture.** §5.8. Deterministic, no network, runnable by `pytest` and `bash` only. Because the global hook has no `/tmp` bypass (F15), `build_golden.sh`, every test helper and every proof that creates a git repository or commits MUST pass `-c core.hooksPath=/dev/null` (or work on a `wip/*` branch).
+**S0-R9 Golden fixture.** §5.8. Deterministic, no network, runnable by `pytest` and `bash` only. `build_golden.sh` supports `--install-sprint <ACTL_ROOT> [--tag <TAG>]` to deterministically populate `spec-001.md`, `solution_key-002.patch`, `oracle-003/`, `qual-004.json`, `contract-005.json`, and `runs/state.json` for Stage 1/2 proofs before Stage 3 exists. Every git call in `build_golden.sh`, test helpers, and proofs MUST use a hermetic git environment (`GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null`, `-c core.hooksPath=/dev/null`, fixed author/committer name, email, and timestamp). Permission proofs (`P-S0-03`, `P-S2-12`) MUST assert `stat.S_IMODE(os.lstat(path).st_mode)` bitmasks rather than write-denial side effects so they behave identically under UID 0 (`root`) and non-root accounts.
 
 **S0-R10 CLI skeleton and exit codes.** `0` ok/green, `1` red (a check failed), `2` usage or schema/parse error, `3` halt (integrity problem; no attempt consumed), `4` environment error (missing tool). Every command supports `--json` and honours `NO_COLOR` like `core/terminal.py`.
 
 **S0-R11 Gating suite (0A).** `proof/run_suite_actl_s0.sh` follows the `run_check` pattern of `proof/run_suite_engines.sh` (log per check in `proof/out/`, PASS/FAIL counters, non-zero exit on failure), is idempotent, and uses a temp `ACTL_ROOT`.
 
-**S0-R12 `scope.py`.** The `scope.txt` parser and matcher, here so Stages 1 and 2 only import it. Format: lines `ALLOW: pattern` and `FROZEN: pattern`, `#` comments. Rules (Design §5.2): paths are denied unless matched by `ALLOW`; `FROZEN` beats any `ALLOW` glob; only a *literal* path in `ALLOW` thaws a frozen path; `ALLOW: **` and `ALLOW: test/**` are invalid and make the file invalid. Glob dialect: `*` within one path segment, `**` across segments, no other metacharacters. API: `parse(text)`, `validate(rules)`, `match(rules, path) -> allowed|denied|frozen`. At least 15 table-driven cases.
+**S0-R12 `scope.py`.** The `scope.txt` parser and matcher. Format: lines `ALLOW: pattern` and `FROZEN: pattern`; blank lines and full-line `#` comments are ignored; trailing whitespace is stripped; inline `#` comments, leading `/`, `\`, NUL, empty segments (`//`), `.` and `..` segments are rejected with `ValueError`. Glob dialect: `*` matches zero or more non-`/` characters within one segment (including leading `.`); `**` (only as full segment `**`, `/**`, `**/`, `/**/`) matches zero or more path segments (`a/**/b` matches both `a/b` and `a/x/y/b`); no other metacharacters (`?`, `[`, `]`, `{`, `}` are rejected). `validate(rules)` requires at least one `ALLOW` rule, requires `FROZEN: test/**` to be present, rejects literal-vs-literal conflicts on the same path, and probes sentinel paths (`__root_probe__`, `test/__probe__.py`, `test/sub/__probe__.py`) to reject any glob that allows arbitrary root paths or thaws `test/**` via a non-literal pattern (e.g., `**/*`, `*/**`, `**/*.py`).
 
 **S0-R13 Registries.** `cli.py` discovers `src/actl/cmd_*.py` (each exports `register(subparsers)`); `next.py` discovers `src/actl/next_rules/*.py` and evaluates rules in a documented fixed order; `decide_next(layout, tag) -> {action, command, reason}` is pure.
 
@@ -240,26 +240,44 @@ trap 'exit 130' INT
 In `spawn_detached_session(...)`, next to the existing log unlink (and in the tmux-failure branch), delete `get_exit_path(session_name)` and its `.exit.tmp`. Add the helpers:
 
 ```python
+def _resolve_metadata_dir() -> Path:
+    env_dir = os.environ.get("ATOOLS_SESSION_DIR")
+    return Path(env_dir) if env_dir else (Path.home() / ".cursor" / "sessions")
+
+def _resolve_log_dir() -> Path:
+    env_dir = os.environ.get("ATOOLS_LOG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    try:
+        if Path("/root/.cursor").exists():
+            return Path("/root/.cursor/logs")
+    except OSError:
+        pass
+    return Path.home() / ".cursor" / "logs"
+
 def get_exit_path(session_name: str) -> Path:
-    return METADATA_DIR / f"{session_name}.exit"
+    return _resolve_metadata_dir() / f"{session_name}.exit"
 
 def read_exit_code(session_name: str) -> Optional[int]:
     try:
-        text = get_exit_path(session_name).read_text().strip()
-        return int(text) if text.isdigit() else None
+        text = get_exit_path(session_name).read_text(encoding="utf-8").strip()
+        return int(text) if re.fullmatch(r"[0-9]+\Z", text) else None
     except Exception:
         return None
 
-def _record_exit(session_name: str, code: int) -> None:
+def _record_exit(session_name: str, code: int, overwrite: bool = False) -> None:
+    if not overwrite and read_exit_code(session_name) is not None:
+        return
     path = get_exit_path(session_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".exit.tmp")
     try:
-        tmp.write_text(f"{code}\n")
+        tmp.write_text(f"{code}\n", encoding="utf-8")
         os.replace(tmp, path)
     except Exception:
         pass
 
-def _wait_pids_gone(pids, timeout: float = 2.0) -> None:
+def _wait_pids_gone(pids, timeout: float = 2.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         alive = False
@@ -272,11 +290,12 @@ def _wait_pids_gone(pids, timeout: float = 2.0) -> None:
             except PermissionError:
                 alive = True
         if not alive:
-            return
+            return True
         time.sleep(0.05)
+    return False
 ```
 
-In the successful branch of `kill_session()`, after the final `kill -9` loop, call `_wait_pids_gone(pids)` and then `_record_exit(session_name, 143)`.
+*(In `kill_session()`, after the `kill -9` loop: if `_wait_pids_gone(pids)` returns `True`, call `_record_exit(session_name, 143, overwrite=False)`; if it returns `False`, unlink `<session>.exit` so a stuck runner is classified as `session_lost`.)*
 
 Proof suite `proof/run_suite_exit_code.sh` (authored first, immutable for the implementer). It isolates itself from the real environment: a private tmux server (so the Owner's real sessions are never touched and `kill-server` is safe), private log and session directories, stub `agent` and stub `loginctl` first in `PATH` (F13).
 
@@ -375,37 +394,35 @@ edit (minimal): src/core/config.py + src/sessions/storage.py -> resolve the Curs
 
 **S1-R1 StepResult and `ev`.** Every check returns `StepResult{id, cmd, exit_code, output_sha256, output_tail, duration_ms, failing_line}`. `verify_impl(...)` returns an `ev` document containing the executed steps and the first `failing_step`/`failing_line`. It runs fail-fast by default but accepts `fail_fast: bool` (Stage 4's `blocked` evaluation needs `G1–G6` and `O2` regardless).
 
-**S1-R2 Order, halt vs red.** Order: self-tests → `G1` → `G2` → `G3` → `G4` → `G5` → `G6` → `O1` → `O2`. A `G1` mismatch or a guard self-test failure is a **halt** (exit `3`, `ev.halt` set, no attempt consumed, Design §5.5). Every other failure is **red** (exit `1`).
+**S1-R2 Order, halt vs red.** Order: self-tests → `G1` → `G2` (structural/schema check) → `G3` → `G4` → `G5` → `G6` → `O1` (skipped when `closure.reason == "blocked"` unless `blocking_step` cites `O1`) → `O2` → `G2` post-check (when `closure.reason == "blocked"`). A `G1` mismatch or a guard self-test failure is a **halt** (exit `3`, `ev.halt = {"reason": "integrity_mismatch" | "selftest_failed"}`, no attempt consumed). Every other failure is **red** (exit `1`). If `session_info` has `lost == True` or `hard_cap == True`, `G2` is unconditionally red (`exit_code = 1`) even if a closure file exists on disk.
 
 **S1-R3 Guards.**
-- `G1`: `manifest_sha256(oracle_dir)` equals the hash in `contract-{seq}.json`.
-- `G2`: `closure-{seq}.json` validates against `closure.json`. A missing, unparsable or schema-invalid closure after a normally ended session is red at `G2`. For `reason: blocked`, the §5.4 preconditions are evaluated only if counters are supplied (`closures_submitted`, `min_attempts_before_block`); full routing is Stage 4, so in Stage 1 a `blocked` closure is validated and reported, never routed.
-- `G3`: `git diff --name-status --no-renames {base_sha}..HEAD` in the verify workspace; every touched path (deletions included) is checked with `scope.match` (S0-R12).
+- `G1`: `manifest_sha256(oracle_dir)` equals `contract["oracle"]["manifest_sha256"]`.
+- `G2`: Validates the closure against `schemas/closure.json`. When `reason == "blocked"`, `verify_impl` forces `fail_fast = False` across `G3–G6` and `O2`, then adjudicates the §5.4 blocked preconditions: (1) `closures_submitted >= min_attempts_before_block`, (2) `G4`, `G5`, and `G6` all pass (`G3` may fail only when `blocking_step == "G3"`), (3) `O2` passes unless `blocking_step` starts with `"O2"`, and (4) when `solution_key_exposure == "full"` and `blocking_step` starts with `"O1:"`, `solution_key_divergence` is non-null and its `requirement_id` exists in `coverage.md`.
+- `G3`: Run `git diff --raw -z --no-renames {base_sha}..HEAD` in the verify workspace. Any entry whose new file mode is not `100644`, `100755`, or `000000` (e.g. symlink `120000` or gitlink `160000`) fails `G3`. Every touched path is checked with `scope.match`; if `scope.match` raises `ValueError` (e.g. backslash or control character in filename), `G3` records `"denied"` (red `G3`, exit `1`) and never crashes `verify_impl`.
 - `G4`: runs only when some `test/{file}` is thawed. For each, parse base and HEAD with Python's `ast`; count `FunctionDef`/`AsyncFunctionDef` named `test_*` (module level and in classes); HEAD ≥ base. Also (Chi's refinement, adopted) reject a test whose body is only `pass`, `...`, a docstring or `assert True`. An unparsable file is red. Python only in Stage 1 (O-4).
 - `G5`: scan the *added* lines of the diff and the closure's `notes`/`backlog` with the regexes in `config/secrets.toml` (private-key headers, cloud/API key shapes, `(api|secret|token|password)\s*[:=]\s*['"][^'"\s]{16,}['"]`) plus Owner-listed literals. Output never echoes the secret (rule id, path, line only).
 - `G6`: data-driven rules in `config/forbidden.toml` (`id`, `language`, `kind` = `ast_call|regex`, `pattern`, `applies_to`, `message`). The spec proposes the initial list (O-5); it includes at least `shell=True`, `os.system`, outbound network clients in production code, `git push` text in scripts, `rm -rf /` shapes, and writes outside the working tree.
 - Self-tests: each guard ships synthetic positive and negative cases, run before every evaluation and on demand (`actl selftest`).
 
-**S1-R4 Oracle staging (Chi's narrowing, adopted).** For `O1`, copy into the verify workspace **only** `proofs/` and `probe.sh`. `solution_key.patch`, `mutants/`, `coverage.md`, `oracle-critique.md` and `scope.txt` are not copied. The staged copy is removed in a `finally` block. `scope.txt` is read by `actl` directly from the oracle directory.
+**S1-R4 Oracle staging.** For `O1`, copy **only** `proofs/` and `probe.sh` into a private sibling directory `<worktree>.oracle-stage/` outside `worktree` (preserving `0550` executable modes), and invoke `bash <stage_dir>/proofs/<script>.sh` with `cwd = worktree` so candidate code inspecting `.` cannot enumerate oracle files. Remove `<worktree>.oracle-stage/` in a `finally` block.
 
 **S1-R5 O1.** Run `proofs/*.sh` in lexical order, then `probe.sh`, each as `bash <script>` with cwd = the verify workspace (a clean `git clone --local --no-hardlinks` of the candidate branch); environment built from an **allowlist** (`PATH`, `LANG`, `HOME` = a throwaway dir, `TMPDIR`, `ACTL_TARGET_CMD`, nothing else, so credentials are blank by construction); per-script timeout (default 60 s); stdout+stderr captured. `failing_line` = the last output line starting `FAIL`, else the last non-empty line, truncated to 300 chars. Exit `0` passes, anything else fails.
 
-**S1-R6 O2.** Run `repo_test_cmd` from the sprint/contract (default `python3 -m pytest test -q -rf --junitxml=<tmp>`); parse the junit XML to produce `failing_step = "O2:{classname}::{name}"`; if the XML is missing, `"O2"`.
+**S1-R6 O2.** Parse `repo_test_cmd` from `sprint.toml` (owner/config-controlled only, never from LLM `sprint-proposal.toml`) via `shlex.split` with `shell=False`. The executable (`argv[0]`) MUST be in `("python3", "pytest")`. Append `f"--junitxml={junit_tmp_path}"` as a discrete argv element; parse the XML to produce `failing_step = "O2:{classname}::{name}"` (fallback `"O2"`).
 
 **S1-R7 Emission.** `verify_impl` writes `runs/ev-{seq}.json` (seq reserved first). On red it writes `implementer-inputs/prior_attempt.json` with `diff` (`git diff {base_sha}..HEAD`), `failing_step`, `failing_line`, `closures_submitted`. Nothing else (no log tail, no oracle content) reaches `implementer-inputs/` (Design §5.4: `log_tail` goes to the Architect only). `ev` records `output_sha256` per step.
 
-**S1-R8 Implementer skill.** `skills/actl-implementer/SKILL.md` instructs the agent to: read only `implementer-inputs/` (`spec`, `contract`, optional `solution_key.patch`, optional `prior_attempt.json`) and the clone; create/checkout `wip/{seq}` (the global hook already enforces `wip/*`); commit incrementally; run only the repo's public `test/` suite; never look for or run `proofs/`, `probe.sh`, `mutants/`, `proof/`, or anything under the actl root; write `implementer-outputs/closure-{seq}.json` (`done` or `blocked`) and stop. `blocked` is legal only after `min_attempts_before_block` closures and the three preconditions of Design §5.4.
+**S1-R8 Implementer skill.** Instructs the agent to read `implementer-inputs/` (`attempt.json` containing `seq` and `branch`, `spec`, `contract`, optional `solution_key.patch`, optional `prior_attempt.json`), commit on the pre-checked-out `wip/{seq}` branch, and write `implementer-outputs/closure.json` (or `closure-{seq:03d}.json`). `actl` stamps `kind`, `seq`, `parent` and promotes `closure.json` to `runs/closure-{seq:03d}.json` (recording `"closure-{seq:03d}.json"` in `ev.parent`).
 
 **S1-R9 `actl dispatch-impl`.** `actl dispatch-impl --sprint TAG [--mode detach|foreground] [--tier balanced] [--engine cursor] [--no-run]`:
-1. Reserve `seq`; create `workspaces/implementer-{seq}` as a standalone local clone at `base_sha` on branch `wip/{seq}` (umask `0007`, mode `2770`); stage `implementer-inputs/` as read-only copies (spec, contract, key if `solution_key_exposure = full`).
-2. Build a **short instruction** that names the skill, the work-order paths and the closure path, and tells the agent to read `implementer-inputs/` from disk. Spec, contract, key and `prior_attempt.json` are NOT embedded. The instruction MUST be ASCII-only, target under 8 KiB, and `len(json.dumps(args))` MUST be under 100,000 bytes (F3: measured single-argument limit 131071 bytes); otherwise exit `2` before calling `arouter`. It never contains a path under `actl-repo/` and is never exactly `help` (F11). The text is identical across attempts (cache-friendliness).
-3. **Detach mode (default for real runs):** run, with cwd = the clone,
-   `arouter -d -n impl-{slug}-{seq} -t <hard_cap.implementer.wall_clock, default 45m> {tier} "<instruction>" < /dev/null`
-   (`< /dev/null` is mandatory: F2). The session name matches `^[a-z0-9][a-z0-9-]{0,40}$` (no dots, colons, uppercase or path characters: it is a tmux session name and a file-name stem); it is recorded in `runs/state.json` and echoed with `arouter attach|logs -f|kill <name>`.
+1. Refuse with exit `2` if `state["tmux_sessions"]` already contains a live tmux session for this sprint. Otherwise reserve `seq`; create `$ACTL_ROOT/workspaces/{tag}/implementer-{seq:03d}` as a standalone local clone at `base_sha` on branch `wip/{seq:03d}`; stage `implementer-inputs/` (including `attempt.json`).
+2. Build a **byte-identical static instruction** across attempts referencing the sprint's `implementer-inputs/` and `implementer-outputs/closure.json` (no per-attempt `{seq}` embedded in the prompt text).
+3. **Detach mode:** session name is `format_session_name("impl", slug, seq, tag)` (`impl-{slug_trimmed}-{tag_hash4}-{seq:03d}`).
 4. **Foreground mode (tests, short jobs):** same without `-d`; non-TTY stdout selects the legacy path (F1), which blocks and returns the real exit code but is not protected against the death of the harness.
 5. After the session completes (S1-R14, S1-R15), call `verify_impl`. The command prints a one-screen summary and exits with the verify exit code. `--no-run` stages everything and stops, so a human can run any other agent by hand.
 
-**S1-R10 Tripwire (honest-mode `P`).** After the session, scan the Cursor transcript (found through the existing `sessions` reader using `$ATOOLS_CURSOR_HOME`) and the **ANSI-stripped** console log for tool-call arguments or text mentioning the actl root, `actl-repo`, `oracle`, `proofs/`, `mutants` or `probe.sh`. Matches go to `ev.tripwires[]` with line numbers. A tripwire is a warning in Stage 1; `--strict-tripwire` makes it red and becomes the default at Stage 4.
+**S1-R10 Tripwire (honest-mode `P`).** Scan the Cursor transcript and ANSI-stripped console log for references to `$ACTL_ROOT/actl-repo`, `actl-repo/`, or path accesses to `oracle-`, `proofs/`, `mutants/`, or `probe.sh`, explicitly excluding lines from `skills/actl-implementer/SKILL.md`, `implementer-inputs/contract-*.json`, and `O1:<script>` tokens inside `implementer-inputs/prior_attempt.json`. Matches go to `ev.tripwires[]` with line numbers. A tripwire is a warning in Stage 1; `--strict-tripwire` makes it red and becomes the default at Stage 4.
 
 **S1-R11 `actl verify-impl`.** `actl verify-impl --sprint TAG --closure PATH [--worktree PATH] [--no-fail-fast] [--json]`; exit codes per S0-R10. It can run by hand on any worktree, which is how golden cases are tested without an LLM.
 
@@ -421,7 +438,7 @@ edit (minimal): src/core/config.py + src/sessions/storage.py -> resolve the Curs
 5. The result is recorded in `ev.session = {name, exit_code, hard_cap, lost, log_sha256}`.
 Directory resolution follows F4 exactly (env override, else default); production leaves the overrides unset so the Owner's `arouter ps`, `attach` and `asessions` keep seeing the sessions.
 
-**S1-R15 Log handling and retention.** After completion `session.py` copies `<LOG_DIR>/<name>.log` to `runs/logs/impl-{seq}.log` (actl-owned, untracked), records the SHA-256 of the raw file in `ev`, scans an ANSI-stripped copy (S1-R10), then deletes the original log and the exit-code file. The originals are kept if the copy or hash fails. Retention of `runs/logs/` is `actl gc` (Stage 4).
+**S1-R15 Log handling and retention.** `archive_session_log` copies `<LOG_DIR>/<name>.log` to `runs/logs/impl-{seq:03d}.log` and `<METADATA_DIR>/<name>.exit` to `runs/logs/impl-{seq:03d}.exit` and verifies the SHA-256. The original `<LOG_DIR>/<name>.log` and `<METADATA_DIR>/<name>.exit` are unlinked **only after** `runs/ev-{seq:03d}.json` is durably written to disk (per `D-16`). Retention of `runs/logs/` is `actl gc` (Stage 4).
 
 ### 6.5 Proof obligations (minimum)
 
@@ -491,35 +508,35 @@ fixtures/golden/make_responses.sh  fixtures/golden/responses/  fixtures/golden/t
 
 ### 7.4 Numbered requirements
 
-**S2-R1 Turn ledger.** Every `bundle` creates `runs/turns/{role}-{n}/` (`n` = 1 + the number of existing turn directories of that role; the global `seq` is not used) containing `bundle.txt`, `bundle.json` (`{role, purpose, base_sha, files:[{path, sha256, bytes}], bundle_sha256, created, model_hint}`), later `response.txt` (raw, byte-exact), `unpack.json` (result, errors, outputs with hashes) and optional `amend-{k}.txt`. Directories are append-only; `unpack` never edits `bundle.*`.
+**S2-R1 Turn ledger.** Every `bundle` acquires `runs/state.lock`, computes `n = 1 + max((existing_n for {role}-{existing_n}), default=0)`, and creates `runs/turns/{role}-{n}/` via exclusive `os.mkdir` containing `bundle.txt`, `bundle.json` (`{turn_id, role, purpose, base_sha, solution_key_sha256, files:[{path, sha256, bytes}], bundle_sha256, created, model_hint}`), later `response.txt`, `unpack.json`, and optional `amend-{k}.txt`. Directories are append-only; `unpack` never edits `bundle.*`.
 
 **S2-R2 `actl bundle <purpose> --sprint TAG [--out FILE|-] [--osc52] [--clip] [--include PATH...] [--max-chars N] [--model NAME]`.** Purposes:
 - `architect-intake`: role prompt + output contract + imported spec (if any) + repo map + files named by `--include`.
 - `challenger`: static prefix `[prompt + contract][spec-{seq}.md][solution_key]`, then dynamic `[qual receipt][oracle-decision.json feedback][prior oracle]` when present.
 - `architect-review`: `[prompt + contract][oracle-critique.md][qual-{seq}.json][oracle summary]` (Stage 3 supplies `qual`; Stage 2 uses the golden `qual` fixture).
 - `curator`: stub that fails with a clear "Stage 5" message.
-Rules: static content first, dynamic last (Design §1.3); a header lists included files with hashes and sizes; a **repo map** (`git ls-files` at `base_sha` with byte sizes) is always included, file bodies only for `--include`d paths; if total characters exceed `--max-chars` (default 200000) it aborts with a table of the largest files instead of truncating silently; every bundle ends with an instruction to finish with the sentinel `<<<END_RESPONSE bundle={first 8 hex of bundle_sha256}>>>`. `--model` stores the model name in `bundle.json` (the `F` check later); if omitted, it prints a reminder and records `unknown`. Output defaults to a file plus a stdout summary; `--osc52` emits the OSC 52 clipboard escape (works through SSH in many terminals); `--clip` uses `wl-copy`/`xclip`/`pbcopy` when found.
+Rules: static content first, dynamic last (Design §1.3); a header lists included files with hashes and sizes; a **repo map** (`git ls-files` at `base_sha` with byte sizes) is always included, file bodies only for `--include`d paths; if total characters exceed `--max-chars` (default 200000) it aborts with a table of the largest files instead of truncating silently; `bundle_sha256` is defined as the lowercase hex SHA-256 of the UTF-8 bytes of `bundle.txt` **up to and excluding** the final line `<<<END_RESPONSE bundle="{bundle_sha256[:8]}">>>\n`. Every `bundle.txt` ends with that exact sentinel line. When `--json` is passed, `--out -` is rejected with exit `2` and `--osc52` writes escape sequences to `/dev/tty` (or stderr) so stdout remains a single valid JSON object. `--model` stores the model name in `bundle.json` (the `F` check later); if omitted, it prints a reminder and records `unknown`. Output defaults to a file plus a stdout summary; `--osc52` emits the OSC 52 clipboard escape (works through SSH in many terminals); `--clip` uses `wl-copy`/`xclip`/`pbcopy` when found.
 
 **S2-R3 Envelope grammar.** Normative in §7.5. Output files travel in `FILE` blocks, code edits in `PATCH` blocks. Prose outside blocks is preserved in `response.txt` and ignored.
 
-**S2-R4 `actl unpack <purpose> --sprint TAG (-f FILE | --paste | < stdin) [--amend]`.**
-1. Locate the latest open turn for the role; read the response (`--paste` reads stdin until the sentinel line appears, avoiding Ctrl-D problems over SSH).
-2. Save the raw bytes as `response.txt` **before** parsing.
-3. Normalize: strip BOM, CRLF → LF, tolerate one enclosing Markdown fence of any length around the whole response or each block, tolerate trailing whitespace on marker lines.
-4. Parse blocks per §7.5; the sentinel must match this turn's `bundle_sha256` prefix (another bundle's → `E_BUNDLE_MISMATCH`; missing → `E_TRUNCATED`).
-5. Validate (S2-R6) and synthesize patches (S2-R5) in a **temporary staging directory**.
-6. All-or-nothing: with zero errors, atomically move staged outputs into `handoff/{tag}/{role}-outputs/` (replacing prior drafts of the same names); otherwise write nothing there, write `unpack.json` with errors, print the repair prompt (S2-R7) and exit `2`.
-`--amend` merges a follow-up response into the same turn: blocks with the same `path`/`out` replace earlier ones and the union is re-validated.
+**S2-R4 `actl unpack <purpose> --sprint TAG [-f FILE | --paste | < stdin] [--turn TURN_ID] [--amend] [--json]`.**
+1. Resolve the target turn: if `--turn` is given, use it (verifying `bundle.json.purpose == <purpose>`); otherwise select the highest-numbered turn `{role}-{n}` whose `bundle.json.purpose == <purpose>`. In `--paste` mode, read stdin line-by-line tracking open `<<<FILE...>>>` and `<<<PATCH...>>>` blocks (honoring `fence="N"`) and stop only when a line matching `^<<<END_RESPONSE bundle="[0-9a-f]{8}">>>\s*$` appears at top level outside any open block.
+2. Save raw bytes as `response.txt` (or `amend-{k}.txt` when `--amend` is set) **before** parsing.
+3. Normalize: strip UTF-8 BOM, convert `CRLF -> LF`, strip one enclosing Markdown code fence (`` ``` ``...) only outside top-level `<<<...>>>` markers, and strip trailing horizontal whitespace on `<<<...>>>` marker lines and hunk delimiter lines.
+4. Parse blocks per §7.5; the top-level sentinel must be the last non-blank line and match `bundle_sha256[:8]` (`E_BUNDLE_MISMATCH` or `E_TRUNCATED`).
+5. Validate (`S2-R6`) and synthesize patches (`S2-R5`) in a **temporary staging directory** (`handoff/{tag}/.{role}-staging-{pid}`).
+6. All-or-nothing directory swap: with zero errors, atomically replace the entire `handoff/{tag}/{role}-outputs/` directory with the validated staging directory (removing any prior `*-outputs.prev`, renaming `*-outputs` -> `*-outputs.prev`, renaming staging -> `*-outputs`, then removing `*-outputs.prev` so omitted files never leak from old turns). On any error, leave `handoff/{tag}/{role}-outputs/` untouched, write `unpack.json` and `repair.txt`, and exit `2`.
+`--amend` replays `response.txt` followed by `amend-1.txt .. amend-{k}.txt` in order: `FILE` blocks replace earlier `FILE` blocks with the same `path`; `PATCH` blocks replace earlier `PATCH` blocks with the same `(out, file)` tuple; the resulting union is validated and published as a complete generation.
 
-**S2-R5 Patch synthesis (Chi's idea, adopted and tightened).** Web models cannot compute unified-diff hunk headers, so `PATCH` blocks carry SEARCH/REPLACE edits. `unpack`: creates a scratch checkout (for `out="solution_key.patch"` at `base_sha`; for `out="…/mutants/NAME.patch"` at `base_sha` + the current solution key); applies each hunk requiring the SEARCH text to match **exactly once** (0 matches → `E_SEARCH_NOMATCH` with the nearest candidate by `difflib` and its line number; more than one → `E_SEARCH_MULTI` with line numbers); produces the patch with `git diff` (intent-to-add for new files), ensures a trailing newline, and verifies it with `git apply --check` on a *fresh* checkout of the same starting point. Several `PATCH` blocks with the same `out` merge into one patch. `new="true"` creates a file from the block body; creating an existing file is `E_EXISTS`. All git operations pass `-c core.hooksPath=/dev/null`.
+**S2-R5 Patch synthesis.** For every `PATCH` block, validate both `out` (against the §7.5 purpose table) and `file` (relative POSIX path; reject any path component equal to `.git` case-insensitively with `E_PATH`; reject any symlink component in the scratch checkout via `lstat` / `O_NOFOLLOW` with `E_PATH`). Create a scratch checkout at `base_sha` (for `out="solution_key.patch"`) or at `base_sha` with the `solution_key` matching `bundle.json.solution_key_sha256` committed (for `out="oracle-draft/mutants/<name>.patch"`). Run all git commands under a hermetic environment (`GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null`, `-c core.hooksPath=/dev/null`, `-c core.fsmonitor=false`, fixed `GIT_AUTHOR_*` and `GIT_COMMITTER_*`), synthesize diffs via `git diff --no-color --no-ext-diff --full-index --src-prefix=a/ --dst-prefix=b/ --no-renames`, and verify with `git apply --check` on a fresh checkout. Applies each hunk requiring the SEARCH text to match **exactly once** (0 matches → `E_SEARCH_NOMATCH` with the nearest candidate by `difflib` and its line number; more than one → `E_SEARCH_MULTI` with line numbers). Several `PATCH` blocks with the same `out` merge into one patch. `new="true"` creates a file from the block body; creating an existing file is `E_EXISTS`.
 
-**S2-R6 Validation after parsing.** JSON files validate against schemas (`oracle-decision.json`); `sprint-proposal.toml` parses and validates against the `sprint` schema (`live_run` present and `none|required`); `proofs/*.sh` and `probe.sh` pass `bash -n`, get the executable bit, and SHOULD start with a shebang and `set -euo pipefail` (warning only); `scope.txt` is parsed with `scope.py` from Stage 0 (blanket `ALLOW` rejected); `coverage.md` is parsed, every `mutants/*.patch` must appear in it and every referenced proof must exist (`E_COVERAGE`); required files per purpose (§7.5 table) must be present (`E_MISSING_REQUIRED`); no output path may escape its allowed prefix, exceed 1 MiB, contain NUL bytes, or collide case-insensitively with another.
+**S2-R6 Validation after parsing.** Validate `oracle-decision.json` against `schemas/oracle-decision.json` and `sprint-proposal.toml` against `schemas/sprint-proposal.json` (`repo_test_cmd` prohibited). Parse `coverage.md` using the normative line grammar: ignore blank lines and `#` headings; every mapping line must match `^(R[0-9]+|(?:mutants/)?[A-Za-z0-9_.-]+\.patch)\s*(?:->|→|:)\s*(.+)\Z` where the RHS is a comma-separated list of proof tokens (`proofs/<name>.sh`, `<name>.sh`, `probe.sh`, or a 2-digit prefix `NN` resolving uniquely to `proofs/NN_*.sh`); every `oracle-draft/mutants/*.patch` must appear on the LHS and every referenced proof must exist in `oracle-draft/` (`E_COVERAGE`). In `architect-intake`, `spec-draft.md` is optional when `sprint.toml` has `spec_source == "imported"` and `state.json` already has a non-null `active_spec`. `proofs/*.sh` and `probe.sh` pass `bash -n`, get the executable bit, and SHOULD start with a shebang and `set -euo pipefail` (warning only); `scope.txt` is parsed with `scope.py` from Stage 0 (blanket `ALLOW` rejected); required files per purpose (§7.5 table) must be present (`E_MISSING_REQUIRED`); no output path may escape its allowed prefix, exceed 1 MiB, contain NUL bytes, or collide case-insensitively with another.
 
 **S2-R7 Repair prompts.** On any error `unpack` prints (and saves as `repair.txt`) a paste-ready message: a short instruction, one numbered entry per error with `code`, `path`, a one-line cause and (for search failures) the offending SEARCH text and nearest candidate, then the instruction to answer with **only the blocks that must change** plus the sentinel. Error codes are fixed (§7.6). The message contains no oracle content beyond what the model sent.
 
-**S2-R8 `actl replay <role>-<n>`.** Re-runs steps 3–6 of `unpack` on the stored `response.txt` against the stored `bundle.json` and compares `unpack.json`: exit `0` if identical, `1` if changed. It needs no network and no repo state other than the stored hashes and the target repo at `base_sha`. This is how parser regressions are caught.
+**S2-R8 `actl replay <role>-<n> [--sprint TAG]`.** Re-runs steps 3–5 of `unpack` in a scratch directory by folding `response.txt` and all `amend-{k}.txt` files in numerical order against the stored `bundle.json` (using the pinned `base_sha` and `solution_key_sha256` artifact from `specs/{tag}/`, without mutating `handoff/{tag}/{role}-outputs/`), and compares the resulting `ok`, `errors`, and `outputs` against stored `unpack.json`: exit `0` if identical, `1` if changed.
 
-**S2-R9 `actl promote <role> --sprint TAG`.** For a role's valid outputs: reserve `seq`s; copy drafts into `actl-repo/specs/{tag}/` as immutable files with Design naming (`spec-{seq}.md`; the key as `solution_key-{seq}.patch` — O-2; Challenger drafts as a candidate directory `oracle-draft-{seq}/`, not frozen); record `kind`, `seq`, `parent`, `sha256` in a sidecar `*.meta.json`; update `active_spec` in `state.json`; stage read-only copies into the next role's `{role}-inputs/` (Architect → Challenger: spec and key; Challenger → actl: oracle draft). No "latest" pointers. Idempotent for identical content (same hash → no new `seq`).
+**S2-R9 `actl promote <role> --sprint TAG`.** For a role's valid outputs: hold `runs/state.lock` across the entire check-reserve-write-stage transaction; deduplicate artifacts by `(kind, parent, sha256)` (where `solution_key` and `oracle-draft` set `parent = state["active_spec"]`); copy drafts into `actl-repo/specs/{tag}/` as immutable files with Design naming (`spec-{seq}.md`; the key as `solution_key-{seq}.patch` — O-2; Challenger drafts as a candidate directory `oracle-draft-{seq}/`, not frozen); record `kind`, `seq`, `parent`, `sha256` in a sidecar `*.meta.json`; update `active_spec`, `active_solution_key`, and `active_oracle_draft` in `state.json`; always refresh read-only staged files (`0440` regular, `0550` executable) in the next role's inbox by unlinking existing targets before copying (Architect → Challenger: spec and key; Challenger → actl: oracle draft). No "latest" pointers. Idempotent for identical content (same `(kind, parent, sha256)` → no new `seq`).
 
 **S2-R10 `actl next` (Phases 1–2 rules).** Registered under `next_rules/phase12.py`; recognizes missing spec, missing key, unpromoted drafts, a challenger bundle ready, a response waiting for unpack, a failed unpack with `repair.txt`, and "ready for Stage 3 qualification". Pure and table-tested.
 
@@ -529,20 +546,25 @@ Rules: static content first, dynamic last (Design §1.3); a header lists include
 
 ### 7.5 Envelope grammar (normative)
 
-Marker lines start in column 0 after normalization; matching is case-sensitive.
+Marker lines start in column 0 after normalization; matching is case-sensitive. Optional `fence="N"` (`N` in `"3".."9"`, default `3`) scales both the closing block marker (`<`×N + `END_FILE` / `END_PATCH` + `>`×N) and inner hunk delimiters (`<`×(N+4) + ` SEARCH`, `=`×(N+4), `>`×(N+4) + ` REPLACE`):
 
 ```text
 response     := (prose | block)* sentinel
 block        := file_block | patch_block
-file_block   := '<<<FILE path="' PATH '"' [' mode="exec"'] '>>>' NL body '<<<END_FILE>>>' NL
-patch_block  := '<<<PATCH out="' OUTPATH '" file="' REPOPATH '"' [' new="true"'] '>>>' NL
-                ( hunk+ | body-if-new ) '<<<END_PATCH>>>' NL
-hunk         := '<<<<<<< SEARCH' NL text '=======' NL text '>>>>>>> REPLACE' NL
-sentinel     := '<<<END_RESPONSE bundle=' HEX8 '>>>' NL
+file_block   := '<<<FILE path="' PATH '"' [' mode="exec"'] [' fence="' N '"'] '>>>' NL
+                body
+                '<'*N 'END_FILE' '>'*N NL
+patch_block  := '<<<PATCH out="' OUTPATH '" file="' REPOPATH '"' [' new="true"'] [' fence="' N '"'] '>>>' NL
+                ( hunk(N)+ | body-if-new )
+                '<'*N 'END_PATCH' '>'*N NL
+hunk(N)      := '<'*(N+4) ' SEARCH' NL text '='*(N+4) NL text '>'*(N+4) ' REPLACE' NL
+sentinel     := '<<<END_RESPONSE bundle=' ['"'] HEX8 ['"'] '>>>' NL
 ```
 
-- `body` and hunk texts are verbatim; the parser interprets only the exact closing marker line. A body that must contain a marker line needs an escape (O-3; proposal: a `fence="N"` attribute lengthening the marker).
+- `body` and hunk texts are verbatim; the parser interprets only the exact closing marker line for the active `fence="N"`.
 - Paths are relative POSIX: no leading `/`, no `..`, no backslash, no NUL, segments ≤ 100 chars, total ≤ 255.
+- For `architect-intake`, `spec-draft.md` is required unless `sprint.toml` has `spec_source = "imported"` and `state.json` has `active_spec != null`.
+- For `PATCH` blocks, `file` MUST NOT contain a `.git` path segment (case-insensitive) or traverse a symlink (`E_PATH`).
 - Allowed output prefixes (violations are `E_PATH`):
 
 | Purpose | Required outputs | Allowed prefixes |
