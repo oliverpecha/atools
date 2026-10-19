@@ -2,7 +2,8 @@
 # `actl` Interface Freeze (Stages 0–2)
 
 Authored-by: Gemini Argon 4 High (Challengers: GPT-6 Sol, Claude Sonnet 5.5)
-Baseline: `atools` commit `64d0980`, `VERSION` `v0.1.4`
+Baseline: `atools` commit `2acaf3c`, `VERSION` `v0.1.7`
+Revision note: 2026-10-19 baseline header moved to 2acaf3c / v0.1.7; no interface changed; approved by Owner (PB-4).
 Status: Normative interface contract for `S0-R15` (`PB-2`, `PB-4`). Changes after Owner acceptance require explicit Owner approval and a revision note in this file.
 
 ---
@@ -211,7 +212,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 ### 1.5 `actl.schemas` (`src/actl/schemas.py`) — Owning Stage: Stage 0A (`S0-R7`, `S0-R14`, `S0-R15`)
 
 * **`validate(kind: str, obj: Any) -> list[dict[str, str]]`** (`kind: function`)
-* **Preconditions:** `kind` is in `("common", "state", "sprint", "sprint-proposal", "closure", "closure-draft", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt")`.
+* **Preconditions:** `kind` is in `("common", "state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt")`.
 * **Return value:** List of `{"path": str, "message": str}` dicts sorted by `(path, message)` produced exclusively by the in-tree stdlib validator (never delegating to `jsonschema`). `path` is `"/"` for root type errors and `"/<prop>"` (or `"/<parent>/<prop>"`) for missing `required` properties and rejected `additionalProperties`. Raises `ValueError` at schema load if a schema contains an unsupported keyword. Empty list `[]` iff `obj` conforms to `schemas/{kind}.json`.
 * **Errors raised:** `ValueError` ONLY if `kind` is unknown or schema load fails. Never raises on invalid `obj` data.
 * **Side effects:** Reads `schemas/*.json`. **Idempotence:** Pure / idempotent.
@@ -325,7 +326,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Return value:** `{"action": str, "command": str, "reason": str}`.
 * **Errors raised:** `FileNotFoundError` if sprint directory does not exist; `ValueError` on invalid `tag`.
 * **Side effects:** None (pure inspection of files under `layout`). **Idempotence:** Pure / idempotent.
-* **Stage 0 Behavior:** Evaluates Terminal/Hold checks (`state.status == "done"` -> `action="done"`, `"aborted"` -> `"aborted"`, `"hold"` -> `"hold_owner"`, `command=""`), then discovers `src/actl/next_rules/[!_]*.py` in ascending `(PRIORITY, __name__)` order (empty registry in Stage 0; Phase 1–3 rules live in `docs/plan/INTERFACES_S1_S2.md`).
+* **Stage 0 Behavior:** Evaluates Terminal/Hold checks (`state.status == "done"` -> `action="done"`, `"aborted"` -> `"aborted"`, `"hold"` -> `"hold_owner"`, `command=""`), then discovers `src/actl/next_rules/[!_]*.py` in ascending `(PRIORITY, __name__)` order (empty registry in Stage 0; Phase 1–3 rules specified in addendum S1-R12 and S2-R10).
 
 
 * **Registry Entry Point 1 — `src/actl/cmd_*.py`:**
@@ -336,7 +337,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Registry Entry Point 2 — `src/actl/next_rules/*.py`:**
 * Module attributes & signature:
 * `PRIORITY: int` — integer priority (`phase12.py` = `10`, `phase3.py` = `30`, default if omitted = `100`).
-* `evaluate(layout: Layout, tag: str) -> dict[str, str] | None` — pure function returning `{"action": str, "command": str, "reason": str}` when matched, or `None` to fall through.
+* `evaluate(layout: Layout, tag: str, session_probe: Optional[Callable] = None) -> dict[str, str] | None` — pure function returning `{"action": str, "command": str, "reason": str}` when matched, or `None` to fall through.
 
 
 * **Evaluation order:** `actl.next.decide_next` discovers all `src/actl/next_rules/[!_]*.py` modules, sorts them ascending by `(getattr(mod, "PRIORITY", 100), mod.__name__)`, and returns the first non-`None` dict returned by `mod.evaluate(layout, tag)`. If all rules return `None`, returns `{"action": "noop", "command": "", "reason": "No matching rule for current sprint state"}`.
@@ -413,14 +414,14 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Return value:** `{"name": str, "exit_code": int | None, "hard_cap": bool, "lost": bool, "log_sha256": str | None}` (`S1-R14`).
 * **Errors raised:** `ValueError` on invalid name; `RuntimeError` if `shutil.which("tmux")` is `None` (mapped to exit code `4`).
 * **Side effects:** Polls `tmux list-sessions`; calls `arouter kill` on watchdog overrun; reads `.exit` via `router.process.read_exit_code`.
-* **Idempotence:** Idempotent once session has exited and `.exit` file remains on disk. Must be called prior to `archive_session_log` (which unlinks `.exit`).
+* **Idempotence:** Idempotent once session has exited and `.exit` file remains on disk. Must be called prior to `archive_session_log` (reads `.exit`; unlinked only after `ev` is written).
 
 
 * **`archive_session_log(layout: Layout, tag: str, seq: int, session_name: str) -> str | None`** (`kind: function`)
 * **Preconditions:** Session `session_name` has terminated.
 * **Return value:** 64-char hex SHA-256 of raw `<LOG_DIR>/<session_name>.log`, or `None` if no log file exists (`S1-R15`).
 * **Errors raised:** `OSError`.
-* **Side effects:** Copies `<LOG_DIR>/<session_name>.log` to `runs/logs/impl-{seq:03d}.log` and `<METADATA_DIR>/<session_name>.exit` to `runs/logs/impl-{seq:03d}.exit` and verifies SHA-256; unlinks original log and `.exit` only after `runs/log` copy verification (and after `ev` persistence when called from `dispatch-impl`).
+* **Side effects:** Copies `<LOG_DIR>/<session_name>.log` to `runs/logs/impl-{seq:03d}.log` and `<METADATA_DIR>/<session_name>.exit` to `runs/logs/impl-{seq:03d}.exit` and verifies SHA-256; copies and verifies SHA-256 without unlinking; unlink handled by verify_impl after ev fsync (and after `ev` persistence when called from `dispatch-impl`).
 * **Idempotence:** Not idempotent once original log is unlinked (returns existing hash if `runs/logs/impl-{seq:03d}.log` already exists).
 
 
@@ -551,12 +552,12 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `steps`: `list[{"id": str, "cmd": str, "exit_code": int, "output_sha256": str}]` (produced by `StepResult.to_ev_step()`)
 * `failing_step`: `str | null`, `failing_line`: `str | null` (max 300 chars, single line)
 * `tripwires`: `list[{"source": "transcript" | "log", "line_no": int, "pattern": str, "excerpt": str}]`
-* `halt`: `{"reason": "integrity_mismatch" | "selftest_failed" | "wrapper_rejected" | "unsupported_cap" | "architect_unavailable" | "internal_error"} | null`
+* `halt`: `{"reason": "integrity_mismatch" | "selftest_failed" | "wrapper_rejected" | "unsupported_cap" | "architect_unavailable"} | null`
 * `session`: `{"name": str, "exit_code": int | null, "hard_cap": bool, "lost": bool, "log_sha256": str | null} | null`
 
 
-* **`closure.json` / `closure-{seq}.json` (`schemas/closure-draft.json`, `schemas/closure.json`):**
-* `kind`: `"closure"` (optional in `closure-draft.json`, required and stamped by `actl` in `closure.json`), `seq`: `int >= 1` (optional in `closure-draft.json`, required and stamped by `actl` on `runs/closure-{seq:03d}.json`), `parent`: `str | null` (optional in `closure-draft.json`, required and stamped by `actl` on `runs/closure-{seq:03d}.json`)
+* **`closure.json` / `closure-{seq}.json` (`schemas/closure.json`):**
+* `kind`: `"closure"` (optional in agent drafts, required and stamped by `actl` upon promotion), `seq`: `int >= 1` (optional in `closure-draft.json`, required and stamped by `actl` on `runs/closure-{seq:03d}.json`), `parent`: `str | null` (optional in `closure-draft.json`, required and stamped by `actl` on `runs/closure-{seq:03d}.json`)
 * `reason`: `"done" | "blocked"`, `blocking_step`: `str | null`, `notes`: `list[str]`, `backlog`: `list[str]`
 * `solution_key_divergence`: `{"requirement_id": str, "rationale": str} | null`
 
@@ -606,7 +607,7 @@ Strictly four keys (`additionalProperties: false`, `P-S1-15`):
 * **`response.txt`:** Raw, unmodified bytes received by the first `actl unpack` call on that turn.
 * **`amend-{k}.txt`:** Raw, unmodified bytes received by the `k`-th (`1`-indexed) `actl unpack --amend` call on that turn.
 * **`unpack.json`:** `{"turn_id": str, "role": str, "purpose": str, "ok": bool, "bundle_sha256": str, "response_sha256": str, "amended": bool, "outputs": list[{"path": str, "sha256": str, "bytes": int, "executable": bool}], "errors": list[{"code": str, "path": str, "message": str, "detail": str | null}], "warnings": list[str], "repair_path": str | null}`. Fixed `errors[].code` vocabulary: `E_TRUNCATED`, `E_BUNDLE_MISMATCH`, `E_PATH`, `E_DUPLICATE`, `E_SYNTAX_MARKER`, `E_SEARCH_NOMATCH`, `E_SEARCH_MULTI`, `E_PATCH_APPLY`, `E_JSON`, `E_TOML`, `E_SCHEMA`, `E_SHELL_SYNTAX`, `E_SCOPE`, `E_COVERAGE`, `E_MISSING_REQUIRED`, `E_SIZE`, `E_EXISTS` (Addendum §7.6).
-* **`repair.txt`:** Generated only when `unpack.json` has `ok == False`; ends with the requirement to close with `<<<END_RESPONSE bundle={bundle_sha256[:8]}>>>`.
+* **`repair.txt`:** Generated only when `unpack.json` has `ok == False`; ends with the requirement to close with `<<<END_RESPONSE bundle="{bundle_sha256[:8]}">>>`.
 
 ### 3.7 `expected.d` Fragment Schema (`fixtures/golden/expected.d/*.json` — `S0-R14`, `§5.8`, `§7.9`)
 
