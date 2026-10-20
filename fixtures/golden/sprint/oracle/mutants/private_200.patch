@@ -1,0 +1,13 @@
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..f8621dc 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -5,7 +5,7 @@ from api import users
+ def render_profile(user_id):
+     """Return (status, body) for a guest viewing user_id's profile."""
+     user = users.get_user(user_id)
+-    if user is None or not users.is_public(user_id):
++    if user is None:
+         return 404, {"error": "not_found"}
+     return 200, {
+         "name": user["name"],

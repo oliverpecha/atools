@@ -1,0 +1,423 @@
+{
+  "pointer_convention": "RFC 6901 pointers as frozen by INTERFACES 1.5: root is \"/\"; missing required => \"/<parent>/<prop>\"; extra property => \"/<extra>\"; type/enum/pattern/minimum/maximum => offending value path",
+  "owner_rulings_applied": [
+    "40-hex SHAs only",
+    "owner_review_triggers in {plan_deviation,budget_exceeded,critical_tripwire,manual_flag}",
+    "ev.exit_code integer 0..255 or null"
+  ],
+  "cases": [
+    {
+      "kind": "state",
+      "file": "state/seq_negative.json",
+      "expect_paths": [
+        "/seq"
+      ]
+    },
+    {
+      "kind": "state",
+      "file": "state/status_enum.json",
+      "expect_paths": [
+        "/status"
+      ]
+    },
+    {
+      "kind": "state",
+      "file": "state/attempts_negative.json",
+      "expect_paths": [
+        "/attempts/oracle"
+      ]
+    },
+    {
+      "kind": "state",
+      "file": "state/missing_run_id.json",
+      "expect_paths": [
+        "/run_id"
+      ]
+    },
+    {
+      "kind": "state",
+      "file": "state/extra_property.json",
+      "expect_paths": [
+        "/unexpected"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/frozen_without_live_run.json",
+      "expect_paths": [
+        "/live_run"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/short_base_sha.json",
+      "expect_paths": [
+        "/base_sha"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/status_enum.json",
+      "expect_paths": [
+        "/status"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/extra_property.json",
+      "expect_paths": [
+        "/unexpected"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/max_attempts_zero.json",
+      "expect_paths": [
+        "/max_attempts/oracle"
+      ]
+    },
+    {
+      "kind": "sprint",
+      "file": "sprint/trigger_old_vocabulary.json",
+      "expect_paths": [
+        "/owner_review_triggers/0"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/missing_live_run.json",
+      "expect_paths": [
+        "/live_run"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/forbidden_sprint_tag.json",
+      "expect_paths": [
+        "/sprint_tag"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/forbidden_base_sha.json",
+      "expect_paths": [
+        "/base_sha"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/forbidden_repo_test_cmd.json",
+      "expect_paths": [
+        "/repo_test_cmd"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/live_run_enum.json",
+      "expect_paths": [
+        "/live_run"
+      ]
+    },
+    {
+      "kind": "sprint-proposal",
+      "file": "sprint-proposal/trigger_old_vocabulary.json",
+      "expect_paths": [
+        "/owner_review_triggers/0"
+      ]
+    },
+    {
+      "kind": "closure",
+      "file": "closure/reason_enum.json",
+      "expect_paths": [
+        "/reason"
+      ]
+    },
+    {
+      "kind": "closure",
+      "file": "closure/notes_type.json",
+      "expect_paths": [
+        "/notes"
+      ]
+    },
+    {
+      "kind": "closure",
+      "file": "closure/divergence_missing_rationale.json",
+      "expect_paths": [
+        "/solution_key_divergence/rationale"
+      ]
+    },
+    {
+      "kind": "closure",
+      "file": "closure/extra_property.json",
+      "expect_paths": [
+        "/unexpected"
+      ]
+    },
+    {
+      "kind": "closure",
+      "file": "closure/missing_reason.json",
+      "expect_paths": [
+        "/reason"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/exit_code_above_255.json",
+      "expect_paths": [
+        "/exit_code"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/exit_code_negative.json",
+      "expect_paths": [
+        "/exit_code"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/exit_code_type.json",
+      "expect_paths": [
+        "/exit_code"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/stage_enum.json",
+      "expect_paths": [
+        "/stage"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/head_pattern.json",
+      "expect_paths": [
+        "/head"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/step_exit_code_type.json",
+      "expect_paths": [
+        "/steps/0/exit_code"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/failing_line_too_long.json",
+      "expect_paths": [
+        "/failing_line"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/halt_reason_enum.json",
+      "expect_paths": [
+        "/halt/reason"
+      ]
+    },
+    {
+      "kind": "ev",
+      "file": "ev/missing_kind.json",
+      "expect_paths": [
+        "/kind"
+      ]
+    },
+    {
+      "kind": "qual",
+      "file": "qual/null_base_enum.json",
+      "expect_paths": [
+        "/null_base"
+      ]
+    },
+    {
+      "kind": "qual",
+      "file": "qual/green_pattern.json",
+      "expect_paths": [
+        "/solution_key_green"
+      ]
+    },
+    {
+      "kind": "qual",
+      "file": "qual/killed_type.json",
+      "expect_paths": [
+        "/mutants/0/killed"
+      ]
+    },
+    {
+      "kind": "qual",
+      "file": "qual/manifest_pattern.json",
+      "expect_paths": [
+        "/manifest_sha256"
+      ]
+    },
+    {
+      "kind": "qual",
+      "file": "qual/diagnostic_enum.json",
+      "expect_paths": [
+        "/diagnostic_case"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/epoch_zero.json",
+      "expect_paths": [
+        "/epoch"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/spec_missing_sha256.json",
+      "expect_paths": [
+        "/spec/sha256"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/budgets_forbidden.json",
+      "expect_paths": [
+        "/max_attempts"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/id_pattern.json",
+      "expect_paths": [
+        "/id"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/kind_const.json",
+      "expect_paths": [
+        "/kind"
+      ]
+    },
+    {
+      "kind": "contract",
+      "file": "contract/short_base_sha.json",
+      "expect_paths": [
+        "/base_sha"
+      ]
+    },
+    {
+      "kind": "oracle-decision",
+      "file": "oracle-decision/decision_enum.json",
+      "expect_paths": [
+        "/decision"
+      ]
+    },
+    {
+      "kind": "oracle-decision",
+      "file": "oracle-decision/feedback_type.json",
+      "expect_paths": [
+        "/feedback"
+      ]
+    },
+    {
+      "kind": "oracle-decision",
+      "file": "oracle-decision/missing_feedback.json",
+      "expect_paths": [
+        "/feedback"
+      ]
+    },
+    {
+      "kind": "oracle-decision",
+      "file": "oracle-decision/extra_property.json",
+      "expect_paths": [
+        "/unexpected"
+      ]
+    },
+    {
+      "kind": "prior_attempt",
+      "file": "prior_attempt/log_tail_forbidden.json",
+      "expect_paths": [
+        "/log_tail"
+      ]
+    },
+    {
+      "kind": "prior_attempt",
+      "file": "prior_attempt/closures_negative.json",
+      "expect_paths": [
+        "/closures_submitted"
+      ]
+    },
+    {
+      "kind": "prior_attempt",
+      "file": "prior_attempt/diff_null.json",
+      "expect_paths": [
+        "/diff"
+      ]
+    },
+    {
+      "kind": "prior_attempt",
+      "file": "prior_attempt/failing_line_too_long.json",
+      "expect_paths": [
+        "/failing_line"
+      ]
+    },
+    {
+      "kind": "prior_attempt",
+      "file": "prior_attempt/missing_failing_step.json",
+      "expect_paths": [
+        "/failing_step"
+      ]
+    },
+    {
+      "kind": "meta",
+      "file": "meta/kind_enum.json",
+      "expect_paths": [
+        "/kind"
+      ]
+    },
+    {
+      "kind": "meta",
+      "file": "meta/sha_pattern.json",
+      "expect_paths": [
+        "/sha256"
+      ]
+    },
+    {
+      "kind": "meta",
+      "file": "meta/seq_zero.json",
+      "expect_paths": [
+        "/seq"
+      ]
+    },
+    {
+      "kind": "meta",
+      "file": "meta/missing_parent.json",
+      "expect_paths": [
+        "/parent"
+      ]
+    },
+    {
+      "kind": "attempt",
+      "file": "attempt/branch_pattern.json",
+      "expect_paths": [
+        "/branch"
+      ]
+    },
+    {
+      "kind": "attempt",
+      "file": "attempt/seq_zero.json",
+      "expect_paths": [
+        "/seq"
+      ]
+    },
+    {
+      "kind": "attempt",
+      "file": "attempt/extra_property.json",
+      "expect_paths": [
+        "/unexpected"
+      ]
+    },
+    {
+      "kind": "attempt",
+      "file": "attempt/missing_seq.json",
+      "expect_paths": [
+        "/seq"
+      ]
+    }
+  ]
+}

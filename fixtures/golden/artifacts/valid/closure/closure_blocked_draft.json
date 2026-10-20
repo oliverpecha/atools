@@ -1,0 +1,10 @@
+{
+  "backlog": [],
+  "blocking_step": "O1:02_no_email.sh",
+  "notes": [],
+  "reason": "blocked",
+  "solution_key_divergence": {
+    "rationale": "Key shortcuts the raw-payload check.",
+    "requirement_id": "R2"
+  }
+}

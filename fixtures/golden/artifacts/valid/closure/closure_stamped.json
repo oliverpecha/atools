@@ -1,0 +1,14 @@
+{
+  "backlog": [
+    "Add pagination"
+  ],
+  "blocking_step": null,
+  "kind": "closure",
+  "notes": [
+    "Reused serializer"
+  ],
+  "parent": null,
+  "reason": "done",
+  "seq": 6,
+  "solution_key_divergence": null
+}

@@ -1,0 +1,10 @@
+{
+  "backlog": [
+    "Add pagination"
+  ],
+  "blocking_step": null,
+  "notes": [
+    "Reused serializer"
+  ],
+  "solution_key_divergence": null
+}

@@ -1,0 +1,31 @@
+{
+  "after": [],
+  "approval_live_run": "architect",
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "hard_cap": {
+    "implementer": {
+      "turns": 60,
+      "wall_clock": "45m"
+    }
+  },
+  "live_run": "none",
+  "max_attempts": {
+    "curator": 2,
+    "implementer": 2,
+    "live": 2,
+    "oracle": 3
+  },
+  "max_epochs": 3,
+  "min_attempts_before_block": 2,
+  "owner_review_triggers": [
+    "plan_deviation",
+    "budget_exceeded",
+    "critical_tripwire",
+    "manual_flag"
+  ],
+  "repo_test_cmd": "python3 -m pytest test -q -rf",
+  "solution_key_exposure": "full",
+  "spec_source": "imported",
+  "sprint_tag": "2026-10-16_public-profiles",
+  "status": "frozen"
+}

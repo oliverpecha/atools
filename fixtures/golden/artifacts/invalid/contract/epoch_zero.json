@@ -1,0 +1,28 @@
+{
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "epoch": 0,
+  "id": "contract-005",
+  "kind": "contract",
+  "oracle": {
+    "id": "oracle-003",
+    "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "seq": 3
+  },
+  "parent": null,
+  "qual": {
+    "id": "qual-004",
+    "seq": 4,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "scope": {
+    "path": "oracle-003/scope.txt",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "seq": 5,
+  "spec": {
+    "id": "spec-001",
+    "seq": 1,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "sprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

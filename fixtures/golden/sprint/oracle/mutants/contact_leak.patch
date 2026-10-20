@@ -1,0 +1,10 @@
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..a03771d 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -12,4 +12,5 @@ def render_profile(user_id):
+         "bio": user["bio"],
+         "avatar": user["avatar"],
+         "photo_count": len(user["photos"]),
++        "contact": user["email"],
+     }

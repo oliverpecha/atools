@@ -1,0 +1,22 @@
+{
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "diagnostic_case": "none",
+  "id": "qual-004",
+  "kind": "qual",
+  "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mutants": [
+    {
+      "apply_error": false,
+      "killed": true,
+      "name": "contact_leak.patch"
+    }
+  ],
+  "null_base": "amber",
+  "oracle": "oracle-003",
+  "parent": null,
+  "seq": 4,
+  "solution_key_green": "3/3",
+  "solution_key_guards": "green",
+  "solution_key_repo_test": "green",
+  "spec": "spec-001"
+}

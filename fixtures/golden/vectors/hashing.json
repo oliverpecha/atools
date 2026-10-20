@@ -1,0 +1,128 @@
+{
+ "canonical_json": [
+  {
+   "canonical_utf8_hex": "7b2261223a5b312c325d2c2262223a317d",
+   "name": "sorted_keys",
+   "obj": {
+    "a": [
+     1,
+     2
+    ],
+    "b": 1
+   },
+   "sha256": "94a786c3662bc7beeb598efa7d8cb58d7bea25d6c275ea9785a0230ff1f8c2ba"
+  },
+  {
+   "canonical_utf8_hex": "7b22c3a9223a22c3bce6bca2227d",
+   "name": "unicode_not_escaped",
+   "obj": {
+    "\u00e9": "\u00fc\u6f22"
+   },
+   "sha256": "73a4259624c2b4e086e6b05f5a855c1d9e40bdfd875f4a3539c67c2a15cf4d3a"
+  },
+  {
+   "canonical_utf8_hex": "7b2278223a7b226b223a66616c73657d2c2279223a747275652c227a223a6e756c6c7d",
+   "name": "nested_null_bool",
+   "obj": {
+    "x": {
+     "k": false
+    },
+    "y": true,
+    "z": null
+   },
+   "sha256": "10b49a0fa1c48f26796fa464f7055b4ec5c010ba63d13615e310a3bb2ec275a9"
+  },
+  {
+   "canonical_utf8_hex": "7b2266223a312e352c2269223a327d",
+   "name": "float_and_int",
+   "obj": {
+    "f": 1.5,
+    "i": 2
+   },
+   "sha256": "2ffdbe7c6beebed28b8eee7124ff852f88877abd397cc7a1f121707a7682e22c"
+  },
+  {
+   "canonical_utf8_hex": "7b2261223a7b7d2c2262223a5b5d7d",
+   "name": "empty_containers",
+   "obj": {
+    "a": {},
+    "b": []
+   },
+   "sha256": "aeeba1e56a144077f89e26c930dad7cf933e9383cfb8e33ddff618233b29be76"
+  },
+  {
+   "canonical_utf8_hex": "7b2271223a22615c22625c5c635c6e227d",
+   "name": "string_escapes",
+   "obj": {
+    "q": "a\"b\\c\n"
+   },
+   "sha256": "71c97ed780b38ca91413993edf3e67f5031e9ebf5bed98233f117b6923160530"
+  }
+ ],
+ "errors": {
+  "canonical_json": [
+   "nan",
+   "inf",
+   "non_str_key",
+   "lone_surrogate"
+  ],
+  "note": "NaN/Infinity -> ValueError, int key -> TypeError, lone surrogate -> ValueError (INTERFACES 1.4)"
+ },
+ "file_sha256": [
+  {
+   "hex": "",
+   "name": "empty",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "hex": "616263",
+   "name": "abc",
+   "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  },
+  {
+   "hex": "68656c6c6f0a",
+   "name": "hello_nl",
+   "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+  },
+  {
+   "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+   "name": "binary",
+   "sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880"
+  }
+ ],
+ "manifest": {
+  "empty_dirs_ignored": [
+   "emptydir"
+  ],
+  "files": [
+   {
+    "content": "x",
+    "exec": false,
+    "path": "a/b"
+   },
+   {
+    "content": "y",
+    "exec": true,
+    "path": "a.b"
+   },
+   {
+    "content": "",
+    "exec": false,
+    "path": "B"
+   },
+   {
+    "content": "z",
+    "exec": false,
+    "path": "\u00e9.txt"
+   },
+   {
+    "content": "q",
+    "exec": false,
+    "path": "dir/sub/f"
+   }
+  ],
+  "manifest_text_hex": "42002d00653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a612e62007800613166636534333633383534666638383863666634623865373837356436303063323638323339303431326138636637396233376430623131313438623066610a612f62002d00326437313136343262373236623034343031363237636139666261633332663563383533306662313930336363346462303232353837313739323161343838310a6469722f7375622f66002d00386533356332636433626636363431626462306532303530623736393332636262326536303334613064646163633164396265613832613662613537663763660ac3a92e747874002d00353934653531396165343939333132623239343333623764643861393766663036386465666362613937353562366435643030653834633532346436376230360a",
+  "sha256": "32b20d32a2a69420770e19e7f98755244c72085b7ed9e4c9073dcd705a06db5a",
+  "sha256_if_no_exec_bits": "1c9115a75ef65fdf51d74fd2285347ff39d5470082063b29b7c9fd3b12b14889"
+ }
+}

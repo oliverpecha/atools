@@ -1,0 +1,30 @@
+{
+  "contract": "contract-005.json",
+  "exit_code": 1,
+  "failing_line": "FAIL: body contains seeded email",
+  "failing_step": "O1:02_no_email.sh",
+  "halt": null,
+  "head": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "id": "ev-007",
+  "kind": "ev",
+  "oracle": "oracle-003",
+  "parent": "closure-006.json",
+  "seq": 7,
+  "session": null,
+  "stage": "dry",
+  "steps": [
+    {
+      "cmd": "guard:scope",
+      "exit_code": 0,
+      "id": "G3",
+      "output_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "cmd": "bash proofs/02_no_email.sh",
+      "exit_code": 1,
+      "id": "O1",
+      "output_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "tripwires": []
+}

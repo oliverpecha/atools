@@ -1,0 +1,6 @@
+{
+  "closures_submitted": 1,
+  "diff": "diff --git a/x b/x\n",
+  "failing_line": "FAIL: body contains seeded email",
+  "failing_step": "O1:02_no_email.sh"
+}

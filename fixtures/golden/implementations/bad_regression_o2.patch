@@ -1,0 +1,45 @@
+diff --git a/api/profile.py b/api/profile.py
+index 4efe645..0cef769 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -1,7 +1,18 @@
+ # Authored-by: Perplexity (AI assistant by Perplexity AI), model family: Perplexity
+ from api import users
+ 
++_PUBLIC_FIELDS = ("name", "bio", "avatar")
++
++
++def _public_view(user):
++    view = {k: user[k] for k in _PUBLIC_FIELDS}
++    view["photo_count"] = len(user["photos"])
++    return view
++
+ 
+ def render_profile(user_id):
+     """Return (status, body) for a guest viewing user_id's profile."""
+-    raise NotImplementedError("public profiles not implemented")
++    user = users.get_user(user_id)
++    if user is None or not users.is_public(user_id):
++        return 404, {"error": "not_found"}
++    return 200, _public_view(user)
+diff --git a/api/users.py b/api/users.py
+index 0c5e22f..83c3f3c 100644
+--- a/api/users.py
++++ b/api/users.py
+@@ -16,8 +16,15 @@ USERS = {
+ 
+ def get_user(user_id):
+     """Return the user dict or None when unknown."""
+-    return USERS.get(user_id)
++    return USERS[user_id]
+ 
+ 
+ def list_user_ids():
+     return sorted(USERS)
++
++
++PUBLIC_USER_IDS = frozenset((1, 2))
++
++
++def is_public(user_id):
++    return user_id in PUBLIC_USER_IDS

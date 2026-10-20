@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# No-op stub: `loginctl enable-linger` must never touch the host (F7). `show-user` reports a fixed state.
+if [[ "${1:-}" == "show-user" ]]; then echo "Linger=no"; fi
+exit 0

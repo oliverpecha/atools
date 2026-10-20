@@ -1,0 +1,5 @@
+{
+  "decision": "revise_oracle",
+  "feedback": "Strengthen 02_no_email.sh to scan the raw payload.",
+  "unexpected": 1
+}

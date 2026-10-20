@@ -1,0 +1,122 @@
+{
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "cases": {
+    "bad_forbidden": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "forbidden call",
+        "failing_step": "G6",
+        "step": "G6"
+      }
+    },
+    "bad_proof_o1": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "seeded email",
+        "failing_step": "O1:02_no_email.sh",
+        "step": "O1"
+      }
+    },
+    "bad_regression_o2": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "test_get_user_unknown_returns_none",
+        "failing_step": "O2:test_users::test_get_user_unknown_returns_none",
+        "step": "O2"
+      }
+    },
+    "bad_scope": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "api/cli.py",
+        "failing_step": "G3",
+        "step": "G3"
+      }
+    },
+    "bad_secret": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "secret pattern",
+        "failing_step": "G5",
+        "step": "G5"
+      }
+    },
+    "bad_testcount": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "test function count decreased",
+        "failing_step": "G4",
+        "step": "G4"
+      }
+    },
+    "good": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 0,
+        "failing_line_contains": null,
+        "failing_step": null,
+        "step": "O2"
+      }
+    },
+    "mutant_avatar_drop": {
+      "applies_on": "base+key",
+      "expect": {
+        "exit": 0,
+        "failing_line_contains": null,
+        "failing_step": null,
+        "step": "O2"
+      }
+    },
+    "mutant_contact_leak": {
+      "applies_on": "base+key",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "seeded email",
+        "failing_step": "O1:02_no_email.sh",
+        "step": "O1"
+      }
+    },
+    "mutant_photo_count_off": {
+      "applies_on": "base+key",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "recomputed",
+        "failing_step": "O1:probe.sh",
+        "step": "O1"
+      }
+    },
+    "mutant_private_200": {
+      "applies_on": "base+key",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "status",
+        "failing_step": "O1:03_private_404.sh",
+        "step": "O1"
+      }
+    },
+    "null_base": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 1,
+        "failing_line_contains": "FAIL:",
+        "failing_step": "O1:01_public.sh",
+        "step": "O1"
+      }
+    },
+    "solution_key": {
+      "applies_on": "base",
+      "expect": {
+        "exit": 0,
+        "failing_line_contains": null,
+        "failing_step": null,
+        "step": "O2"
+      }
+    }
+  }
+}

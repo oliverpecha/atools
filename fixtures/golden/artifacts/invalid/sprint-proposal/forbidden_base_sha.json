@@ -1,0 +1,24 @@
+{
+  "approval_live_run": "owner",
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "hard_cap": {
+    "implementer": {
+      "turns": 40,
+      "wall_clock": "30m"
+    }
+  },
+  "live_run": "required",
+  "max_attempts": {
+    "curator": 2,
+    "implementer": 2,
+    "live": 2,
+    "oracle": 3
+  },
+  "max_epochs": 3,
+  "min_attempts_before_block": 2,
+  "owner_review_triggers": [
+    "manual_flag",
+    "budget_exceeded"
+  ],
+  "solution_key_exposure": "hidden"
+}

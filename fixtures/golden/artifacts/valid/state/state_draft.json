@@ -1,0 +1,28 @@
+{
+  "active_contract": null,
+  "active_oracle": null,
+  "active_oracle_draft": null,
+  "active_solution_key": null,
+  "active_spec": null,
+  "active_stage": null,
+  "attempts": {
+    "curator": 0,
+    "implementer": 0,
+    "live": 0,
+    "oracle": 0
+  },
+  "closures_submitted": 0,
+  "epoch": 1,
+  "grants": {
+    "curator": 0,
+    "implementer": 0,
+    "live": 0,
+    "oracle": 0
+  },
+  "hard_caps_tripped": 0,
+  "run_id": "run-0123456789ab",
+  "seq": 0,
+  "sprint_tag": "2026-10-16_public-profiles",
+  "status": "draft",
+  "tmux_sessions": []
+}

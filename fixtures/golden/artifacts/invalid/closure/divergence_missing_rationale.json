@@ -1,0 +1,13 @@
+{
+  "backlog": [
+    "Add pagination"
+  ],
+  "blocking_step": null,
+  "notes": [
+    "Reused serializer"
+  ],
+  "reason": "done",
+  "solution_key_divergence": {
+    "requirement_id": "R1"
+  }
+}

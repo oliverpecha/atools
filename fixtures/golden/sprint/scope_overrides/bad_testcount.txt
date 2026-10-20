@@ -1,0 +1,4 @@
+FROZEN: test/**
+ALLOW: api/profile.py
+ALLOW: api/users.py
+ALLOW: test/test_users.py

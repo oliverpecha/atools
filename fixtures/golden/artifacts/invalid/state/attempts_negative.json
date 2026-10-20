@@ -1,0 +1,28 @@
+{
+  "active_contract": "contract-005.json",
+  "active_oracle": "oracle-003",
+  "active_oracle_draft": null,
+  "active_solution_key": "solution_key-002.patch",
+  "active_spec": "spec-001.md",
+  "active_stage": "implementer",
+  "attempts": {
+    "curator": 0,
+    "implementer": 0,
+    "live": 0,
+    "oracle": -1
+  },
+  "closures_submitted": 0,
+  "epoch": 1,
+  "grants": {
+    "curator": 0,
+    "implementer": 0,
+    "live": 0,
+    "oracle": 0
+  },
+  "hard_caps_tripped": 0,
+  "run_id": "run-0123456789ab",
+  "seq": 5,
+  "sprint_tag": "2026-10-16_public-profiles",
+  "status": "running",
+  "tmux_sessions": []
+}

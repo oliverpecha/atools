@@ -1,0 +1,19 @@
+{
+  "contract": "contract-005.json",
+  "exit_code": 3,
+  "failing_line": null,
+  "failing_step": null,
+  "halt": {
+    "reason": "integrity_mismatch"
+  },
+  "head": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "id": "ev-007",
+  "kind": "ev",
+  "oracle": "oracle-003",
+  "parent": "closure-006.json",
+  "seq": 7,
+  "session": null,
+  "stage": "guards",
+  "steps": [],
+  "tripwires": []
+}
