@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "meta.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "seq", "parent", "sha256"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["spec", "solution_key", "oracle-draft"]
+    },
+    "seq": { "type": "integer", "minimum": 1 },
+    "parent": { "type": ["string", "null"] },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

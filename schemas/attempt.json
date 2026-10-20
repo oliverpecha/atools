@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "attempt.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "branch"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "branch": {
+      "type": "string",
+      "pattern": "^wip/[0-9]{3,}$"
+    },
+    "sprint_tag": { "type": "string" },
+    "contract": { "type": "string" },
+    "spec": { "type": "string" }
+  }
+}

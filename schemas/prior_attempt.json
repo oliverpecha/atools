@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prior_attempt.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["diff", "failing_step", "failing_line", "closures_submitted"],
+  "properties": {
+    "diff": { "type": "string" },
+    "failing_step": { "type": ["string", "null"] },
+    "failing_line": {
+      "type": ["string", "null"],
+      "maxLength": 300
+    },
+    "closures_submitted": { "type": "integer", "minimum": 0 }
+  }
+}

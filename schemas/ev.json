@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ev.json",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    { "$ref": "common.json#/$defs/artifact_meta" }
+  ],
+  "required": [
+    "kind",
+    "seq",
+    "parent",
+    "id",
+    "stage",
+    "oracle",
+    "contract",
+    "head",
+    "exit_code",
+    "steps",
+    "failing_step",
+    "failing_line",
+    "tripwires",
+    "halt",
+    "session"
+  ],
+  "properties": {
+    "kind": { "const": "ev" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "parent": { "type": ["string", "null"] },
+    "id": {
+      "type": "string",
+      "pattern": "^ev-[0-9]{3,}$"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["guards", "offline", "live", "blocked_check"]
+    },
+    "oracle": { "type": "string" },
+    "contract": { "type": "string" },
+    "head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "exit_code": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 255
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "cmd", "exit_code", "output_sha256"],
+        "properties": {
+          "id": { "type": "string" },
+          "cmd": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "output_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "failing_step": { "type": ["string", "null"] },
+    "failing_line": {
+      "type": ["string", "null"],
+      "maxLength": 300
+    },
+    "tripwires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "line_no", "pattern", "excerpt"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["transcript", "log"]
+          },
+          "line_no": { "type": "integer" },
+          "pattern": { "type": "string" },
+          "excerpt": { "type": "string" }
+        }
+      }
+    },
+    "halt": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reason"],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "enum": [
+                "integrity_mismatch",
+                "selftest_failed",
+                "wrapper_rejected",
+                "unsupported_cap",
+                "architect_unavailable"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "session": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "exit_code", "hard_cap", "lost", "log_sha256"],
+          "properties": {
+            "name": { "type": "string" },
+            "exit_code": { "type": ["integer", "null"] },
+            "hard_cap": { "type": "boolean" },
+            "lost": { "type": "boolean" },
+            "log_sha256": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

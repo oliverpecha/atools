@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.json",
+  "$defs": {
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_meta": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "parent": { "type": ["string", "null"] }
+      },
+      "required": ["kind", "seq", "parent"]
+    },
+    "owner_review_trigger": {
+      "type": "string",
+      "enum": ["plan_deviation", "budget_exceeded", "critical_tripwire", "manual_flag"]
+    },
+    "max_attempts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "oracle": { "type": "integer", "minimum": 1 },
+        "implementer": { "type": "integer", "minimum": 1 },
+        "live": { "type": "integer", "minimum": 1 },
+        "curator": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["oracle", "implementer", "live", "curator"]
+    },
+    "hard_cap_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wall_clock": { "type": "string" },
+        "turns": { "type": "integer", "minimum": 0 },
+        "tool_calls": { "type": "integer", "minimum": 0 },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

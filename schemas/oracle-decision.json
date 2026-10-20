@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oracle-decision.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "feedback"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["lock_oracle", "revise_oracle"]
+    },
+    "feedback": { "type": ["string", "null"] }
+  }
+}

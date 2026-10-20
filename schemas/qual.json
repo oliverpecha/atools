@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qual.json",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    { "$ref": "common.json#/$defs/artifact_meta" }
+  ],
+  "required": [
+    "kind",
+    "seq",
+    "parent",
+    "id",
+    "oracle",
+    "spec",
+    "base_sha",
+    "manifest_sha256",
+    "null_base",
+    "solution_key_guards",
+    "solution_key_green",
+    "solution_key_repo_test",
+    "mutants",
+    "diagnostic_case"
+  ],
+  "properties": {
+    "kind": { "const": "qual" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "parent": { "type": ["string", "null"] },
+    "id": {
+      "type": "string",
+      "pattern": "^qual-[0-9]{3,}$"
+    },
+    "oracle": { "type": "string" },
+    "spec": { "type": "string" },
+    "base_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "null_base": {
+      "type": "string",
+      "enum": ["red", "green"]
+    },
+    "solution_key_guards": {
+      "type": "string",
+      "enum": ["green", "red"]
+    },
+    "solution_key_green": {
+      "type": "string",
+      "pattern": "^[0-3]/3$"
+    },
+    "solution_key_repo_test": {
+      "type": "string",
+      "enum": ["green", "red"]
+    },
+    "mutants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "killed", "apply_error"],
+        "properties": {
+          "name": { "type": "string" },
+          "killed": { "type": "boolean" },
+          "apply_error": { "type": "boolean" }
+        }
+      }
+    },
+    "diagnostic_case": {
+      "type": "string",
+      "enum": ["none", "pure_oracle_failure", "solution_key_conflict"]
+    }
+  }
+}

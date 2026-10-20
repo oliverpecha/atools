@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract.json",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    { "$ref": "common.json#/$defs/artifact_meta" }
+  ],
+  "required": [
+    "kind",
+    "seq",
+    "parent",
+    "id",
+    "epoch",
+    "base_sha",
+    "spec",
+    "oracle",
+    "qual",
+    "sprint_sha256",
+    "scope"
+  ],
+  "properties": {
+    "kind": { "const": "contract" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "parent": { "type": ["string", "null"] },
+    "id": {
+      "type": "string",
+      "pattern": "^contract-[0-9]{3,}$"
+    },
+    "epoch": { "type": "integer", "minimum": 1 },
+    "base_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "id", "sha256"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "id": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "id", "manifest_sha256"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "id": { "type": "string" },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "qual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "id", "sha256"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "id": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "sprint_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
