@@ -19,10 +19,27 @@ LOG_DIR = Path(os.environ.get("ATOOLS_LOG_DIR", "/root/.cursor/logs" if Path("/r
 METADATA_DIR = Path(os.environ.get("ATOOLS_SESSION_DIR", Path.home() / ".cursor" / "sessions"))
 
 
+def _resolve_metadata_dir() -> Path:
+    env_dir = os.environ.get("ATOOLS_SESSION_DIR")
+    return Path(env_dir) if env_dir else (Path.home() / ".cursor" / "sessions")
+
+
+def _resolve_log_dir() -> Path:
+    env_dir = os.environ.get("ATOOLS_LOG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    try:
+        if Path("/root/.cursor").exists():
+            return Path("/root/.cursor/logs")
+    except OSError:
+        pass
+    return Path.home() / ".cursor" / "logs"
+
+
 def ensure_environment() -> None:
     """Initialize directories and enable systemd user lingering."""
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
+    _resolve_log_dir().mkdir(parents=True, exist_ok=True)
+    _resolve_metadata_dir().mkdir(parents=True, exist_ok=True)
     enable_linger()
 
 
@@ -41,11 +58,57 @@ def enable_linger() -> None:
 
 
 def get_metadata_path(session_name: str) -> Path:
-    return METADATA_DIR / f"{session_name}.json"
+    return _resolve_metadata_dir() / f"{session_name}.json"
 
 
 def get_log_path(session_name: str) -> Path:
-    return LOG_DIR / f"{session_name}.log"
+    return _resolve_log_dir() / f"{session_name}.log"
+
+
+def get_exit_path(session_name: str) -> Path:
+    return _resolve_metadata_dir() / f"{session_name}.exit"
+
+
+def read_exit_code(session_name: str) -> Optional[int]:
+    path = get_exit_path(session_name)
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    if re.fullmatch(r"[0-9]+\Z", text):
+        return int(text)
+    return None
+
+
+def _record_exit(session_name: str, code: int, overwrite: bool = False) -> None:
+    if not overwrite and read_exit_code(session_name) is not None:
+        return
+    path = get_exit_path(session_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".exit.tmp")
+    try:
+        tmp.write_text(f"{code}\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+def _wait_pids_gone(pids: List[str], timeout: float = 2.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        alive = False
+        for p in pids:
+            try:
+                os.kill(int(p), 0)
+                alive = True
+            except (ProcessLookupError, ValueError):
+                pass
+            except PermissionError:
+                alive = True
+        if not alive:
+            return True
+        time.sleep(0.05)
+    return False
 
 
 def save_session_metadata(
@@ -136,9 +199,10 @@ def get_running_sessions() -> List[Dict[str, Any]]:
     now = time.time()
     results = []
 
-    # Clean up stale metadata files
-    if METADATA_DIR.exists():
-        for meta_file in METADATA_DIR.glob("*.json"):
+    # Clean up stale metadata files (never delete .exit)
+    meta_dir = _resolve_metadata_dir()
+    if meta_dir.exists():
+        for meta_file in meta_dir.glob("*.json"):
             sess_name = meta_file.stem
             if sess_name not in active_tmux:
                 try:
@@ -437,6 +501,15 @@ def kill_session(session_name: str, manual: bool = False) -> int:
             err = res_kill.stderr.strip()
             err_lower = err.lower()
             if any(k in err_lower for k in ["no server running", "can't find session", "no current target", "server exited unexpectedly"]):
+                if _wait_pids_gone(pids, timeout=2.0):
+                    _record_exit(session_name, 143, overwrite=True)
+                else:
+                    for p in (get_exit_path(session_name), get_exit_path(session_name).with_suffix(".exit.tmp")):
+                        try:
+                            if p.exists():
+                                p.unlink()
+                        except Exception:
+                            pass
                 cleanup_session_metadata(session_name)
                 print(msg_term)
                 return 0
@@ -449,6 +522,16 @@ def kill_session(session_name: str, manual: bool = False) -> int:
             except Exception:
                 pass
 
+        if _wait_pids_gone(pids, timeout=2.0):
+            _record_exit(session_name, 143, overwrite=True)
+        else:
+            for p in (get_exit_path(session_name), get_exit_path(session_name).with_suffix(".exit.tmp")):
+                try:
+                    if p.exists():
+                        p.unlink()
+                except Exception:
+                    pass
+
         cleanup_session_metadata(session_name)
         print(msg_term)
         return 0
@@ -456,6 +539,8 @@ def kill_session(session_name: str, manual: bool = False) -> int:
         err = e.stderr.decode() if isinstance(e.stderr, bytes) else str(e.stderr)
         err_lower = err.lower()
         if any(k in err_lower for k in ["no server running", "can't find session", "no current target", "server exited unexpectedly"]):
+            if _wait_pids_gone([], timeout=2.0):
+                _record_exit(session_name, 143, overwrite=True)
             cleanup_session_metadata(session_name)
             print(msg_term)
             return 0
@@ -498,9 +583,20 @@ def create_runner_script(
     log_file: Path,
 ) -> Path:
     """Generate ephemeral bash runner that supervises execution and streams via tee."""
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
-    runner_path = METADATA_DIR / f"{session_name}.run.sh"
+    meta_dir = _resolve_metadata_dir()
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    runner_path = meta_dir / f"{session_name}.run.sh"
     meta_path = get_metadata_path(session_name)
+    exit_path = get_exit_path(session_name)
+    exit_tmp = meta_dir / f"{session_name}.exit.tmp"
+    # Boot trampoline: tmux cmdline must not contain "<session>.run.sh" so E10's
+    # `pgrep -f "<session>.run.sh"` selects the bash runner, not the tmux server.
+    boot_path = meta_dir / f"{session_name}.boot.sh"
+    boot_path.write_text(
+        f"#!/usr/bin/env bash\nexec bash {shlex.quote(str(runner_path))}\n",
+        encoding="utf-8",
+    )
+    boot_path.chmod(0o755)
 
     cmd_parts = [engine_script] + dispatch_args
     cmd_str = " ".join(shlex.quote(arg) for arg in cmd_parts)
@@ -515,9 +611,14 @@ def create_runner_script(
 set -uo pipefail
 
 cleanup() {{
-    rm -f {shlex.quote(str(runner_path))} {shlex.quote(str(meta_path))}
+    local ec=$?
+    printf '%s\\n' "$ec" > {shlex.quote(str(exit_tmp))} && mv -f {shlex.quote(str(exit_tmp))} {shlex.quote(str(exit_path))}
+    rm -f {shlex.quote(str(runner_path))} {shlex.quote(str(meta_path))} {shlex.quote(str(boot_path))}
 }}
 trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+trap 'exit 130' INT
 
 execute_work() {{
     echo >&2 {shlex.quote(telemetry_msg)}
@@ -542,7 +643,7 @@ exit $?
 """
     runner_path.write_text(content)
     runner_path.chmod(0o755)
-    return runner_path
+    return boot_path
 
 
 def spawn_detached_session(
@@ -565,6 +666,15 @@ def spawn_detached_session(
             log_file.unlink()
     except Exception:
         pass
+    exit_path = get_exit_path(session_name)
+    exit_tmp = exit_path.with_suffix(".exit.tmp")
+    boot_path = _resolve_metadata_dir() / f"{session_name}.boot.sh"
+    for p in (exit_path, exit_tmp, boot_path):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
     log_file.touch(exist_ok=True)
 
     prompt_text = ""
@@ -585,7 +695,7 @@ def spawn_detached_session(
         },
     )
 
-    runner_path = create_runner_script(
+    boot_path = create_runner_script(
         session_name=session_name,
         engine_script=engine_script,
         dispatch_args=dispatch_args,
@@ -596,6 +706,7 @@ def spawn_detached_session(
         engine=engine,
         log_file=log_file,
     )
+    runner_path = _resolve_metadata_dir() / f"{session_name}.run.sh"
 
     work_dir = cwd or os.getcwd()
 
@@ -612,16 +723,18 @@ def spawn_detached_session(
         str(rows),
         "-c",
         work_dir,
-        f"bash {shlex.quote(str(runner_path))}",
+        f"bash {shlex.quote(str(boot_path))}",
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         sys.stderr.write(f"🚨 [ERROR] Failed to start tmux session: {res.stderr}\n")
         cleanup_session_metadata(session_name)
-        try:
-            runner_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        for p in (boot_path, runner_path, exit_path, exit_tmp):
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
         return res.returncode
 
     # Prevent zombie sessions across any host environment
