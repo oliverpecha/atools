@@ -4,6 +4,7 @@
 Authored-by: Gemini Argon 4 High (Challengers: GPT-6 Sol, Claude Sonnet 5.5)
 Baseline: `atools` commit `2acaf3c`, `VERSION` `v0.1.7`
 Revision note: 2026-10-19 baseline header moved to 2acaf3c / v0.1.7; no interface changed; approved by Owner (PB-4).
+Revision note: 2026-10-20 align C-2, C-3, F-17 per spec-S0-rulings.md; approved by Owner (PB-4).
 Revision note: 2026-10-19 error types, scope parse/validate split, validator error paths, state_lock threading, reserve highwater, run_id rule and verify_impl effects clarified; `actl.errors` added (3 entries); no signature removed; applied at Owner request (PB-4).
 Status: Normative interface contract for `S0-R15` (`PB-2`, `PB-4`). Changes after Owner acceptance require explicit Owner approval and a revision note in this file.
 
@@ -121,7 +122,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 
 * **`format_artifact_id(kind: str, seq: int) -> str`** (`kind: function`)
-* **Preconditions:** `kind` in `("spec", "solution_key", "oracle", "oracle-draft", "qual", "contract", "closure", "ev", "escalation", "live-decision")`; `seq >= 1`.
+* **Preconditions:** `kind` in `("spec", "solution_key", "oracle", "oracle-draft", "qual", "contract", "closure", "ev", "escalation", "live-decision", "implementer")`; `seq >= 1`.
 * **Return value:** `f"{kind}-{seq:03d}"`.
 * **Errors raised:** `ValueError` on unknown `kind` or `seq < 1`. **Side effects:** None. **Idempotence:** Pure.
 
@@ -528,7 +529,7 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `status`, `spec_source`, and `repo_test_cmd`)
 * `approval_live_run`: `"architect" | "owner"` (default `"architect"`)
 * `solution_key_exposure`: `"full" | "hidden"` (default `"full"`)
-* `owner_review_triggers`: `list["grant_attempts" | "waive_mutant" | "update_scope" | "reopen_oracle" | "retry_live"]` (default `[]`)
+* `owner_review_triggers`: `list["plan_deviation" | "budget_exceeded" | "critical_tripwire" | "manual_flag"]` (default `[]`)
 * `min_attempts_before_block`: `int >= 1` (default `2`)
 * `max_epochs`: `int >= 1` (default `3`)
 * `repo_test_cmd`: `str` (default `"python3 -m pytest test -q -rf"`)
@@ -553,7 +554,7 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * **`ev-{seq}.json` (`schemas/ev.json`):**
 * `kind`: `"ev"`, `seq`: `int >= 1`, `parent`: `str | null`, `id`: `str` (`^ev-[0-9]{3,}$`)
 * `stage`: `"guards" | "offline" | "live" | "blocked_check"`
-* `oracle`: `str`, `contract`: `str`, `head`: `str` (`^[0-9a-f]{40}\Z`), `exit_code`: `0 | 1 | 3`
+* `oracle`: `str`, `contract`: `str`, `head`: `str` (`^[0-9a-f]{40}\Z`), `exit_code`: `int (0..255) | null`
 * `parent`: `str | null` (set to evaluated closure filename `"closure-{seq:03d}.json"` when evaluating a closure)
 * `steps`: `list[{"id": str, "cmd": str, "exit_code": int, "output_sha256": str}]` (produced by `StepResult.to_ev_step()`)
 * `failing_step`: `str | null`, `failing_line`: `str | null` (max 300 chars, single line)
