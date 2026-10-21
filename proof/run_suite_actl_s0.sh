@@ -44,6 +44,7 @@ run_check "P-S0-15_expected_fragments"      bash $P/P-S0-15.sh
 run_check "P-S0-26_interfaces_conformance"  bash $P/P-S0-26.sh
 run_check "P-S0-28_doctor_uninitialised"    bash $P/p02_doctor_empty.sh
 run_check "P-S0-29_next_rules_table"        bash $P/P-S0-29.sh
+run_check "P-S0-30_gap_proofs"             bash $P/P-S0-30.sh
 
 echo "=========================================="
 echo "Suite Summary: $PASS Passed, $FAIL Failed, $ENVERR Environment"
