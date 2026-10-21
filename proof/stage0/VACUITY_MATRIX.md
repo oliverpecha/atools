@@ -1,5 +1,5 @@
 # VACUITY_MATRIX.md - D-20 three-stand-in review of the Stage 0 proofs
-Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 
 ## How to read this
 Stand-ins (addendum section 10, item 5): (a) empty module / missing symbols, (b) always-succeed stub (functions return success, empty or permissive values), (c) always-fail stub (functions raise or return failure). A proof passes the review when it is RED against every stand-in it should reject. A green result is correct only for the cells marked "by design".

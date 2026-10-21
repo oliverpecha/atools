@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # proof/stage0/selfcheck_mutations.sh - checks the checker: golden_selfcheck.sh (P-S0-10) must be GREEN on the pristine fixture (control)
 # and RED on every planted fixture defect below. Exit 0 = control green and every mutant detected; 1 otherwise; 4 = tool missing.
 # Runs golden_selfcheck.sh with GOLDEN_DIR pointing at a mutated copy; the real fixture is never modified.

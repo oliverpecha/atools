@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """P-S0-08 / S0-R7: schemas.validate over golden artifacts and >= 3 invalid cases per schema with exact RFC 6901 pointers."""
 import json
 import sys

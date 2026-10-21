@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # proof/stage0/golden_selfcheck.sh - P-S0-10 (S0-R9). Plain bash + git + python3 stdlib. ZERO actl code.
 # Verifies fixtures/golden against fixtures/golden/expected.d/base.json:
 #   deterministic base_sha; base red; key green 3x + repo tests; each mutant killed exactly by its coverage.md proofs

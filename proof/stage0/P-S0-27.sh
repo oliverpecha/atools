@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # P-S0-27 (extra, S0-R11): conformance of proof/run_suite_actl_s0.sh to the run_check pattern of proof/run_suite_engines.sh.
 # Static: pattern markers. Dynamic: idempotence, ONLY filter, exit-code mapping 0/1/4 and per-check logs, temporary ACTL_ROOT that is
 # removed afterwards and never equals the caller's. NOT listed inside the suite itself (it would recurse): run it separately.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # P-S0-28 (extra, S0-R1.5/R1.6): `actl doctor` against an UNINITIALISED root (no init, no sprint, root dir absent).
 # Must exit 0, print one JSON object, write only $ACTL_ROOT/baseline.json, create no sprint/handoff tree, and not touch the repo.
 set -uo pipefail

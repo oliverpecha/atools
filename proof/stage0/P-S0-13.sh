@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # P-S0-13 (S0-R9, D-12): with the repo's real pre-commit hook installed as the GLOBAL hook, building the golden repo in a mktemp dir succeeds
 # and gives the pinned base_sha. A counter-check proves the hook is really active (otherwise the proof would be vacuous).
 set -uo pipefail

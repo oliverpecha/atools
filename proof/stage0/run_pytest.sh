@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # run_pytest.sh <test-file>...  - run pytest proofs and map the outcome to the proof convention:
 #   0 pass | 1 red (a FAIL: line is printed) | 4 environment/harness problem (ENVFAIL, collection error, no tests, pytest missing)
 set -uo pipefail

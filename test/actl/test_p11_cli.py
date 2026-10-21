@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """P-S0-11 / S0-R10: exit-code table, --json and NO_COLOR. A test-only dummy command is dropped into a SCRATCH copy of the repo."""
 import json
 

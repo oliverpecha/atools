@@ -3,7 +3,7 @@ index 4efe645..264b0f3 100644
 --- a/api/profile.py
 +++ b/api/profile.py
 @@ -1,7 +1,19 @@
- # Authored-by: Perplexity (AI assistant by Perplexity AI), model family: Perplexity
+ # Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
  from api import users
  
 +_PUBLIC_FIELDS = ("name", "bio", "avatar")

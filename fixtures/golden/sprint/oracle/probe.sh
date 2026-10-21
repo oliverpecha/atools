@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # End-to-end recomputation: photo_count must equal len(photos) recomputed from RAW data (api.users.USERS).
 set -uo pipefail
 CMD="${ACTL_TARGET_CMD:-python3 -m api.cli}"

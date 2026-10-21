@@ -17,8 +17,8 @@
   "max_epochs": 3,
   "min_attempts_before_block": 2,
   "owner_review_triggers": [
-    "manual_flag",
-    "budget_exceeded"
+    "grant_attempts",
+    "waive_mutant"
   ],
   "solution_key_exposure": "hidden"
 }

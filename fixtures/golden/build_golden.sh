@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 # build_golden.sh - deterministic golden target repo + optional sprint install (S0-R9).
 #   build_golden.sh <dest-dir>                       build git repo at <dest-dir>, print base_sha
 #   build_golden.sh --install-sprint <ACTL_ROOT> [--tag <TAG>]   populate spec-001.md, solution_key-002.patch,

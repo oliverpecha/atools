@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant by Perplexity AI), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """In-memory user store. Schema is LOCKED (spec-001 'Locked')."""
 
 USERS = {

@@ -1,5 +1,5 @@
 # artifacts
-Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 
 `valid/<kind>/*.json` must give `[]` from `schemas.validate(kind, obj)`. `invalid/<kind>/*.json` must give errors whose set of `path`
 values equals `expect_paths` in `invalid/index.json` exactly (messages are not asserted). JSON files carry no Authored-by field because the

@@ -1,5 +1,5 @@
 # spec-001: public profiles
-Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 
 ## Requirements
 - R1: Guests see name, bio, avatar and photo count of public profiles.

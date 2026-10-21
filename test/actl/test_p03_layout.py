@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """P-S0-03 / S0-R3: Layout. Modes are asserted with stat.S_IMODE(os.lstat(p).st_mode) (identical under UID 0 and non-root)."""
 import os
 import stat

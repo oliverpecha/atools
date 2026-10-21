@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """P-S0-29 (extra, S0-R13.2): table-driven state transitions of actl.next.decide_next, driven by one table rule in a SCRATCH repo.
 (P-S0-13 is the global-hook proof; the registry-discovery proof is P-S0-14.)"""
 import json

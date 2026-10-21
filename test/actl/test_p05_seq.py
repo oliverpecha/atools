@@ -1,4 +1,4 @@
-# Authored-by: Perplexity (AI assistant developed by Perplexity AI; underlying model name not disclosed to this agent), model family: Perplexity
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
 """P-S0-05 / S0-R5: seq.reserve under concurrency and SIGKILL (reconstruct lives in test_p06_reconstruct.py)."""
 import json
 import signal
