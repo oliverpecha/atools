@@ -8,7 +8,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "branch": {
       "type": "string",
-      "pattern": "^wip/[0-9]{3,}$"
+      "pattern": "^wip/[0-9]{3,}\\Z"
     },
     "sprint_tag": { "type": "string" },
     "contract": { "type": "string" },

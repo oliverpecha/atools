@@ -133,7 +133,7 @@ fi
 
 # Selective SHA requirement: fix and revert must cite a prior commit in Why:
 if [[ "${TYPE:-}" == "fix" || "${TYPE:-}" == "revert" ]]; then
-  WHY_BLOCK=$(printf '%s\n' "$STRIPPED" | sed -n '/^Why:/,/^What changed:/p' | grep -v '^What changed:')
+  WHY_BLOCK=$(sed -n '/^Why:/,/^What changed:/p' "$STRIPPED" | grep -v '^What changed:')
   if ! echo "$WHY_BLOCK" | grep -qE '[0-9a-f]{7,40}'; then
     errs+=("E_FIX_NO_SHA: '${TYPE}' commits must reference the prior commit SHA (7-40 hex chars) in 'Why:'")
   fi

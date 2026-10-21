@@ -29,7 +29,7 @@
     "parent": { "type": ["string", "null"] },
     "id": {
       "type": "string",
-      "pattern": "^ev-[0-9]{3,}$"
+      "pattern": "^ev-[0-9]{3,}\\Z"
     },
     "stage": {
       "type": "string",
@@ -39,7 +39,7 @@
     "contract": { "type": "string" },
     "head": {
       "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
+      "pattern": "^[0-9a-f]{40}\\Z"
     },
     "exit_code": {
       "type": ["integer", "null"],
@@ -58,7 +58,7 @@
           "exit_code": { "type": "integer" },
           "output_sha256": {
             "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+            "pattern": "^[0-9a-f]{64}\\Z"
           }
         }
       }
@@ -121,7 +121,7 @@
             "lost": { "type": "boolean" },
             "log_sha256": {
               "type": ["string", "null"],
-              "pattern": "^[0-9a-f]{64}$"
+              "pattern": "^[0-9a-f]{64}\\Z"
             }
           }
         }

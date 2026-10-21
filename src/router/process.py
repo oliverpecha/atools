@@ -207,6 +207,9 @@ def get_running_sessions() -> List[Dict[str, Any]]:
             if sess_name not in active_tmux:
                 try:
                     meta_file.unlink()
+                    boot_file = meta_file.with_name(f"{sess_name}.boot.sh")
+                    if boot_file.exists():
+                        boot_file.unlink()
                 except Exception:
                     pass
 

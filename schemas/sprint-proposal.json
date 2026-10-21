@@ -3,37 +3,72 @@
   "$id": "sprint-proposal.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["live_run"],
+  "required": [
+    "live_run"
+  ],
   "properties": {
     "live_run": {
       "type": "string",
-      "enum": ["none", "required"]
+      "enum": [
+        "none",
+        "required"
+      ]
     },
     "approval_live_run": {
       "type": "string",
-      "enum": ["architect", "owner"]
+      "enum": [
+        "architect",
+        "owner"
+      ]
     },
     "solution_key_exposure": {
       "type": "string",
-      "enum": ["full", "hidden"]
+      "enum": [
+        "full",
+        "hidden"
+      ]
     },
     "owner_review_triggers": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["plan_deviation", "budget_exceeded", "critical_tripwire", "manual_flag"]
+        "enum": [
+          "grant_attempts",
+          "waive_mutant",
+          "update_scope",
+          "reopen_oracle",
+          "retry_live"
+        ]
       }
     },
-    "min_attempts_before_block": { "type": "integer", "minimum": 1 },
-    "max_epochs": { "type": "integer", "minimum": 1 },
+    "min_attempts_before_block": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_epochs": {
+      "type": "integer",
+      "minimum": 1
+    },
     "max_attempts": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "oracle": { "type": "integer", "minimum": 1 },
-        "implementer": { "type": "integer", "minimum": 1 },
-        "live": { "type": "integer", "minimum": 1 },
-        "curator": { "type": "integer", "minimum": 1 }
+        "oracle": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "implementer": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "live": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "curator": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "hard_cap": {
@@ -44,44 +79,100 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "wall_clock": { "type": "string" },
-            "turns": { "type": "integer", "minimum": 0 },
-            "tool_calls": { "type": "integer", "minimum": 0 },
-            "tokens": { "type": "integer", "minimum": 0 },
-            "cost_usd": { "type": "number", "minimum": 0 }
+            "wall_clock": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         },
         "oracle": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "wall_clock": { "type": "string" },
-            "turns": { "type": "integer", "minimum": 0 },
-            "tool_calls": { "type": "integer", "minimum": 0 },
-            "tokens": { "type": "integer", "minimum": 0 },
-            "cost_usd": { "type": "number", "minimum": 0 }
+            "wall_clock": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         },
         "live": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "wall_clock": { "type": "string" },
-            "turns": { "type": "integer", "minimum": 0 },
-            "tool_calls": { "type": "integer", "minimum": 0 },
-            "tokens": { "type": "integer", "minimum": 0 },
-            "cost_usd": { "type": "number", "minimum": 0 }
+            "wall_clock": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         },
         "curator": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "wall_clock": { "type": "string" },
-            "turns": { "type": "integer", "minimum": 0 },
-            "tool_calls": { "type": "integer", "minimum": 0 },
-            "tokens": { "type": "integer", "minimum": 0 },
-            "cost_usd": { "type": "number", "minimum": 0 }
+            "wall_clock": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cost_usd": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         }
       }

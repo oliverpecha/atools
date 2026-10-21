@@ -25,7 +25,7 @@
     "run_id": { "type": "string" },
     "sprint_tag": {
       "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-z0-9][a-z0-9-]{1,40}$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-z0-9][a-z0-9-]{1,40}\\Z"
     },
     "seq": { "type": "integer", "minimum": 0 },
     "epoch": { "type": "integer", "minimum": 1 },

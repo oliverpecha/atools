@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
-        if exc.code == 0:
+        if exc.code in (None, 0):
             return 0
         if want_json:
             print(json.dumps({"ok": False, "exit_code": 2, "error": "usage error"}))
@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         code, msg = 4, str(e)
     except SystemExit as e:
         c = e.code
-        if c in (0, 1, 2, 3, 4):
+        if c in (None, 0, 1, 2, 3, 4):
             return 0 if c is None else int(c)
         code, msg = 2, str(e)
     except Exception as e:

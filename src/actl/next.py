@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -45,8 +46,6 @@ def decide_next(
                 continue
             mod = importlib.util.module_from_spec(spec)
             sys.modules[mod_name] = mod
-            # Also register under bare stem for scratch tests
-            sys.modules[p.stem] = mod
             spec.loader.exec_module(mod)
             pri = int(getattr(mod, "PRIORITY", 100))
             modules.append((pri, p.stem, mod))
@@ -55,9 +54,17 @@ def decide_next(
         evaluate = getattr(mod, "evaluate", None)
         if not callable(evaluate):
             continue
-        try:
+        sig = inspect.signature(evaluate)
+        accepts_probe = (
+            "session_probe" in sig.parameters
+            or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+        )
+        if accepts_probe:
             res = evaluate(layout, tag, session_probe=session_probe)
-        except TypeError:
+        else:
             res = evaluate(layout, tag)
         if res is not None:
             return {

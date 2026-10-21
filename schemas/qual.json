@@ -28,17 +28,17 @@
     "parent": { "type": ["string", "null"] },
     "id": {
       "type": "string",
-      "pattern": "^qual-[0-9]{3,}$"
+      "pattern": "^qual-[0-9]{3,}\\Z"
     },
     "oracle": { "type": "string" },
     "spec": { "type": "string" },
     "base_sha": {
       "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
+      "pattern": "^[0-9a-f]{40}\\Z"
     },
     "manifest_sha256": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^[0-9a-f]{64}\\Z"
     },
     "null_base": {
       "type": "string",
@@ -50,7 +50,7 @@
     },
     "solution_key_green": {
       "type": "string",
-      "pattern": "^[0-3]/3$"
+      "pattern": "^[0-3]/3\\Z"
     },
     "solution_key_repo_test": {
       "type": "string",

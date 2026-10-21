@@ -183,5 +183,25 @@ MSG
 }
 check "T15_accept_feat_without_sha" check_feat_without_sha
 
+# Gate 16: Hook accepts 'fix' commit with prior SHA in Why:
+check_fix_with_sha() {
+  local f=$(mktemp)
+  cat << 'MSG' > "$f"
+fix(router): isolate prompt tiers from flag parsing (WI-TOOLS-2)
+
+Why: Fixes argument truncation introduced in 2acaf3c.
+
+What changed:
+- src/router/cli.py: Guard positional arguments.
+
+Result: 11 passed, 0 failed in engine proof suite.
+MSG
+  "$HOOK" "$f" >/dev/null 2>&1
+  local res=$?
+  rm -f "$f"
+  return $res
+}
+check "T16_accept_fix_with_sha" check_fix_with_sha
+
 echo "--- Suite Results: $PASS passed, $FAIL failed ---"
 [[ $FAIL -eq 0 ]]
