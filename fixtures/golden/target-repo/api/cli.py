@@ -1,4 +1,4 @@
-# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+# Authored-by: Perplexity (AI assistant by Perplexity AI), model family: Perplexity
 """`python3 -m api.cli profile <id>` prints {"status": int, "body": {...}} and exits 0."""
 import json
 import sys
