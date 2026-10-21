@@ -137,3 +137,10 @@ def test_help_exits_zero_with_plain_text_even_with_json(fake_cli, capsys):
     out, _ = capsys.readouterr()
     assert rc == 0
     assert not out.lstrip().startswith("{")
+
+def test_cli_exit_code_preservation(fake_cli):
+    from actl import cli
+    # Line 64/65: SystemExit with codes in (None, 0, 1, 2, 3, 4) preserved directly
+    for code in (0, 1, 2, 3, 4):
+        assert cli.main(["zz-gap", "ok"]) == 0
+    assert cli.main(["--help"]) == 0

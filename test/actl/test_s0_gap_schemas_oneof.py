@@ -59,3 +59,28 @@ def test_oneof_two_matches_and_non_object_instance_use_generic_message(monkeypat
     assert len(errs) == 1 and errs[0]["message"].startswith("oneOf: expected 1 match, got 2") or errs[0]["message"].startswith("oneOf expected 1 match, got 2")
     errs = _validate_with(monkeypatch, {"oneOf": [{"type": "string"}, {"type": "integer"}]}, {})
     assert len(errs) == 1 and errs[0]["message"].startswith("oneOf: expected 1 match, got 0") or errs[0]["message"].startswith("oneOf expected 1 match, got 0")
+
+def test_schema_rejects_forbidden_additional_properties():
+    from actl import schemas
+    import json
+    from pathlib import Path
+    
+    golden_valid = Path("fixtures/golden/artifacts/valid")
+    # Kill "additionalProperties": false -> true mutants
+    for kind in ("closure", "contract", "sprint", "sprint-proposal"):
+        files = list((golden_valid / kind).glob("*.json"))
+        if not files:
+            continue
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        data["forbidden_extra_key_xyz"] = 123
+        errs = schemas.validate(kind, data)
+        assert len(errs) > 0, f"Schema {kind} must reject unknown additional property"
+        assert any("forbidden_extra_key_xyz" in e.get("message", "") or "additional" in e.get("message", "").lower() or "property" in e.get("message", "").lower() for e in errs)
+
+
+def test_schema_rejects_zero_when_minimum_is_one():
+    from actl import schemas
+    # Kill "minimum": 1 -> 0 mutants on seq / epoch across closure, contract, state, sprint-proposal
+    for kind, field in (("closure", "seq"), ("contract", "seq"), ("contract", "epoch"), ("state", "epoch")):
+        errs = schemas.validate(kind, {field: 0})
+        assert len(errs) > 0

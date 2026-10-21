@@ -119,3 +119,30 @@ def test_reconstruct_result_identical_for_both_iteration_orders(tmp_path, monkey
         results.append(_fresh_reconstruct(lay))
         monkeypatch.undo()
     assert results[0] == results[1]
+
+def test_seq_initial_state_and_filter_invariants(tmp_path):
+    from actl import seq, layout
+    import json
+    TAG = "2026-10-16_seqgap"
+    lay = layout.Layout(tmp_path)
+    sprint_dir = lay.sprint_dir(TAG)
+    sprint_dir.mkdir(parents=True)
+
+    # 1. Reconstruct on empty sprint dir builds valid initial state on disk
+    hw = seq.reconstruct(lay, TAG)
+    state_file = lay.state_file(TAG)
+    assert state_file.is_file()
+    st = json.loads(state_file.read_text(encoding="utf-8"))
+    assert len(st["run_id"]) == 16
+    assert st["run_id"].startswith("run-")
+    assert st["attempts"] == {"oracle": 0, "implementer": 0, "live": 0, "curator": 0}
+
+    # 2. Verify reserve increments sequence
+    n = seq.reserve(lay, TAG, "spec")
+    assert n >= 1
+
+    # 3. Spec filter invariant: reconstruct ignores .meta.json files
+    (sprint_dir / "spec-001.meta.json").write_text(json.dumps({"kind": "spec", "seq": 1, "parent": None}))
+    (sprint_dir / "spec-001.md").write_text("# Spec 1")
+    reconstructed = seq.reconstruct(lay, TAG)
+    assert reconstructed >= 1

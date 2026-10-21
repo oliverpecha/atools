@@ -102,3 +102,15 @@ def test_type_error_inside_rule_propagates_and_rule_runs_once(env, sig):
     with pytest.raises(TypeError, match="inside-rule-boom"):
         nxt.decide_next(lay, TAG, session_probe=_probe)
     assert rec.calls == [1]
+
+def test_next_decide_missing_layout_guards(tmp_path):
+    from actl import next, layout
+    # Line 21: if not layout.sprint_dir(tag).is_dir() or not layout.state_file(tag).is_file()
+    lay = layout.Layout(tmp_path)
+    # sprint dir missing
+    with pytest.raises(FileNotFoundError):
+        next.decide_next(lay, "2026-10-16_nonexistent")
+    # sprint dir exists but state.json missing
+    (tmp_path / "runs" / "2026-10-16_nostate").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError):
+        next.decide_next(lay, "2026-10-16_nostate")

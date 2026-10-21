@@ -69,3 +69,30 @@ def test_canonical_json_is_compact_and_utf8_not_escaped():
 def test_json_sha256_matches_digest_of_canonical_bytes():
     expected = hashlib.sha256(b'{"a":2,"b":1}').hexdigest()
     assert hashing.json_sha256({"b": 1, "a": 2}) == expected
+
+def test_canonical_json_rejects_nan_and_surrogates():
+    from actl.hashing import canonical_json
+    import pytest
+    with pytest.raises(ValueError):
+        canonical_json({"val": float("nan")})
+    with pytest.raises(ValueError):
+        canonical_json({"val": float("inf")})
+    with pytest.raises(ValueError):
+        canonical_json({"val": chr(0xD800)})
+    with pytest.raises(ValueError):
+        canonical_json({"val": chr(0xDFFF)})
+
+def test_manifest_sha256_handles_mode_mask_0o111(tmp_path):
+    from actl.hashing import manifest_sha256
+    # Mode mask 0o111: file with other-exec only (0o641) must be marked executable 'x'
+    # Mutant 0o111 -> 0o112 checks other-write instead of other-exec, flipping 'x' to '-'
+    f = tmp_path / "bin_exec"
+    f.write_text("echo hi\n")
+    f.chmod(0o641)
+    
+    sha1 = manifest_sha256(tmp_path)
+    # Remove other-exec (0o640)
+    f.chmod(0o640)
+    sha2 = manifest_sha256(tmp_path)
+    assert sha1 != sha2, "Mode 0o641 must produce a different manifest SHA than 0o640"
+
