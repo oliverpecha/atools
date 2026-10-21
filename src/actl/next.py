@@ -11,6 +11,8 @@ from typing import Any
 from actl.layout import Layout
 from actl.seq import read_state
 
+RULES_DIR = Path(__file__).resolve().parent / "next_rules"
+
 
 def decide_next(
     layout: Layout,
@@ -33,7 +35,7 @@ def decide_next(
             "reason": "Sprint is on hold for owner review",
         }
 
-    rules_dir = Path(__file__).resolve().parent / "next_rules"
+    rules_dir = Path(RULES_DIR)
     modules: list[tuple[int, str, Any]] = []
     if rules_dir.is_dir():
         for p in rules_dir.glob("*.py"):
@@ -53,6 +55,8 @@ def decide_next(
     for _pri, _stem, mod in modules:
         evaluate = getattr(mod, "evaluate", None)
         if not callable(evaluate):
+            evaluate = getattr(mod, "match", None)
+        if not callable(evaluate):
             continue
         sig = inspect.signature(evaluate)
         accepts_probe = (
@@ -69,8 +73,8 @@ def decide_next(
         if res is not None:
             return {
                 "action": str(res["action"]),
-                "command": str(res["command"]),
-                "reason": str(res["reason"]),
+                "command": str(res.get("command", "")),
+                "reason": str(res.get("reason", "")),
             }
     return {
         "action": "noop",

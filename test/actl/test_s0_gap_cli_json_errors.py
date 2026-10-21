@@ -50,6 +50,9 @@ def fake_cli(monkeypatch, tmp_path):
                 return 1
             if m == "none":
                 return None
+            if m.startswith("exit-"):
+                val = m.split("-", 1)[1]
+                raise SystemExit(None if val == "none" else int(val))
             return 0
 
         p.set_defaults(func=handler)
@@ -139,8 +142,10 @@ def test_help_exits_zero_with_plain_text_even_with_json(fake_cli, capsys):
     assert not out.lstrip().startswith("{")
 
 def test_cli_exit_code_preservation(fake_cli):
-    from actl import cli
-    # Line 64/65: SystemExit with codes in (None, 0, 1, 2, 3, 4) preserved directly
-    for code in (0, 1, 2, 3, 4):
-        assert cli.main(["zz-gap", "ok"]) == 0
-    assert cli.main(["--help"]) == 0
+    # SystemExit with codes in (None, 0, 1, 2, 3, 4) preserved directly
+    for code in (None, 0, 1, 2, 3, 4):
+        target = "exit-none" if code is None else f"exit-{code}"
+        expected = 0 if code is None else code
+        assert cli.main(["zz-gap", target]) == expected
+    # Non-standard exit codes fall through to exit code 2
+    assert cli.main(["zz-gap", "exit-99"]) == 2

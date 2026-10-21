@@ -115,19 +115,59 @@ def test_next_decide_missing_layout_guards(tmp_path):
     with pytest.raises(FileNotFoundError):
         next.decide_next(lay, "2026-10-16_nostate")
 
-def test_next_rule_default_priority_tiebreak(tmp_path):
-    from actl import next, layout
-    import types
-    # Mock two rules: aa_default without PRIORITY, zz_explicit with PRIORITY=100
-    rule_aa = types.ModuleType("aa_default")
-    rule_aa.decide = lambda lay, tag, **kw: {"action": "win_aa", "reason": "aa"}
-    
-    rule_zz = types.ModuleType("zz_explicit")
-    rule_zz.PRIORITY = 100
-    rule_zz.decide = lambda lay, tag, **kw: {"action": "win_zz", "reason": "zz"}
-    
-    # Priority sorting key: (getattr(mod, 'PRIORITY', 100), filename)
-    rules = [(int(getattr(rule_aa, "PRIORITY", 100)), "aa_default", rule_aa),
-             (int(getattr(rule_zz, "PRIORITY", 100)), "zz_explicit", rule_zz)]
-    rules.sort(key=lambda t: (t[0], t[1]))
-    assert rules[0][1] == "aa_default", "Default priority must remain strictly 100 for deterministic tie-breaking"
+def test_next_rule_default_priority_tiebreak(tmp_path, monkeypatch):
+    lay = Layout(tmp_path / "root")
+    tag = "2026-10-16_demo"
+    lay.ensure_sprint_tree(tag)
+    lay.state_file(tag).write_text(json.dumps({"status": "draft"}), encoding="utf-8")
+
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir(parents=True)
+    monkeypatch.setattr(nxt, "RULES_DIR", rules_dir)
+
+    # 1. aa_default (no PRIORITY) vs zz_explicit (PRIORITY = 100)
+    # Default = 100 -> tie at 100 -> aa_default wins. Mutant > 100 -> zz_explicit wins.
+    (rules_dir / "aa_default.py").write_text(
+        "def evaluate(layout, tag, **kw):\n    return {'action': 'win_aa', 'command': '', 'reason': 'aa'}\n",
+        encoding="utf-8",
+    )
+    (rules_dir / "zz_explicit.py").write_text(
+        "PRIORITY = 100\ndef evaluate(layout, tag, **kw):\n    return {'action': 'win_zz', 'command': '', 'reason': 'zz'}\n",
+        encoding="utf-8",
+    )
+    res = nxt.decide_next(lay, tag)
+    assert res["action"] == "win_aa", "aa_default must win tiebreak against zz_explicit at priority 100"
+
+    # 2. aa_explicit (PRIORITY = 100) vs zz_default (no PRIORITY)
+    # Default = 100 -> tie at 100 -> aa_explicit wins. Mutant < 100 -> zz_default wins.
+    rules_dir_2 = tmp_path / "rules_2"
+    rules_dir_2.mkdir(parents=True)
+    monkeypatch.setattr(nxt, "RULES_DIR", rules_dir_2)
+    (rules_dir_2 / "aa_explicit.py").write_text(
+        "PRIORITY = 100\ndef evaluate(layout, tag, **kw):\n    return {'action': 'win_aa_exp', 'command': '', 'reason': 'aa'}\n",
+        encoding="utf-8",
+    )
+    (rules_dir_2 / "zz_default.py").write_text(
+        "def evaluate(layout, tag, **kw):\n    return {'action': 'win_zz_def', 'command': '', 'reason': 'zz'}\n",
+        encoding="utf-8",
+    )
+    res2 = nxt.decide_next(lay, tag)
+    assert res2["action"] == "win_aa_exp", "aa_explicit must win tiebreak against zz_default at priority 100"
+
+
+def test_next_rule_supports_match_function(tmp_path, monkeypatch):
+    lay = Layout(tmp_path / "root")
+    tag = "2026-10-16_demo"
+    lay.ensure_sprint_tree(tag)
+    lay.state_file(tag).write_text(json.dumps({"status": "draft"}), encoding="utf-8")
+
+    rules_dir = tmp_path / "rules_match"
+    rules_dir.mkdir(parents=True)
+    monkeypatch.setattr(nxt, "RULES_DIR", rules_dir)
+
+    (rules_dir / "rule_match.py").write_text(
+        "def match(layout, tag, **kw):\n    return {'action': 'matched', 'command': 'cmd', 'reason': 'ok'}\n",
+        encoding="utf-8",
+    )
+    res = nxt.decide_next(lay, tag)
+    assert res["action"] == "matched"

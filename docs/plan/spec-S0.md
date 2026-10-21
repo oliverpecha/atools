@@ -208,7 +208,7 @@ INTERFACES.md already uses A-1..A-4; this register continues as SA-n.
 ## 5. Design conflicts reported (not resolved silently)
 - C-1 Design sample values use 7-character SHAs; the schemas and S0-R4 use 40. Proposed: the Design samples are illustrative (Design conventions say examples are illustrative); keep 40; Owner may amend the Design samples.
 - C-2 Design 4.1 lists `owner_review_triggers` free text of actions; INTERFACES 3.2 restricts it to five names. Proposed: keep the enum; extend only with an Owner-approved INTERFACES change (PB-4).
-- C-3 `ev.exit_code` enum is `0|1|3` in INTERFACES 3.4 while the Design example only shows `1`. Proposed: keep `0|1|3`.
+- C-3 `ev.exit_code` integer is `0..255 | null` per Ruling C-3 while the Design example only shows `1`. Ruling C-3 sets `ev.exit_code` to `0..255 | null`.
 
 ## 6. Proposed decisions
 ### O-1 `jsonschema` dependency

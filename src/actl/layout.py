@@ -51,72 +51,78 @@ class Layout:
             raise ValueError("NUL byte in root path")
         self.root: Path = Path(root).resolve()
 
+    def _resolve_contained(self, target_path: Path) -> Path:
+        resolved = target_path.resolve()
+        root_resolved = self.root.resolve()
+        if not resolved.is_relative_to(root_resolved):
+            raise ValueError(f"Path escapes boundary: {target_path} outside {self.root}")
+        return target_path
+
     def _safe_path(self, path: Path) -> Path:
-        if not path.resolve().is_relative_to(self.root.resolve()):
-            raise ValueError(f"Path escapes boundary: {path} outside {self.root}")
-        return path
+        return self._resolve_contained(path)
 
     @property
     def actl_repo(self) -> Path:
-        return self.root / "actl-repo"
+        return self._resolve_contained(self.root / "actl-repo")
 
     @property
     def target_repo(self) -> Path:
-        return self.root / "repos" / "target-repo"
+        return self._resolve_contained(self.root / "repos" / "target-repo")
 
     @property
     def baseline_file(self) -> Path:
-        return self.root / "baseline.json"
+        return self._resolve_contained(self.root / "baseline.json")
 
     def sprint_dir(self, tag: str) -> Path:
-        return self._safe_path(self.actl_repo / "specs" / _check_tag(tag))
+        return self._resolve_contained(self.actl_repo / "specs" / _check_tag(tag))
 
     def runs_dir(self, tag: str) -> Path:
-        return self.sprint_dir(tag) / "runs"
+        return self._resolve_contained(self.sprint_dir(tag) / "runs")
 
     def logs_dir(self, tag: str) -> Path:
-        return self.runs_dir(tag) / "logs"
+        return self._resolve_contained(self.runs_dir(tag) / "logs")
 
     def turns_dir(self, tag: str) -> Path:
-        return self.runs_dir(tag) / "turns"
+        return self._resolve_contained(self.runs_dir(tag) / "turns")
 
     def state_file(self, tag: str) -> Path:
-        return self.runs_dir(tag) / "state.json"
+        return self._resolve_contained(self.runs_dir(tag) / "state.json")
 
     def state_lock(self, tag: str) -> Path:
-        return self.runs_dir(tag) / "state.lock"
+        return self._resolve_contained(self.runs_dir(tag) / "state.lock")
 
     def sessions_file(self, tag: str) -> Path:
-        return self.runs_dir(tag) / "sessions.tsv"
+        return self._resolve_contained(self.runs_dir(tag) / "sessions.tsv")
 
     def sprint_toml(self, tag: str) -> Path:
-        return self.sprint_dir(tag) / "sprint.toml"
+        return self._resolve_contained(self.sprint_dir(tag) / "sprint.toml")
 
     def handoff(self, tag: str) -> Path:
-        return self._safe_path(self.root / "handoff" / _check_tag(tag))
+        return self._resolve_contained(self.root / "handoff" / _check_tag(tag))
 
     def inbox(self, tag: str, role: str) -> Path:
-        return self._safe_path(self.handoff(tag) / f"{_check_role(role)}-inputs")
+        return self._resolve_contained(self.handoff(tag) / f"{_check_role(role)}-inputs")
 
     def outbox(self, tag: str, role: str) -> Path:
-        return self._safe_path(self.handoff(tag) / f"{_check_role(role)}-outputs")
+        return self._resolve_contained(self.handoff(tag) / f"{_check_role(role)}-outputs")
 
     def workspace(self, name: str, tag: str | None = None) -> Path:
         _check_workspace_name(name)
         if tag is not None:
             _check_tag(tag)
-            return self._safe_path(self.root / "workspaces" / tag / name)
-        return self._safe_path(self.root / "workspaces" / name)
+            return self._resolve_contained(self.root / "workspaces" / tag / name)
+        return self._resolve_contained(self.root / "workspaces" / name)
 
     def homes(self, role: str) -> Path:
-        return self._safe_path(self.root / "homes" / _check_role(role))
+        return self._resolve_contained(self.root / "homes" / _check_role(role))
 
     def ensure_base_tree(self) -> None:
+        self._resolve_contained(self.root)
         _mkdir(self.root, 0o755)
         _mkdir(self.actl_repo, 0o700)
-        _mkdir(self.actl_repo / "specs", 0o755)
+        _mkdir(self._resolve_contained(self.actl_repo / "specs"), 0o755)
         for d in ("handoff", "workspaces", "repos", "homes"):
-            _mkdir(self.root / d, 0o755)
+            _mkdir(self._resolve_contained(self.root / d), 0o755)
         for role in ROLES:
             _mkdir(self.homes(role), 0o755)
 
@@ -130,7 +136,7 @@ class Layout:
             self.turns_dir(tag),
             self.handoff(tag),
         ):
-            _mkdir(p, 0o755)
+            _mkdir(self._resolve_contained(p), 0o755)
         for role in ROLES:
             _mkdir(self.inbox(tag, role), 0o750)
             _mkdir(self.outbox(tag, role), 0o770)

@@ -183,10 +183,8 @@ def test_seq_reconstruct_replays_artifacts_and_validates(tmp_path):
     (sprint_dir / "contract-003.meta.json").write_text(json.dumps({"kind": "contract", "seq": 3, "parent": "spec-001.md"}))
     
     # Reconstruct must reject invalid contract epoch and properly restore closures_submitted
-    try:
+    with pytest.raises(ValueError):
         seq.reconstruct(lay, TAG)
-    except Exception:
-        pass  # Reconstruct should raise or quarantine corrupt artifact rather than saving invalid state
     
     # Fix contract to valid epoch and re-run to confirm state reconstruction
     bad_contract["epoch"] = 1
@@ -196,3 +194,42 @@ def test_seq_reconstruct_replays_artifacts_and_validates(tmp_path):
     assert st["closures_submitted"] == 1, f"Expected closures_submitted == 1, got {st['closures_submitted']}"
     assert st["epoch"] == 1
     assert len(schemas.validate("state", st)) == 0, "Persisted state must be schema valid"
+
+
+def test_reconstruct_failure_leaves_state_file_untouched(tmp_path):
+    from actl import seq, layout
+    import json
+    TAG = "2026-10-16_untouched"
+    lay = layout.Layout(tmp_path)
+    sprint_dir = lay.sprint_dir(TAG)
+    sprint_dir.mkdir(parents=True)
+
+    seq.reconstruct(lay, TAG)
+    state_file = lay.state_file(TAG)
+    assert state_file.is_file()
+    orig_bytes = state_file.read_bytes()
+
+    # Inject malformed contract artifact with epoch 0
+    bad_contract = {
+        "epoch": 0,
+        "base_sha": "0" * 40,
+        "spec": {"seq": 1, "sha256": "a" * 64},
+        "oracle": {"seq": 3, "manifest_sha256": "b" * 64},
+        "qual": {"seq": 4, "sha256": "c" * 64},
+        "sprint_sha256": "d" * 64,
+        "scope": "FROZEN: test/**\nALLOW: api/**",
+    }
+    (sprint_dir / "contract-002.json").write_text(json.dumps(bad_contract), encoding="utf-8")
+    (sprint_dir / "contract-002.meta.json").write_text(json.dumps({"kind": "contract", "seq": 2}), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        seq.reconstruct(lay, TAG)
+
+    assert state_file.read_bytes() == orig_bytes, "State file must remain byte-for-byte identical on reconstruct failure"
+
+    # Also test with malformed non-JSON artifact
+    (sprint_dir / "contract-002.json").write_text("NOT_VALID_JSON{{{", encoding="utf-8")
+    with pytest.raises(ValueError):
+        seq.reconstruct(lay, TAG)
+
+    assert state_file.read_bytes() == orig_bytes, "State file must remain byte-for-byte identical on malformed JSON"

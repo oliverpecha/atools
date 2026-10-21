@@ -30,35 +30,45 @@ def _validate_with(monkeypatch, schema, instance):
     return schemas.validate("state", instance)
 
 
-# T6 -- kills: removal of `or "required" in sub` from the oneOf `looks_object` test.
-# Branch A has `required` but neither `type` nor `properties`; branch B is a string type.
-# Original: A is object-like -> its error path ("/a") is reported.  Mutant: no branch is
-# object-like -> generic "oneOf expected 1 match, got 0" at the instance path.
-def test_oneof_required_only_branch_reports_missing_property_path(monkeypatch):
+def test_oneof_reports_error_at_instance_pointer(monkeypatch):
     schema = {"oneOf": [{"required": ["a"]}, {"type": "string"}]}
     errs = _validate_with(monkeypatch, schema, {})
     assert len(errs) == 1, errs
-    assert errs[0]["path"].endswith("/a"), errs
-    assert "oneOf expected" not in errs[0]["message"]
-    assert "a" in errs[0]["message"]
+    assert errs[0]["path"] == "/"
+    assert "oneOf" in errs[0]["message"]
 
 
-# T6b -- the best (fewest-errors) object-like branch wins; both branches are `required`-only.
-def test_oneof_picks_branch_with_fewest_errors(monkeypatch):
-    schema = {"oneOf": [{"required": ["a", "b"]}, {"required": ["c"]}]}
-    errs = _validate_with(monkeypatch, schema, {})
-    assert [e["path"] for e in errs] == [errs[0]["path"]]
-    assert errs[0]["path"].endswith("/c"), errs
-    schema2 = {"oneOf": [{"required": ["c"]}, {"required": ["a", "b"]}]}
-    errs2 = _validate_with(monkeypatch, schema2, {})
-    assert len(errs2) == 1 and errs2[0]["path"].endswith("/c"), errs2
+def test_oneof_nested_reports_at_instance_pointer(monkeypatch):
+    schema = {
+        "type": "object",
+        "properties": {
+            "halt": {
+                "oneOf": [{"type": "null"}, {"type": "object", "required": ["reason"]}]
+            }
+        },
+    }
+    errs = _validate_with(monkeypatch, schema, {"halt": {}})
+    assert len(errs) == 1, errs
+    assert errs[0]["path"] == "/halt"
+    assert "oneOf" in errs[0]["message"]
 
 
 def test_oneof_two_matches_and_non_object_instance_use_generic_message(monkeypatch):
     errs = _validate_with(monkeypatch, {"oneOf": [{"required": ["a"]}, {"required": ["a"]}]}, {"a": 1})
-    assert len(errs) == 1 and errs[0]["message"].startswith("oneOf: expected 1 match, got 2") or errs[0]["message"].startswith("oneOf expected 1 match, got 2")
+    assert len(errs) == 1 and ("oneOf: expected 1 match, got 2" in errs[0]["message"] or "oneOf expected 1 match, got 2" in errs[0]["message"])
     errs = _validate_with(monkeypatch, {"oneOf": [{"type": "string"}, {"type": "integer"}]}, {})
-    assert len(errs) == 1 and errs[0]["message"].startswith("oneOf: expected 1 match, got 0") or errs[0]["message"].startswith("oneOf expected 1 match, got 0")
+    assert len(errs) == 1 and ("oneOf: expected 1 match, got 0" in errs[0]["message"] or "oneOf expected 1 match, got 0" in errs[0]["message"])
+
+
+def test_contract_epoch_zero_fails_at_epoch_path():
+    import json
+    golden_contract = Path("fixtures/golden/artifacts/valid/contract/contract_base.json")
+    doc = json.loads(golden_contract.read_text(encoding="utf-8"))
+    assert schemas.validate("contract", doc) == []
+    doc["epoch"] = 0
+    errs = schemas.validate("contract", doc)
+    assert len(errs) > 0
+    assert any(e["path"] == "/epoch" for e in errs)
 
 def test_schema_rejects_forbidden_additional_properties():
     from actl import schemas

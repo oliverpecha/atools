@@ -284,49 +284,99 @@ def reconstruct(layout: Layout, tag: str) -> int:
                 state["active_oracle_draft"] = name
             elif name.startswith("oracle-") and not name.startswith("oracle-draft-"):
                 state["active_oracle"] = name
-            elif name.startswith("qual-") and name.endswith(".json"):
+            elif name.startswith("qual-") and name.endswith(".json") and not name.endswith(".meta.json"):
+                try:
+                    q = json.loads(p.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise ValueError(f"Corrupt qual artifact {name}: {exc}") from exc
+                if not isinstance(q, dict):
+                    raise ValueError(f"Qual artifact {name} is not a dict")
+                errs = schemas.validate("qual", q)
+                if errs:
+                    raise ValueError(f"Invalid qual artifact {name}: {errs}")
                 attempts = dict(state.get("attempts") or {})
                 attempts["oracle"] = int(attempts.get("oracle", 0)) + 1
                 state["attempts"] = attempts
-            elif name.startswith("contract-") and name.endswith(".json"):
+            elif name.startswith("contract-") and name.endswith(".json") and not name.endswith(".meta.json"):
                 state["active_contract"] = name
                 try:
                     c = json.loads(p.read_text(encoding="utf-8"))
-                    ep = c.get("epoch", 1)
-                    if not isinstance(ep, int) or isinstance(ep, bool) or ep < 1:
-                        raise ValueError(f"Invalid contract epoch in {name}: {ep}")
-                    state["epoch"] = ep
                 except (json.JSONDecodeError, OSError) as exc:
                     raise ValueError(f"Failed reading contract {name}: {exc}") from exc
+                if not isinstance(c, dict):
+                    raise ValueError(f"Contract artifact {name} is not a dict")
+                ep = c.get("epoch", 0)
+                if not isinstance(ep, int) or isinstance(ep, bool) or ep < 1:
+                    raise ValueError(f"Invalid contract epoch in {name}: {ep}")
+                state["epoch"] = ep
                 if state.get("status") in ("draft", "hold"):
                     state["status"] = "running"
                     state["active_stage"] = "implementer"
             elif name.startswith("closure-") and name.endswith(".json") and not name.endswith(".meta.json"):
                 try:
                     c = json.loads(p.read_text(encoding="utf-8"))
-                    if isinstance(c, dict) and not schemas.validate("closure", c):
-                        state["closures_submitted"] = int(state.get("closures_submitted", 0)) + 1
-                        reason = c.get("reason")
-                        if reason == "blocked":
-                            state["status"] = "hold"
-                except (json.JSONDecodeError, OSError):
-                    pass
-            elif name.startswith("ev-") and name.endswith(".json"):
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise ValueError(f"Corrupt closure artifact {name}: {exc}") from exc
+                if not isinstance(c, dict):
+                    raise ValueError(f"Closure artifact {name} is not a dict")
+                if not schemas.validate("closure", c):
+                    state["closures_submitted"] = int(state.get("closures_submitted", 0)) + 1
+                    reason = c.get("reason")
+                    if reason == "blocked":
+                        state["status"] = "hold"
+            elif name.startswith("escalation-") and name.endswith(".json") and not name.endswith(".meta.json"):
+                try:
+                    esc = json.loads(p.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise ValueError(f"Corrupt escalation artifact {name}: {exc}") from exc
+                if not isinstance(esc, dict):
+                    raise ValueError(f"Escalation artifact {name} is not a dict")
+                res = esc.get("resolution")
+                if isinstance(res, dict):
+                    action = res.get("action")
+                    grants = dict(state.get("grants") or {})
+                    granted = res.get("attempts_granted")
+                    if granted is not None and isinstance(granted, int):
+                        stg = esc.get("stage", "implementer")
+                        grants[stg] = int(grants.get(stg, 0)) + granted
+                    elif action == "grant_attempts":
+                        stg = esc.get("stage", "implementer")
+                        cnt = res.get("count", res.get("grant", 1))
+                        if isinstance(cnt, int):
+                            grants[stg] = int(grants.get(stg, 0)) + cnt
+                    if "waived_mutants" in res:
+                        waived = res.get("waived_mutants", [])
+                        if isinstance(waived, list):
+                            grants["waive_mutant"] = int(grants.get("waive_mutant", 0)) + len(waived)
+                    elif action == "waive_mutant":
+                        grants["waive_mutant"] = int(grants.get("waive_mutant", 0)) + 1
+                    state["grants"] = grants
+                    if action in ("grant_attempts", "waive_mutant", "update_scope", "retry_live"):
+                        if state.get("status") == "hold":
+                            state["status"] = "running"
+                    elif res.get("status"):
+                        state["status"] = str(res["status"])
+                    elif esc.get("status") == "resolved":
+                        if state.get("status") == "hold":
+                            state["status"] = "running"
+            elif name.startswith("ev-") and name.endswith(".json") and not name.endswith(".meta.json"):
                 try:
                     ev = json.loads(p.read_text(encoding="utf-8"))
-                    ev_stage = ev.get("stage")
-                    attempts = dict(state.get("attempts") or {})
-                    if ev_stage in attempts:
-                        attempts[ev_stage] = int(attempts.get(ev_stage, 0)) + 1
-                    else:
-                        attempts["implementer"] = int(attempts.get("implementer", 0)) + 1
-                    state["attempts"] = attempts
-                    if ev.get("hard_cap") or (isinstance(ev.get("session"), dict) and ev["session"].get("hard_cap")):
-                        state["hard_caps_tripped"] = int(state.get("hard_caps_tripped", 0)) + 1
-                    if ev.get("halt"):
-                        state["status"] = "hold"
-                except (json.JSONDecodeError, OSError):
-                    pass
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise ValueError(f"Corrupt ev artifact {name}: {exc}") from exc
+                if not isinstance(ev, dict):
+                    raise ValueError(f"ev artifact {name} is not a dict")
+                ev_stage = ev.get("stage")
+                attempts = dict(state.get("attempts") or {})
+                if ev_stage in attempts:
+                    attempts[ev_stage] = int(attempts.get(ev_stage, 0)) + 1
+                else:
+                    attempts["implementer"] = int(attempts.get("implementer", 0)) + 1
+                state["attempts"] = attempts
+                if ev.get("hard_cap") or (isinstance(ev.get("session"), dict) and ev["session"].get("hard_cap")):
+                    state["hard_caps_tripped"] = int(state.get("hard_caps_tripped", 0)) + 1
+                if ev.get("halt"):
+                    state["status"] = "hold"
 
             for cand in (p.with_name(f"{p.name}.meta.json"), p.with_name(f"{p.stem}.meta.json")):
                 if cand.is_file() and cand != p:
@@ -340,6 +390,10 @@ def reconstruct(layout: Layout, tag: str) -> int:
                             state["active_solution_key"] = f"solution_key-{mseq:03d}.patch"
                         elif mkind == "oracle-draft":
                             state["active_oracle_draft"] = f"oracle-draft-{mseq:03d}"
+                        elif mkind == "oracle":
+                            state["active_oracle"] = f"oracle-{mseq:03d}"
+                        elif mkind == "contract":
+                            state["active_contract"] = f"contract-{mseq:03d}.json"
                     except (json.JSONDecodeError, OSError):
                         pass
                     break

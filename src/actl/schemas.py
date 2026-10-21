@@ -65,6 +65,7 @@ _SUPPORTED = frozenset(
 # $defs is intentional; listed above
 
 _schema_cache: dict[str, Any] = {}
+_SCHEMA_CACHE = _schema_cache
 
 
 @dataclass
@@ -323,7 +324,7 @@ def _validate_schema(
             _validate_schema(instance, sub, ptr, errors, current_doc, doc_name)
 
     if "anyOf" in schema:
-        branch_errs: list[list[dict[str, str]]] = []
+        branch_msgs: list[str] = []
         matched = False
         for sub in schema["anyOf"]:
             be: list[dict[str, str]] = []
@@ -331,34 +332,25 @@ def _validate_schema(
             if not be:
                 matched = True
                 break
-            branch_errs.append(be)
+            branch_msgs.append("; ".join(e["message"] for e in be))
         if not matched:
             errors.append({"path": ptr, "message": "anyOf: no branch matched"})
 
     if "oneOf" in schema:
         matches = 0
-        best_errs: list[dict[str, str]] = []
+        all_branch_errs: list[str] = []
         for sub in schema["oneOf"]:
-            be = []
+            be: list[dict[str, str]] = []
             _validate_schema(instance, sub, ptr, be, current_doc, doc_name)
             if not be:
                 matches += 1
-            elif isinstance(instance, dict) and isinstance(sub, dict):
-                looks_object = (
-                    sub.get("type") == "object"
-                    or (isinstance(sub.get("type"), list) and "object" in sub["type"])
-                    or "properties" in sub
-                    or "required" in sub
-                )
-                if looks_object and (not best_errs or len(be) <= len(best_errs)):
-                    best_errs = be
-        if matches != 1:
-            if matches == 0 and best_errs:
-                errors.extend(best_errs)
             else:
-                errors.append(
-                    {"path": ptr, "message": f"oneOf: expected 1 match, got {matches}"}
-                )
+                all_branch_errs.append("; ".join(e["message"] for e in be))
+        if matches != 1:
+            msg = f"oneOf: expected 1 match, got {matches}"
+            if matches == 0 and all_branch_errs:
+                msg += f" ({', '.join(all_branch_errs)})"
+            errors.append({"path": ptr, "message": msg})
 
     if "not" in schema:
         be = []
