@@ -79,3 +79,33 @@ def test_create_sprint_exact_initial_state(lay):
               "active_solution_key", "active_spec", "active_stage"):
         assert st[k] is None, k
     assert res["seq"] == 0
+
+def test_sprint_new_captures_default_branch(tmp_path):
+    import subprocess
+    from actl import sprint, layout
+    target = tmp_path / "target_repo"
+    target.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Tester"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=target, check=True)
+    (target / "file.txt").write_text("v1")
+    subprocess.run(["git", "add", "file.txt"], cwd=target, check=True)
+    subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "initial on main"], cwd=target, check=True)
+    main_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=target, capture_output=True, text=True, check=True).stdout.strip()
+    
+    # Create feature branch with a second commit and switch to it
+    subprocess.run(["git", "checkout", "-b", "feature-branch"], cwd=target, check=True)
+    (target / "file.txt").write_text("v2")
+    subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "commit", "-am", "commit on feature"], cwd=target, check=True)
+    
+    # Create sprint: base_sha must equal main_sha, not the current feature checkout
+    lay = layout.Layout(tmp_path / "actl-root")
+    # Move target repository into lay.target_repo
+    lay.target_repo.parent.mkdir(parents=True, exist_ok=True)
+    target.rename(lay.target_repo)
+    
+    sprint.create_sprint(lay, "testslug")
+    sprint_dirs = list((lay.root / "actl-repo" / "specs").glob("*_testslug"))
+    assert len(sprint_dirs) == 1
+    st_file = sprint_dirs[0] / "sprint.toml"
+    assert f'base_sha = "{main_sha}"' in st_file.read_text(encoding="utf-8")

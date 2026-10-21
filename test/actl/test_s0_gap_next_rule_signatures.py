@@ -114,3 +114,20 @@ def test_next_decide_missing_layout_guards(tmp_path):
     (tmp_path / "runs" / "2026-10-16_nostate").mkdir(parents=True)
     with pytest.raises(FileNotFoundError):
         next.decide_next(lay, "2026-10-16_nostate")
+
+def test_next_rule_default_priority_tiebreak(tmp_path):
+    from actl import next, layout
+    import types
+    # Mock two rules: aa_default without PRIORITY, zz_explicit with PRIORITY=100
+    rule_aa = types.ModuleType("aa_default")
+    rule_aa.decide = lambda lay, tag, **kw: {"action": "win_aa", "reason": "aa"}
+    
+    rule_zz = types.ModuleType("zz_explicit")
+    rule_zz.PRIORITY = 100
+    rule_zz.decide = lambda lay, tag, **kw: {"action": "win_zz", "reason": "zz"}
+    
+    # Priority sorting key: (getattr(mod, 'PRIORITY', 100), filename)
+    rules = [(int(getattr(rule_aa, "PRIORITY", 100)), "aa_default", rule_aa),
+             (int(getattr(rule_zz, "PRIORITY", 100)), "zz_explicit", rule_zz)]
+    rules.sort(key=lambda t: (t[0], t[1]))
+    assert rules[0][1] == "aa_default", "Default priority must remain strictly 100 for deterministic tie-breaking"

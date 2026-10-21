@@ -178,3 +178,9 @@ def test_differential_multi_segment_and_double_star_vs_reference():
             cur = [(c + "/" + s) if c else s for c in cur for s in ppool]
         paths += cur
     _differential(patterns, paths, "ab", per_pattern=24, seed=7, min_checked=3000)
+
+def test_scope_allows_no_space_after_colon():
+    from actl import scope
+    rules = scope.parse("FROZEN:test/**\nALLOW:src/**\nALLOW:api/profile.py")
+    assert "src/**" in rules["allow"]
+    assert "api/profile.py" in rules["allow"]

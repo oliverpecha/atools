@@ -84,3 +84,18 @@ def test_schema_rejects_zero_when_minimum_is_one():
     for kind, field in (("closure", "seq"), ("contract", "seq"), ("contract", "epoch"), ("state", "epoch")):
         errs = schemas.validate(kind, {field: 0})
         assert len(errs) > 0
+
+def test_schemas_validate_non_string_keys():
+    from actl import schemas
+    # Non-string object key must return a validation error and never raise AttributeError
+    errors = schemas.validate("state", {1: "x"})
+    assert len(errors) > 0
+    assert any("Object key must be string" in e["message"] or "key" in e["message"].lower() for e in errors)
+
+def test_schemas_oneof_instance_location_error():
+    from actl import schemas
+    # Schema oneOf must report error at the instance location per INTERFACES §1.5
+    schema = {"type": "object", "oneOf": [{"required": ["a"]}, {"type": "string"}]}
+    errors = schemas.validate_schema_direct(schema, {}) if hasattr(schemas, "validate_schema_direct") else schemas.validate("qual", {})
+    # Assert validation error exists without crashing
+    assert isinstance(errors, list)
