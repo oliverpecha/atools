@@ -304,8 +304,7 @@ def reconstruct(layout: Layout, tag: str) -> int:
             elif name.startswith("closure-") and name.endswith(".json") and not name.endswith(".meta.json"):
                 try:
                     c = json.loads(p.read_text(encoding="utf-8"))
-                    if isinstance(c, dict):
-                        schemas.validate("closure", c)
+                    if isinstance(c, dict) and not schemas.validate("closure", c):
                         state["closures_submitted"] = int(state.get("closures_submitted", 0)) + 1
                         reason = c.get("reason")
                         if reason == "blocked":
