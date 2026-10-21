@@ -51,6 +51,11 @@ class Layout:
             raise ValueError("NUL byte in root path")
         self.root: Path = Path(root).resolve()
 
+    def _safe_path(self, path: Path) -> Path:
+        if not path.resolve().is_relative_to(self.root.resolve()):
+            raise ValueError(f"Path escapes boundary: {path} outside {self.root}")
+        return path
+
     @property
     def actl_repo(self) -> Path:
         return self.root / "actl-repo"
@@ -64,7 +69,7 @@ class Layout:
         return self.root / "baseline.json"
 
     def sprint_dir(self, tag: str) -> Path:
-        return self.actl_repo / "specs" / _check_tag(tag)
+        return self._safe_path(self.actl_repo / "specs" / _check_tag(tag))
 
     def runs_dir(self, tag: str) -> Path:
         return self.sprint_dir(tag) / "runs"
@@ -88,23 +93,23 @@ class Layout:
         return self.sprint_dir(tag) / "sprint.toml"
 
     def handoff(self, tag: str) -> Path:
-        return self.root / "handoff" / _check_tag(tag)
+        return self._safe_path(self.root / "handoff" / _check_tag(tag))
 
     def inbox(self, tag: str, role: str) -> Path:
-        return self.handoff(tag) / f"{_check_role(role)}-inputs"
+        return self._safe_path(self.handoff(tag) / f"{_check_role(role)}-inputs")
 
     def outbox(self, tag: str, role: str) -> Path:
-        return self.handoff(tag) / f"{_check_role(role)}-outputs"
+        return self._safe_path(self.handoff(tag) / f"{_check_role(role)}-outputs")
 
     def workspace(self, name: str, tag: str | None = None) -> Path:
         _check_workspace_name(name)
         if tag is not None:
             _check_tag(tag)
-            return self.root / "workspaces" / tag / name
-        return self.root / "workspaces" / name
+            return self._safe_path(self.root / "workspaces" / tag / name)
+        return self._safe_path(self.root / "workspaces" / name)
 
     def homes(self, role: str) -> Path:
-        return self.root / "homes" / _check_role(role)
+        return self._safe_path(self.root / "homes" / _check_role(role))
 
     def ensure_base_tree(self) -> None:
         _mkdir(self.root, 0o755)

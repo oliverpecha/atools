@@ -242,6 +242,19 @@ def reconstruct(layout: Layout, tag: str) -> int:
                 state = None
         if state is None:
             state = _default_state(tag, max_seq)
+        else:
+            state["seq"] = max_seq
+            state["epoch"] = 1
+            state["status"] = "draft"
+            state["active_stage"] = None
+            state["active_spec"] = None
+            state["active_solution_key"] = None
+            state["active_oracle_draft"] = None
+            state["active_oracle"] = None
+            state["active_contract"] = None
+            state["attempts"] = {"oracle": 0, "implementer": 0, "live": 0, "curator": 0}
+            state["closures_submitted"] = 0
+            state["hard_caps_tripped"] = 0
 
         toml_path = layout.sprint_toml(tag)
         if toml_path.is_file():
@@ -273,20 +286,69 @@ def reconstruct(layout: Layout, tag: str) -> int:
                 state["active_oracle"] = name
             elif name.startswith("qual-") and name.endswith(".json"):
                 attempts = dict(state.get("attempts") or {})
-                attempts["oracle"] = max(int(attempts.get("oracle", 0)), 1)
+                attempts["oracle"] = int(attempts.get("oracle", 0)) + 1
                 state["attempts"] = attempts
             elif name.startswith("contract-") and name.endswith(".json"):
                 state["active_contract"] = name
                 try:
                     c = json.loads(p.read_text(encoding="utf-8"))
-                    state["epoch"] = c.get("epoch", 1)
-                except (json.JSONDecodeError, OSError):
-                    pass
-                if state.get("status") == "draft":
+                    ep = c.get("epoch", 1)
+                    if not isinstance(ep, int) or isinstance(ep, bool) or ep < 1:
+                        raise ValueError(f"Invalid contract epoch in {name}: {ep}")
+                    state["epoch"] = ep
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise ValueError(f"Failed reading contract {name}: {exc}") from exc
+                if state.get("status") in ("draft", "hold"):
                     state["status"] = "running"
                     state["active_stage"] = "implementer"
+            elif name.startswith("closure-") and name.endswith(".json") and not name.endswith(".meta.json"):
+                try:
+                    c = json.loads(p.read_text(encoding="utf-8"))
+                    if isinstance(c, dict):
+                        schemas.validate("closure", c)
+                        state["closures_submitted"] = int(state.get("closures_submitted", 0)) + 1
+                        reason = c.get("reason")
+                        if reason == "blocked":
+                            state["status"] = "hold"
+                except (json.JSONDecodeError, OSError):
+                    pass
+            elif name.startswith("ev-") and name.endswith(".json"):
+                try:
+                    ev = json.loads(p.read_text(encoding="utf-8"))
+                    ev_stage = ev.get("stage")
+                    attempts = dict(state.get("attempts") or {})
+                    if ev_stage in attempts:
+                        attempts[ev_stage] = int(attempts.get(ev_stage, 0)) + 1
+                    else:
+                        attempts["implementer"] = int(attempts.get("implementer", 0)) + 1
+                    state["attempts"] = attempts
+                    if ev.get("hard_cap") or (isinstance(ev.get("session"), dict) and ev["session"].get("hard_cap")):
+                        state["hard_caps_tripped"] = int(state.get("hard_caps_tripped", 0)) + 1
+                    if ev.get("halt"):
+                        state["status"] = "hold"
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            for cand in (p.with_name(f"{p.name}.meta.json"), p.with_name(f"{p.stem}.meta.json")):
+                if cand.is_file() and cand != p:
+                    try:
+                        meta = json.loads(cand.read_text(encoding="utf-8"))
+                        mkind = meta.get("kind")
+                        mseq = meta.get("seq", _n)
+                        if mkind == "spec":
+                            state["active_spec"] = f"spec-{mseq:03d}.md"
+                        elif mkind == "solution_key":
+                            state["active_solution_key"] = f"solution_key-{mseq:03d}.patch"
+                        elif mkind == "oracle-draft":
+                            state["active_oracle_draft"] = f"oracle-draft-{mseq:03d}"
+                    except (json.JSONDecodeError, OSError):
+                        pass
+                    break
 
         state["seq"] = max_seq
+        errs = schemas.validate("state", state)
+        if errs:
+            raise ValueError(f"State validation failed during reconstruct: {errs}")
         _atomic_write(hw_path, f"{max_seq}\n".encode("utf-8"))
         _atomic_write(layout.state_file(tag), canonical_json(state) + b"\n")
         return max_seq

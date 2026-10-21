@@ -86,11 +86,11 @@ class StepResult:
         }
 
 
-def _escape(tok: str) -> str:
-    return tok.replace("~", "~0").replace("/", "~1")
+def _escape(tok: Any) -> str:
+    return str(tok).replace("~", "~0").replace("/", "~1")
 
 
-def _child(parent: str, tok: str) -> str:
+def _child(parent: str, tok: Any) -> str:
     esc = _escape(tok)
     if parent == "/":
         return f"/{esc}"
@@ -296,6 +296,14 @@ def _validate_schema(
                         }
                     )
         for k, v in instance.items():
+            if not isinstance(k, str):
+                errors.append(
+                    {
+                        "path": _child(ptr, str(k)),
+                        "message": f"Object key must be string, got {type(k).__name__}",
+                    }
+                )
+                continue
             if k in props:
                 _validate_schema(v, props[k], _child(ptr, k), errors, current_doc, doc_name)
             elif "additionalProperties" in schema:

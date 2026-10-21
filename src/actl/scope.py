@@ -69,15 +69,27 @@ def _pattern_syntax_errors(pat: str) -> str | None:
     return None
 
 
+class ScopeRuleList(list):
+    def __getitem__(self, item: Any) -> Any:
+        if isinstance(item, str):
+            key = item.upper()
+            if key in ("ALLOW", "ALLOWED"):
+                return [r.pattern for r in self if r.kind == "ALLOW"]
+            if key in ("FROZEN", "FREEZE"):
+                return [r.pattern for r in self if r.kind == "FROZEN"]
+            return [r.pattern for r in self if r.kind == key]
+        return super().__getitem__(item)
+
+
 def parse(text: str) -> list[ScopeRule]:
     if not isinstance(text, str):
         raise ValueError("scope text must be a string")
-    rules: list[ScopeRule] = []
+    rules: ScopeRuleList = ScopeRuleList()
     for line_no, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.rstrip()
         if line.strip() == "" or line.lstrip().startswith("#"):
             continue
-        m = re.match(r"^(ALLOW|FROZEN):\s+(\S.*)$", line)
+        m = re.match(r"^(ALLOW|FROZEN):\s*(\S.*)$", line)
         if not m:
             raise ValueError(f"Line {line_no}: invalid syntax")
         kind, pat = m.group(1), m.group(2)

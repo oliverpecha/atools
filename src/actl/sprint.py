@@ -200,8 +200,31 @@ def create_sprint(
     tag = mint_sprint_tag(slug)
     if layout.sprint_dir(tag).exists():
         raise ValueError(f"Sprint already exists: {tag}")
+    target = str(layout.target_repo)
+    default_ref = None
+    r_sym = subprocess.run(
+        ["git", "-C", target, "symbolic-ref", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+        env=_git_env(),
+    )
+    if r_sym.returncode == 0 and r_sym.stdout.strip():
+        default_ref = r_sym.stdout.strip()
+    else:
+        for candidate in ("refs/heads/main", "refs/heads/master"):
+            r_cand = subprocess.run(
+                ["git", "-C", target, "rev-parse", "--verify", candidate],
+                capture_output=True,
+                text=True,
+                env=_git_env(),
+            )
+            if r_cand.returncode == 0 and r_cand.stdout.strip():
+                default_ref = candidate
+                break
+
+    ref_to_resolve = default_ref if default_ref else "HEAD"
     r = subprocess.run(
-        ["git", "-C", str(layout.target_repo), "rev-parse", "HEAD"],
+        ["git", "-C", target, "rev-parse", ref_to_resolve],
         capture_output=True,
         text=True,
         env=_git_env(),

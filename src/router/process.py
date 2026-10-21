@@ -152,6 +152,12 @@ def cleanup_session_metadata(session_name: str) -> None:
             meta_path.unlink()
     except Exception:
         pass
+    boot_path = _resolve_metadata_dir() / f"{session_name}.boot.sh"
+    try:
+        if boot_path.exists():
+            boot_path.unlink()
+    except Exception:
+        pass
 
 
 def list_active_tmux_sessions() -> Dict[str, float]:
