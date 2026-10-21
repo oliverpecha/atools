@@ -529,7 +529,7 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `status`, `spec_source`, and `repo_test_cmd`)
 * `approval_live_run`: `"architect" | "owner"` (default `"architect"`)
 * `solution_key_exposure`: `"full" | "hidden"` (default `"full"`)
-* `owner_review_triggers`: `list["plan_deviation" | "budget_exceeded" | "critical_tripwire" | "manual_flag"]` (default `[]`)
+* `owner_review_triggers`: `list["grant_attempts" | "waive_mutant" | "update_scope" | "reopen_oracle" | "retry_live"]` (default `[]`)
 * `min_attempts_before_block`: `int >= 1` (default `2`)
 * `max_epochs`: `int >= 1` (default `3`)
 * `repo_test_cmd`: `str` (default `"python3 -m pytest test -q -rf"`)
