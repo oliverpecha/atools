@@ -334,7 +334,10 @@ def _validate_schema(
                 break
             branch_msgs.append("; ".join(e["message"] for e in be))
         if not matched:
-            errors.append({"path": ptr, "message": "anyOf: no branch matched"})
+            msg = "anyOf: no branch matched"
+            if branch_msgs:
+                msg += f" ({', '.join(branch_msgs)})"
+            errors.append({"path": ptr, "message": msg})
 
     if "oneOf" in schema:
         matches = 0
