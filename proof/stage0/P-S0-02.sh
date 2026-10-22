@@ -41,6 +41,7 @@ fi
 
 is_allowed_addition() {
   local f="$1"
+  [[ "$f" == "src/actl/INTERFACES.md" ]] && return 1
   case "$f" in
     src/actl/*|schemas/*|proof/stage0/*|test/actl/*|fixtures/*) return 0 ;;
     config/graph.toml|bin/actl|install.sh|README.md|proof/run_suite_actl_s0.sh|proof/run_suite_gate_d.sh|docs/plan/spec-S0.md) return 0 ;;
@@ -50,6 +51,13 @@ is_allowed_addition() {
 
 is_allowed_modification() {
   local f="$1"
+  if [[ "$f" == "src/actl/INTERFACES.md" ]]; then
+    # PB-2/PB-4: Allowed only if matching the Owner-approved PB-4 contract (81465b0)
+    if git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q '^81465b0' &&        grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
+      return 0
+    fi
+    return 1
+  fi
   if is_allowed_addition "$f"; then
     return 0
   fi
@@ -94,6 +102,12 @@ fi
 PB2_BASE="$(git diff --name-only "$FORK" -- fixtures/golden/expected.d/base.json)"
 [[ -z "$PB2_BASE" ]] || bad "S0-R2.3 (PB-2): immutable fixtures/golden/expected.d/base.json changed: $PB2_BASE"
 
+if git diff --name-only "$FORK" -- src/actl/INTERFACES.md | grep -q .; then
+  if ! git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q '^81465b0' ||      ! grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
+    bad "S0-R2.3 (PB-2): immutable src/actl/INTERFACES.md changed without Owner approval (PB-4)"
+  fi
+fi
+
 if [[ "$WS" == "0A" || "$WS" == "0B" ]]; then
   PB2="$( { git diff --name-only "$FORK" -- proof fixtures test/actl src/actl/INTERFACES.md; git ls-files -o --exclude-standard -- proof fixtures test/actl src/actl/INTERFACES.md; } | grep -v '^proof/out/' || true)"
   [[ -z "$PB2" ]] || bad "S0-R2.3 (PB-2): immutable paths changed: $(echo $PB2)"
@@ -119,6 +133,12 @@ if [[ -z "${ACTL_P02_SELFTEST:-}" ]]; then
     echo '{"tampered": true}' > "$ST_DIR/fixtures/golden/expected.d/base.json"
     if ACTL_REPO="$ST_DIR" ACTL_FORK_POINT="$FORK" ACTL_WORKSTREAM="integration" ACTL_P02_SELFTEST=1 bash "$THIS_SCRIPT" >/dev/null 2>&1; then
       bad "S0-R2.3: selftest failed: tampered fixtures/golden/expected.d/base.json was not rejected"
+    fi
+
+    # 3. Negative self-check: tampering with src/actl/INTERFACES.md
+    echo "tampered" > "$ST_DIR/src/actl/INTERFACES.md"
+    if ACTL_REPO="$ST_DIR" ACTL_FORK_POINT="$FORK" ACTL_WORKSTREAM="integration" ACTL_P02_SELFTEST=1 bash "$THIS_SCRIPT" >/dev/null 2>&1; then
+      bad "S0-R2.3: selftest failed: tampered src/actl/INTERFACES.md was not rejected"
     fi
   else
     bad "S0-R2: could not create git worktree for selftests"

@@ -253,6 +253,7 @@ def reconstruct(layout: Layout, tag: str) -> int:
             state["active_oracle"] = None
             state["active_contract"] = None
             state["attempts"] = {"oracle": 0, "implementer": 0, "live": 0, "curator": 0}
+            state["grants"] = {"oracle": 0, "implementer": 0, "live": 0, "curator": 0}
             state["closures_submitted"] = 0
             state["hard_caps_tripped"] = 0
 
@@ -334,22 +335,17 @@ def reconstruct(layout: Layout, tag: str) -> int:
                 res = esc.get("resolution")
                 if isinstance(res, dict):
                     action = res.get("action")
-                    grants = dict(state.get("grants") or {})
+                    grants = dict(state.get("grants") or {"oracle": 0, "implementer": 0, "live": 0, "curator": 0})
                     granted = res.get("attempts_granted")
                     if granted is not None and isinstance(granted, int):
                         stg = esc.get("stage", "implementer")
-                        grants[stg] = int(grants.get(stg, 0)) + granted
+                        if stg in grants:
+                            grants[stg] = int(grants.get(stg, 0)) + granted
                     elif action == "grant_attempts":
                         stg = esc.get("stage", "implementer")
                         cnt = res.get("count", res.get("grant", 1))
-                        if isinstance(cnt, int):
+                        if isinstance(cnt, int) and stg in grants:
                             grants[stg] = int(grants.get(stg, 0)) + cnt
-                    if "waived_mutants" in res:
-                        waived = res.get("waived_mutants", [])
-                        if isinstance(waived, list):
-                            grants["waive_mutant"] = int(grants.get("waive_mutant", 0)) + len(waived)
-                    elif action == "waive_mutant":
-                        grants["waive_mutant"] = int(grants.get("waive_mutant", 0)) + 1
                     state["grants"] = grants
                     if action in ("grant_attempts", "waive_mutant", "update_scope", "retry_live"):
                         if state.get("status") == "hold":
