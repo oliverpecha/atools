@@ -128,34 +128,6 @@ def diff_hashing42():
             return 1
     print("equivalent over 200000 trials: hashing:42")
     return 0
-
-
-# EQ-S23-01: src/actl/hashing.py:71 (allow_nan=False -> True)
-# Proof: canonical_json(obj) calls _validate_canonical(obj) before invoking json.dumps().
-# _validate_canonical explicitly inspects all floats and raises ValueError("NaN/Infinity not allowed")
-# if math.isnan(obj) or math.isinf(obj). Therefore, json.dumps() can never receive an out-of-range
-# float value, rendering allow_nan=False semantically identical to allow_nan=True.
-def diff_hashing71():
-    import math
-    from actl import hashing
-    for val in [0.0, -0.0, 1.2345, 1e10, -1e-10]:
-        expected = json.dumps({"v": val}, separators=(",", ":"), sort_keys=True, allow_nan=True).encode("utf-8")
-        if hashing.canonical_json({"v": val}) != expected:
-            print("DIVERGE hashing:71 valid float")
-            return 1
-    for bad in [float("nan"), float("inf"), float("-inf")]:
-        try:
-            hashing.canonical_json({"v": bad})
-            print("DIVERGE hashing:71 did not raise on bad float")
-            return 1
-        except ValueError as e:
-            if "NaN/Infinity not allowed" not in str(e):
-                print(f"DIVERGE hashing:71 unexpected error message: {e}")
-                return 1
-    print("equivalent over canonical float domain: hashing:71")
-    return 0
-
-
 if __name__ == "__main__":
-    total_failures = diff_seq() + diff_hashing42() + diff_hashing71()
+    total_failures = diff_seq() + diff_hashing42()
     sys.exit(1 if total_failures else 0)

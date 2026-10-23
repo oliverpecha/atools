@@ -141,9 +141,28 @@ S11-61 schemas/state.json:60 additionalProperties false to true: same as S11-47.
 
 C. Seed 23
 
-S23-01 src/actl/hashing.py:71 allow_nan False to True: Equivalent. canonical_json(obj) validates via _validate_canonical(obj) before json.dumps(); floats are checked with isnan/isinf to raise ValueError("NaN/Infinity not allowed") beforehand, making allow_nan=False and allow_nan=True behaviorally identical. Formally certified in diff_equiv_seed11.py (diff_hashing71).
+S23-01 src/actl/hashing.py:71 allow_nan False to True: killed-by test/actl/test_s0_gap3_hashing_tuples.py (rejects nan/inf in nested tuple containers).
 
-S23-02 src/actl/hashing.py:42 0 to 1: Same as S11-02 (equivalent row-digest ordering).
+S23-02 src/actl/hashing.py:42 0 to 1: same as S11-02 (equivalent row-digest ordering). Formally certified in diff_equiv_seed11.py.
 
-D. Out-of-scope summary for process.py
-Lines 172, 196, 295, 323, 330, 337 and 348 are pre-existing code at HEAD 85523a0 that S0-R16 does not touch. Line 172 is additionally equivalent because it sits inside try/except.
+D. Individual dispositions for process.py (Seed 23)
+
+All process.py survivors below reside in pre-existing daemon/process infrastructure introduced in commit 2acaf3c, outside the S0-R16 remediation scope:
+
+S23-03 src/router/process.py:41 ensure_environment() _resolve_log_dir().mkdir(parents=True, exist_ok=True) True to False: out-of-scope (pre-existing directory initialization flag in 2acaf3c).
+
+S23-04 src/router/process.py:111 _wait_pids_gone() return False False to True: out-of-scope (pre-existing process polling timeout return in 2acaf3c).
+
+S23-05 src/router/process.py:227 get_running_sessions() and to or: out-of-scope (pre-existing session discovery guard in 2acaf3c).
+
+S23-06 src/router/process.py:491 kill_session() return 1 to 2: out-of-scope (pre-existing warning exit code on missing session in 2acaf3c).
+
+S23-07 src/router/process.py:546 kill_session() return 0 to 1: out-of-scope (pre-existing clean termination return code in 2acaf3c).
+
+S23-08 src/router/process.py:552 kill_session() _record_exit(session_name, 143, overwrite=True) True to False: out-of-scope (pre-existing exit overwrite flag in 2acaf3c).
+
+S23-09 src/router/process.py:608 create_runner_script() boot_path.chmod(0o755) 0o755 to 0o756: out-of-scope (pre-existing runner boot script permissions in 2acaf3c).
+
+S23-10 src/router/process.py:668 spawn_detached_session() auto_stream: bool = False False to True: out-of-scope (pre-existing keyword default parameter in 2acaf3c).
+
+S23-11 src/router/process.py:737 spawn_detached_session() subprocess.run(cmd, capture_output=True, text=True) True to False: out-of-scope (pre-existing process execution invocation in 2acaf3c).
