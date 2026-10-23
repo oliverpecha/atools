@@ -166,3 +166,39 @@ S23-09 src/router/process.py:608 create_runner_script() boot_path.chmod(0o755) 0
 S23-10 src/router/process.py:668 spawn_detached_session() auto_stream: bool = False False to True: out-of-scope (pre-existing keyword default parameter in 2acaf3c).
 
 S23-11 src/router/process.py:737 spawn_detached_session() subprocess.run(cmd, capture_output=True, text=True) True to False: out-of-scope (pre-existing process execution invocation in 2acaf3c).
+
+## E. Seed 37 (Untuned Baseline Run)
+
+Baseline verification run executed on clean `wip/stage0-gap2` without tuning:
+`TOTAL 153  killed 124  survived 21  invalid 8`
+
+All 21 survivors itemized individually below:
+
+### `src/actl/` Mutants (12 survivors)
+
+* **S37-01 `src/actl/hashing.py:27` (`False -> True`)**: `os.walk(root, followlinks=False)` -> `followlinks=True`. Equivalent under current fixture tree (fixtures contain no symlinked directory cycles/hierarchies within hashing roots).
+* **S37-02 `src/actl/hashing.py:42` (`0 -> 1`)**: `rows.sort(key=lambda r: r[0])` -> `r[1]`. Formally certified equivalent (EQ-S11-02).
+* **S37-03 `src/actl/ids.py:42` (`not -> `)**: `if not isinstance(today, date)` -> `if isinstance(today, date)`. Negative type check branch when explicit `today` argument is supplied.
+* **S37-04 `src/actl/layout.py:38` (`True -> False`)**: `path.mkdir(parents=True, exist_ok=True)` -> `parents=False`. Parent directories exist before helper invocation.
+* **S37-05 `src/actl/layout.py:31` (`< -> <=`)**: `ord(c) < 0x20` -> `<= 0x20` (ASCII 0x20 space boundary check in workspace name validator).
+* **S37-06 `src/actl/seq.py:103` (`True -> False`)**: `layout.runs_dir(tag).mkdir(parents=True, exist_ok=True)` -> `parents=False`. Parent directory is created in layout tree prior to lock acquisition.
+* **S37-07 `src/actl/seq.py:94` (`1 -> 2`)**: `depth -= 1` -> `depth -= 2`. Reentrant lock counter decrement during nested locking.
+* **S37-08 `src/actl/schemas.py:270` (`>= -> >`)**: `instance >= schema["exclusiveMaximum"]` -> `>`. Boundary test on exclusiveMaximum constraint.
+* **S37-09 `src/actl/schemas.py:179` (`or -> and`)**: `frag or "/"` -> `frag and "/"`. Default pointer root resolution.
+* **S37-10 `src/actl/schemas.py:170` (`or -> and`)**: `ref[1:] or "/"` -> `ref[1:] and "/"`. Local pointer root resolution.
+* **S37-11 `src/actl/sprint.py:95` (`or -> and`)**: Target validation guard condition operator.
+* **S37-12 `src/actl/sprint.py:61` (`True -> False`)**: `subprocess.run(..., text=True)` -> `text=False`. Git command capture output encoding.
+
+### `src/router/process.py` Mutants (9 survivors - Pre-existing 2acaf3c)
+
+All process infrastructure survivors below reside in daemon and tmux session management code introduced at commit `2acaf3c`, outside the S0-R16 remediation scope:
+
+* **S37-13 `src/router/process.py:480` (`False -> True`)**: `kill_session(..., manual: bool = False)` keyword parameter default.
+* **S37-14 `src/router/process.py:668` (`False -> True`)**: `spawn_detached_session(..., auto_stream: bool = False)` keyword parameter default.
+* **S37-15 `src/router/process.py:687` (`True -> False`)**: `log_file.touch(exist_ok=True)` file existence flag.
+* **S37-16 `src/router/process.py:498` (`False -> True`)**: `subprocess.run(..., check=False)` process exit exception check.
+* **S37-17 `src/router/process.py:107` (`True -> False`)**: `alive = True` in `_wait_pids_gone` exception handler.
+* **S37-18 `src/router/process.py:98` (`< -> <=`)**: `while time.time() < deadline:` polling timeout comparison.
+* **S37-19 `src/router/process.py:183` (`> -> >=`)**: `len(parts) > 1` session metadata string split length check.
+* **S37-20 `src/router/process.py:227` (`and -> or`)**: Session discovery filter guard.
+* **S37-21 `src/router/process.py:181` (`1 -> 2`)**: `line.split("|", 1)` delimiter maxsplit argument.
