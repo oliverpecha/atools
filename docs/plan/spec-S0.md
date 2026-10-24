@@ -27,7 +27,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 ### S0-R2 Additive-change rule
 - S0-R2.1 Workstream 0A, measured against `ACTL_FORK_POINT`: added files are free; modified files are a subset of `{install.sh, README.md}`; no deleted or renamed files.
 - S0-R2.2 Workstream 0B: the set of changed files is exactly `{src/router/process.py}`.
-- S0-R2.3 PB-2: `git diff --name-only <fork>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md` is empty for both workstreams.
+- S0-R2.3 PB-2: `git diff --name-only <fork>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md` is empty for both workstreams (for authoring-side edits after the pin, `P-S0-02` uses an allowlist of attested blobs for authoring-side edits, D-28).
 - S0-R2.4 The engines suite, the session-persistence suite (when `agent` exists) and the audit keep their baseline results (`audit ... --cursor` exit 0, `--self-test` pass).
 - S0-R2.5 Red on base: P-S0-02 also requires that workstream work exists (0A: at least `src/actl/cli.py` and `bin/actl` added; 0B: `process.py` modified), so an empty branch is red.
 - Proof: P-S0-02 (`proof/stage0/P-S0-02.sh`, Part 2).
@@ -70,7 +70,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - S0-R7.3 `validate(kind, obj)` returns a list of `{path, message}` sorted by `(path, message)`, `[]` iff valid, never raises on bad data, raises `ValueError` only for an unknown kind or schema load failure. A non-object root reports `"/"`.
 - S0-R7.4 It never delegates to `jsonschema`: results are identical with `sys.modules["jsonschema"] = None` (O-1).
 - S0-R7.5 `sprint` may omit `live_run` only when `status == "draft"`; `sprint-proposal` requires `live_run` and rejects `sprint_tag base_sha status spec_source repo_test_cmd`.
-- S0-R7.6 Fixtures: 20 valid documents and 54 invalid documents (>= 4 per kind, 11 kinds) in `fixtures/golden/artifacts/`, each invalid case with its exact expected pointer set in `invalid/index.json`.
+- S0-R7.6 Fixtures: 24 valid documents and 60 invalid documents (>= 4 per kind, 11 kinds) in `fixtures/golden/artifacts/`, each invalid case with its exact expected pointer set in `invalid/index.json`.
 - Proof: P-S0-08 (`test_p08_schemas.py`).
 
 ### S0-R8 Defaults
@@ -170,7 +170,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 Every clause above maps to at least one proof; clauses added beyond the addendum are S0-R1.6, S0-R2.5, S0-R3.5 modes-under-umask, S0-R5.3, S0-R7.4, S0-R11.2, S0-R15.3.
 
 ## 3. Interfaces and fixtures index
-Names, signatures, CLI synopsis and file formats are those of INTERFACES.md sections 1-4 and are not restated or altered here. Fixtures delivered with this spec: `fixtures/golden/{build_golden.sh, target-repo/, sprint/{spec-001.md, solution_key.patch, oracle/, scope_overrides/}, implementations/, stubs/{agent,loginctl}, artifacts/, vectors/, expected_text/, expected.d/base.json}`. Run results obtained in the authoring environment: `golden_selfcheck.sh` exit 0 (all checks); `run_suite_exit_code.sh` against a behavioural model: base variant exit 1 with E1..E10 all red, fixed variant exit 0 with all green (real `tmux` was not available there, so the real `arouter` has not been exercised); a throwaway reference for layout, seq, hashing, scope and the fragment loader passed 126 tests.
+Names, signatures, CLI synopsis and file formats are those of INTERFACES.md sections 1-4 and are not restated or altered here. Fixtures delivered with this spec: `fixtures/golden/{build_golden.sh, target-repo/, sprint/{spec-001.md, solution_key.patch, oracle/, scope_overrides/}, implementations/, stubs/{agent,loginctl}, artifacts/, vectors/, expected_text/, expected.d/base.json}`. Run results obtained in the authoring environment: `golden_selfcheck.sh` exit 0 (all checks); `run_suite_exit_code.sh` against a behavioural model: base variant exit 1 with E1..E10 all red, fixed variant exit 0 with all green (real `tmux` was not available there, so the real `arouter` had not been exercised there. Superseded: real-host results are in `proof/stage0/VACUITY_MATRIX.md` and `proof/stage0/SURVIVOR_ANALYSIS.md`); a throwaway reference for layout, seq, hashing, scope and the fragment loader passed 126 tests.
 
 ## 4. Ambiguity register
 INTERFACES.md already uses A-1..A-4; this register continues as SA-n.

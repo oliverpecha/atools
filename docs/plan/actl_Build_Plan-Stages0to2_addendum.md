@@ -1,6 +1,8 @@
 # actl_Build_Plan-Stages0to2_addendum — Addendum to the core document
 
-**Author:** Vela. **Revision:** Wednesday, October 14, 2026 (measurements from the VPS folded in). **Baseline:** `atools` `main` at `2acaf3c`, `VERSION` v0.1.7 (audit runner `4da9394`; the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
+**Author:** Vela. **Revision:** Wednesday, October 14, 2026; amended Saturday, October 24, 2026 (see Revision log) (measurements from the VPS folded in). **Baseline:** `atools` `main` at `2acaf3c`, `VERSION` v0.1.7 (audit runner `4da9394`; the facts in §B were measured at `a9b3a4e`, `VERSION` v0.1.2, an ancestor).
+**Revision log.** 2026-10-24: Stage 0 closed (tag `stage-0-verified`, `VERSION` v0.1.8). Since the lock (2026-10-14): requirements S0-R4..R16 and parts of S1/S2 were tightened (WI-DOCS-3); the baseline moved to `2acaf3c`; sections 5.3, 5.5, 5.9 and 9 were brought in line with the delivered Stage 0; decisions D-22..D-29 were added; open items O-1, O-2 and O-8 were closed; the text of D-21 was corrected because `hooks/commit-msg` now checks the tag (the decision is unchanged). Deviation recorded: Gate D ran after the Stage 0 implementation; from Stage 1 on it MUST run before implementation (section 11.4, step 2). The Stage 1 and Stage 2 requirement changes of 2026-10-18 have not had an independent review yet; they get one in the Stage 1/2 authoring pass.
+
 **Relation to other files**
 
 | File | Role |
@@ -74,11 +76,11 @@ atools/
 ├── src/actl/
 │   ├── __init__.py  cli.py           # argparse + auto-discovery of cmd_*.py; exit-code table (S0-R10)
 │   ├── next.py                       # decide_next + auto-discovery of next_rules/*.py
-│   ├── layout.py  ids.py  seq.py  hashing.py  schemas.py  scope.py  sprint.py  doctor.py
+│   ├── layout.py  ids.py  seq.py  hashing.py  schemas.py  scope.py  sprint.py  doctor.py  errors.py
 │   ├── cmd_init.py  cmd_sprint.py  cmd_doctor.py  cmd_next.py
 │   ├── next_rules/                   # empty registry in Stage 0 (a dummy rule in tests)
 │   └── INTERFACES.md                 # the interface freeze (S0-R15), with a machine-readable block
-├── schemas/  common.json state.json sprint.json closure.json ev.json qual.json contract.json oracle-decision.json prior_attempt.json
+├── schemas/  common.json state.json sprint.json closure.json ev.json qual.json contract.json oracle-decision.json prior_attempt.json sprint-proposal.json meta.json attempt.json
 ├── config/graph.toml                 # installation defaults (illustrative values from Design §4.1)
 ├── fixtures/golden/                  # §5.8
 ├── proof/run_suite_actl_s0.sh  proof/stage0/*.sh            # workstream 0A
@@ -108,7 +110,7 @@ Modes from §1.5 are *applied* (`700`, `0750`/`0770`) even though local mode can
 
 **S0-R4 Sprint creation.** `actl init --target <git path|url>` creates the tree and clones the target (`git clone --local --no-hardlinks` for a path). `actl sprint new <slug> [--spec file]` MUST: validate `slug` against `^[a-z0-9][a-z0-9-]{1,40}\Z`; mint `sprint_tag = YYYY-MM-DD_{slug}` from `$ACTL_TODAY` (if set to `YYYY-MM-DD`) else the local date (refuse if it exists); pin `base_sha` as the full 40-char HEAD of the target's default branch; create the sprint and handoff directories, `runs/state.json` (S0-R5), `runs/sessions.tsv` with header `seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n`, and a deterministically formatted draft `sprint.toml` with every default resolved from `config/graph.toml`, `live_run` left **unset** (no default per Design §4.1) and `status = "draft"`. With `--spec`, it is copied as `spec-{seq}.md` using a newly allocated `seq`, and `spec_source = "imported"` and `active_spec = "spec-001.md"` are recorded.
 
-**S0-R5 Sequence allocator and state.** `seq.reserve(layout, tag, kind) -> int` MUST: take an exclusive `fcntl.flock` on `runs/state.lock`; read `state.json` and `runs/seq.highwater` (if present); set `next_seq = max(state["seq"], highwater) + 1`; write `f"{next_seq}\n"` + `fsync` to `runs/seq.highwater`; write `state.json` atomically (temp file in `runs/`, `fsync`, `os.replace`, `fsync` of `runs/`); release the lock; and return `next_seq` **before** any artifact is written. Numbers are never reused. 50 parallel reservations MUST yield 50 distinct numbers. `state.json` includes `active_solution_key` and `active_oracle_draft` alongside `active_spec`, `active_oracle`, `active_contract`. `seq.reconstruct(layout, tag)` rebuilds `seq = max(highwater, max_artifact_seq)` across `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*`, and sprint-scoped `workspaces/{tag}/implementer-*`, and replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` files in `seq` order to restore `active_*` pointers, `epoch`, `status`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
+**S0-R5 Sequence allocator and state.** `seq.reserve(layout, tag, kind) -> int` MUST: take an exclusive `fcntl.flock` on `runs/state.lock`; read `state.json` and `runs/seq.highwater` (if present); set `next_seq = max(state["seq"], highwater) + 1`; write `f"{next_seq}\n"` + `fsync` to `runs/seq.highwater`; write `state.json` atomically (temp file in `runs/`, `fsync`, `os.replace`, `fsync` of `runs/`); release the lock; and return `next_seq` **before** any artifact is written. Numbers are never reused. 50 parallel reservations MUST yield 50 distinct numbers. `state.json` includes `active_solution_key` and `active_oracle_draft` alongside `active_spec`, `active_oracle`, `active_contract`. `seq.reconstruct(layout, tag)` rebuilds `seq = max(highwater, max_artifact_seq)` across `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*/*` (two levels, file names only), and sprint-scoped `workspaces/{tag}/implementer-*`, and replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` files in `seq` order to restore `active_*` pointers, `epoch`, `status`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
 
 **S0-R6 Canonical hashing.** `hashing` defines once:
 - `file_sha256(path)`: SHA-256 of raw on-disk file bytes, lowercase 64-char hex. This is the universal digest domain for `sprint_sha256`, `contract_sha256`, `spec.sha256`, `qual.sha256`, and `scope.sha256`.
@@ -148,7 +150,7 @@ The spec MUST include at least six independently computed test vectors.
 3. `spawn_detached_session()` deletes an existing `<session>.exit` and `<session>.exit.tmp` before starting (next to where it unlinks the old log) and also when the tmux start fails.
 4. `kill_session()`, after it has killed the pane processes, waits (at most 2 s) until they are gone and then **unconditionally overwrites** `<session>.exit` with `143` (atomic temp file plus rename). The overwrite is safe because the killed runner can no longer write.
 5. Helpers `get_exit_path(session_name) -> Path` and `read_exit_code(session_name) -> Optional[int]` (`None` when missing or not a clean integer).
-6. No other behaviour changes (log handling, tmux options, argument handling, printed messages); the engines and persistence suites pass unchanged.
+6. No other behaviour changes (tmux options, argument handling, printed messages) except two: the session directories are resolved at call time (`_resolve_metadata_dir`, `_resolve_log_dir`, same defaults as F4), and the runner is started through an ephemeral `<session>.boot.sh` trampoline that `exec`s `<session>.run.sh`, so that `pgrep -f <session>.run.sh` selects the runner and not the tmux server (E10). `.boot.sh` is removed with the runner, by `cleanup_session_metadata()`, by the stale sweep in `get_running_sessions()` and when the tmux start fails. The engines and persistence suites pass unchanged.
 Meanings: `0` success; `124`/`137` watchdog; `127` missing CLI; `129`/`130`/`143` signalled from outside or killed with `arouter kill`. A missing file after the session is gone means "lost" (SIGKILL, tmux server death, reboot). Nothing may rely on the engine's exit status being visible any other way, and no killed session may record `0`.
 
 ### 5.5 Proof obligations (minimum)
@@ -156,7 +158,7 @@ Meanings: `0` success; `124`/`137` watchdog; `127` missing CLI; `129`/`130`/`143
 | ID | Proves | Method |
 |---|---|---|
 | P-S0-01 | `S0-R1`: all fields reported; baseline written once; `--refresh` overwrites; missing `tmux` or audit → exit `4` | run twice; PATH manipulation |
-| P-S0-02 | `S0-R2`: only allowed files changed per workstream; suites and audit unchanged | `git diff --name-status` against the fork point |
+| P-S0-02 | `S0-R2`: only allowed files changed per workstream; suites and audit unchanged | `git diff --name-status` against the fork point; edits to pinned paths must match an allowlist of attested blobs inside the proof (D-28) |
 | P-S0-03 | `S0-R3`: tree matches Design §1.5; modes applied; traversal rejected | stat every path |
 | P-S0-04 | `S0-R4`: happy path; bad slug; duplicate; `live_run` unset; `--spec` import allocates a seq | CLI |
 | P-S0-05 | `S0-R5`: 50 parallel `reserve` give distinct monotonic numbers; `kill -9` mid-reserve leaves no duplicate | multiprocess |
@@ -170,7 +172,7 @@ Meanings: `0` success; `124`/`137` watchdog; `127` missing CLI; `129`/`130`/`143
 | P-S0-13 | `S0-R9`: with the real global hook installed, building the golden repo in a `mktemp -d` directory succeeds | integration |
 | P-S0-14 | `S0-R13`: a dummy `cmd_*.py` and `next_rules/*.py` are discovered without editing core files | unit |
 | P-S0-15 | `S0-R14`: the fragment loader merges `base`, `s1`, `s2` | unit |
-| P-S0-16..25 | `S0-R16`: the ten checks `E1`–`E10` of `proof/run_suite_exit_code.sh` (§5.9): exit `0`, nonzero exit, timeout `124`, file format (one integer line, no `.tmp` left), runner and metadata removed while `.exit` stays, stale file replaced, no `.exit` while running, `arouter kill` records ≥ 128, `read_exit_code` helper, runner signalled from outside never records `0` | private tmux server, stub `agent` and `loginctl` |
+| P-S0-16..25 | `S0-R16`: the ten checks `E1`–`E10` of `proof/run_suite_exit_code.sh` (§5.9): exit `0`, nonzero exit, timeout `124`, file format (one integer line, no `.tmp` left), runner and metadata removed while `.exit` stays, stale file replaced, no `.exit` while running, `arouter kill` records 129, 130 or 143 (exact 143 asserted by the pytest `test_kill_overwrites_129_with_143`), `read_exit_code` helper, runner signalled from outside never records `0` | private tmux server, stub `agent` and `loginctl` |
 | P-S0-26 | `S0-R15`: `INTERFACES.md` conformance (signature introspection against the machine-readable block) | unit |
 
 ### 5.6 Exit criteria
@@ -692,17 +694,25 @@ From Stage 4, personas run under separate Linux accounts. tmux's default socket 
 - D-18 The former separate task "T1" is Stage 0B; there is no separate runbook file.
 - D-19 `actl_Guide-*` is maintained on the schedule of §12.
 - D-20 Mutation interpretation: before implementation, reviewers apply the three-stand-in vacuity review; after implementation, a cross-family reviewer plants mutants (§10 item 5).
-- D-21 Work-item tag protocol: guide §4I (PB-10). The tag is mandatory for agents (rules, skill, audit) and is not checked by the hook.
+- D-21 Work-item tag protocol: guide §4I (PB-10). The tag is mandatory for agents (rules, skill, audit) and is checked by the `commit-msg` hook (`hooks/commit-msg`, WI-RULES-1).
+- D-22 Identifiers and hashes: every SHA in schemas, state and artifacts is 40 lowercase hex; schema patterns end in `\Z` (Python `re` dialect); short prefixes are display only.
+- D-23 `owner_review_triggers` takes the Design 6.3 action names (`grant_attempts`, `waive_mutant`, `update_scope`, `reopen_oracle`, `retry_live`); an Owner ruling of 2026-10-20 that replaced them was reverted because the Design wins.
+- D-24 `ev.exit_code` is an integer `0..255` or `null` (`null` = interrupted or halted before a verdict; the process-level code is in `ev.session.exit_code`).
+- D-25 `actl` validates schemas with the in-tree stdlib validator only and never imports `jsonschema` (closes O-1).
+- D-26 The solution key is stored as `solution_key-{seq}.patch` with a `*.meta.json` sidecar (`parent` = the active spec file) and the pointer `state.active_solution_key`; promotion deduplicates by `(kind, parent, sha256)` (closes O-2).
+- D-27 Detached sessions start through an ephemeral `<session>.boot.sh` trampoline (S0-R16 item 6).
+- D-28 PB-2 is enforced by `P-S0-02` with an allowlist of attested blobs. Authoring-side edits to pinned paths after the pin need the Owner's approval, a `WI-S<n>-PROOF`, `WI-S<n>-SPEC` or `WI-IFACE` tag, and a Gate D delta review.
+- D-29 Mutation standing rule: every stage merge re-runs the mutation harness on the Stage 0 modules with a seed not used before; a real gap in a protected file blocks the merge (`proof/stage0/SURVIVOR_ANALYSIS.md`, section G).
 
 ### 9.2 OPEN (spec agents propose an answer; the Owner decides where noted)
 
-- **O-1** `jsonschema` as a dependency, or a minimal vendored validator (the repo ships no dependencies).
-- **O-2** Name and storage of `solution_key` between Architect promotion and oracle freeze (proposal: `solution_key-{seq}.patch`).
+- **O-1** `jsonschema` as a dependency, or a minimal vendored validator (the repo ships no dependencies). **Closed (D-25).**
+- **O-2** Name and storage of `solution_key` between Architect promotion and oracle freeze (proposal: `solution_key-{seq}.patch`). **Closed (D-26).**
 - **O-3** Envelope escape for bodies containing marker lines.
 - **O-4** `G4` for non-Python test suites.
 - **O-5** Initial `forbidden.toml` rules.
 - **O-6** Initial `secrets.toml` patterns and false-positive handling.
-- **O-8** Sanitizing `failing_line` so it cannot carry large oracle excerpts (a length cap exists; character rules do not).
+- **O-8** Sanitizing `failing_line` so it cannot carry large oracle excerpts (a length cap exists; character rules do not). **Closed (INTERFACES §6, O-8).**
 - **O-9** Whether `bundle` offers a zipped or chunked form for chats that accept uploads.
 - **O-12** Multi-account session mechanism: recommended C+A (§8.3); **Owner decides at the start of Stage 4**.
 - **O-13** Whether `arouter ps` gains `--json` (only needed for option A).
