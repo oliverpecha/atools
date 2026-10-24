@@ -1,6 +1,6 @@
 # actl Guide: Running Agent Loops with the atools Suite (and, as it lands, actl)
 
-**Revision:** Oct 14, 2026. **Baseline:** `atools` `main` at `4221952` (`VERSION` v0.1.4), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
+**Revision:** Oct 24, 2026. **Baseline:** `atools` `main` at `6b61504` (`VERSION` v0.1.8; Stage 0 closed, tag `stage-0-verified`), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
 
 **Where this guide fits.** It tells agents how to run loops that get the build Stages implemented. The plan lives in `actl_Build_Plan-Stages0to2.md` (core) and `actl_Build_Plan-Stages0to2_addendum.md` (Stage specifications, branch protocol in its §11, guide update schedule in its §12); the long-term design is `actl_Design.md`. This guide is updated on the schedule in §10 below.
 
@@ -45,7 +45,7 @@ Manual patch application through web chats is error-prone, hallucination-heavy a
   (2) stdout is a TTY + cursor . same tmux session, then auto-streams it to your terminal
   (3) otherwise ................ legacy foreground: timeout --foreground, real exit code, no tmux
 
-  tmux paths: src/router/process.py writes <SESSIONS>/<s>.run.sh and runs it via
+  tmux paths: src/router/process.py writes <SESSIONS>/<s>.run.sh plus a <s>.boot.sh trampoline (it execs the runner) and starts the trampoline via
               `tmux new-session -d -s <s> -c <cwd>`; console mirrored to <LOGS>/<s>.log (pipe-pane)
   runner:     /usr/bin/timeout --foreground -k <grace> <duration> engines/<name>.sh ...
   agent:      headless CLI, governed by ~/.cursor/cli-config.json, global rules, pre-commit hook
@@ -53,6 +53,8 @@ Manual patch application through web chats is error-prone, hallucination-heavy a
 ```
 
 `<LOGS>` is `$ATOOLS_LOG_DIR`, else `/root/.cursor/logs` when `/root/.cursor` exists, else `~/.cursor/logs`. `<SESSIONS>` is `$ATOOLS_SESSION_DIR`, else `~/.cursor/sessions`.
+
+**Tier argument.** The first positional argument is a tier only if it is `cheap`, `balanced`, `smart`, `auto` or an `a`-prefixed form (`acheap`, `abalanced`, `asmart`); otherwise the tier is `auto` and every positional argument is the prompt. `arouter --get` without a tier prints the `auto` mapping.
 
 ### A. Security and process supervision
 
@@ -87,6 +89,19 @@ Interactive Cursor runs are tmux-backed too, and `asessions` does show running s
 
 ---
 
+## 2b. actl (Stage 0) **[new]**
+
+`actl` lives in `src/actl/` and starts with `bin/actl`; `install.sh` does not link it yet, so run `~/atools/bin/actl`. Stage 0 provides:
+
+| Command | Purpose |
+|---|---|
+| `actl doctor [--refresh] [--json]` | Environment baseline. Runs the engines, persistence and exit-code suites and the audit (minutes), writes `$ACTL_ROOT/baseline.json` on the first run only, exits `4` if `tmux` or the audit script is missing |
+| `actl init --target <path-or-url> [--json]` | Create the tree under `$ACTL_ROOT` (default `~/actl-graph`) and clone the target repository (for a local path the base is the source repo's checked-out branch) |
+| `actl sprint new <slug> [--spec FILE] [--json]` | Mint `YYYY-MM-DD_<slug>` (`$ACTL_TODAY` overrides the date), pin `base_sha`, create `runs/state.json`, `runs/sessions.tsv` and a draft `sprint.toml` |
+| `actl next --sprint <TAG> [--json]` | Print the next action (a pure function of the sprint files) |
+
+Exit codes for every command: `0` ok, `1` red, `2` usage or schema error, `3` halt, `4` environment. Every command accepts `--json` and honours `NO_COLOR`. Contract: `src/actl/INTERFACES.md`; specification: `docs/plan/spec-S0.md`; proofs: `bash proof/run_suite_actl_s0.sh` and `PYTHONPATH=src python3 -m pytest -q test/actl`; golden fixture: `fixtures/golden/`. In local mode (one uid) Invariant P is a convention.
+
 ## 3. Installation & Setup **[updated]**
 
 ### A. Cursor Agent CLI
@@ -104,7 +119,7 @@ git clone git@github.com:<org>/atools.git ~/.atools
 cd ~/.atools && ./install.sh
 ```
 
-`install.sh` symlinks `arouter` into `~/.local/bin` and `/usr/local/bin`, writes `acheap`/`abalanced`/`asmart` wrappers (with built-in `--help`), copies `hooks/pre-commit` to `~/.config/git/hooks/pre-commit` and sets `core.hooksPath`, installs the global rules, copies the repair skill, merges Cursor permissions, then runs the proof suite. Do not create an `arun` binary or symlink `agent-router-cursor.py` / `agent-sessions.py`; they belong to the retired layout. `tmux` must be installed.
+`install.sh` symlinks `arouter` into `~/.local/bin` and `/usr/local/bin`, writes `acheap`/`abalanced`/`asmart` wrappers (with built-in `--help`), copies `hooks/pre-commit` and `hooks/commit-msg` to `~/.config/git/hooks/` and sets `core.hooksPath`, installs the global rules, copies the repair skill, merges Cursor permissions, then runs the proof suite. Do not create an `arun` binary or symlink `agent-router-cursor.py` / `agent-sessions.py`; they belong to the retired layout. `tmux` must be installed.
 
 ### C. Map tiers (CLI only)
 
@@ -185,7 +200,7 @@ While streaming, press `Ctrl+C` for the menu: `Enter`/`b` leaves the run in the 
 
 Working directory: the run starts in the dispatching cwd, so dispatch from inside the worktree. Piped stdin: `arouter` reads stdin with `cat` whenever stdin is not a TTY. **In scripts and harnesses always give it input or redirect `< /dev/null`, otherwise it waits for EOF forever.** The piped text is embedded in the prompt argument.
 
-Size limit: the whole prompt is passed as one command-line argument several times over (JSON-serialized with non-ASCII escaped, shell-quoted into the runner, then to the engine). A single Linux argument is limited to about 128 KiB (inference, not tested), so keep instructions small and ASCII-only and put large material in files the agent reads. Test the limit once on your VPS.
+Size limit: the whole prompt is passed as one command-line argument several times over (JSON-serialized with non-ASCII escaped, shell-quoted into the runner, then to the engine). A single Linux argument is limited to 131071 bytes (measured on the VPS: 131071 accepted, 131072 refused), counted on the JSON-escaped size, so keep instructions small and ASCII-only (the build caps them at 100,000 bytes) and put large material in files the agent reads.
 
 An argument equal to `help`, `-h` or `--help` anywhere on the command line prints help instead of running.
 
@@ -209,9 +224,9 @@ bash proof/run_suite_<title>.sh   # re-run yourself; never trust the agent's cla
 git diff --name-only <base>..HEAD -- proof/ fixtures/   # must be empty if those paths are immutable
 ```
 
-### F. Exit status of a detached run **[planned: Stage 0B, requirement S0-R16]**
+### F. Exit status of a detached run **[updated: Stage 0B, requirement S0-R16]**
 
-Today the runner's exit status is lost when the tmux session disappears. Stage 0B adds `<SESSIONS>/<session>.exit`: one integer, written atomically from the runner's EXIT trap before cleanup. Meanings: `0` success, `124`/`137` watchdog, `127` missing CLI, at least `128` after `arouter kill`. A stale file from a reused name is removed at spawn. A runner signalled from outside records 143 (TERM), 129 (HUP) or 130 (INT) once its foreground child has ended; a SIGKILLed or lost session leaves no file. Until Stage 0B merges, determine the outcome from the proof suite and the log. After it merges, poll like this:
+The runner records its exit status in `<SESSIONS>/<session>.exit` (Stage 0B, S0-R16): one integer, written atomically from the runner's EXIT trap before cleanup. Meanings: `0` success, `124`/`137` watchdog, `127` missing CLI, `143` after `arouter kill` (written once the pane processes are gone; if they are not gone the file is removed and the run counts as lost). A stale file from a reused name is removed at spawn. A runner signalled from outside records 143 (TERM), 129 (HUP) or 130 (INT) once its foreground child has ended; a SIGKILLed or lost session leaves no file. Poll like this:
 
 ```bash
 while tmux has-session -t "$S" 2>/dev/null; do sleep 2; done
@@ -241,7 +256,7 @@ Every commit subject ends with exactly one work-item tag `(WI-<id>)`. The rules 
 | `WI-IFACE` | `src/actl/INTERFACES.md` | `docs(actl): freeze interfaces (WI-IFACE)` |
 | `WI-<AREA>-<n>` | Housekeeping, with `AREA` one of `AUDIT`, `DOCS`, `RULES`, `TOOLS` (router, sessions, engines, installer) and `n` the next free number | `docs(plan): refresh baseline (WI-DOCS-2)` |
 
-Rules: one tag per commit (name any other requirements in the body); the tag goes at the end of the subject line; do not retag old commits. Next free housekeeping number: `git log --format=%s | grep -o '(WI-AUDIT-[0-9]*)' | sort -V | tail -1` (change `AUDIT` as needed). Used so far: `AUDIT-2`, `AUDIT-3`, `DOCS-1`, `RULES-1`.
+Rules: one tag per commit (name any other requirements in the body); the tag goes at the end of the subject line; do not retag old commits. Next free housekeeping number: `git log --format=%s | grep -o '(WI-AUDIT-[0-9]*)' | sort -V | tail -1` (change `AUDIT` as needed). Used so far (highest per area on `main`): `AUDIT-3`, `DOCS-4`, `RULES-1`, `TOOLS-2`.
 
 **Mechanical commit format** (`hooks/commit-msg`): subject must match `<type>(<scope>): <summary> (WI-<id>)` where type is one of `feat|fix|refactor|perf|test|proof|audit|eval|spec|chore|docs` (synonyms rejected with a canonical hint). Scope must name a module/subsystem (never `s0`, `stage*`, `v1.2`, `wip`, `main`, `master`). Body must include non-empty `Why:` (cite prior work as bare SHAs like `85523a0`, never `commit <sha>`), `What changed:` with at least one `- <file>: <change>` bullet, and `Result:` with metrics/invariants. Never bypass with `--no-verify` / `-n`.
 
@@ -257,6 +272,8 @@ Sections 5A and 5B are applied by `install.sh`.
 2. All experiments on isolated `wip/*` branches.
 3. Never `git push` or modify remote refs.
 4. Never commit until tests/proofs pass; end every run with `git status`.
+5. Commit protocol: every subject is `<type>(<scope>): <summary> (WI-<id>)` and the message has `Why:`, `What changed:` and `Result:` sections; never bypass hooks (`--no-verify`, `-n`) or touch `core.hooksPath`.
+6. Never check out, rebase or mutate a branch that is checked out in another linked worktree; integrate across worktrees with `--no-ff` merges on the integration branch.
 
 ### B. Permissions (`~/.cursor/cli-config.json`)
 
@@ -275,9 +292,9 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 | Agent CLI | `agent` (`~/.local/bin`) | Cursor Agent binary |
 | Router | `bin/arouter` → `~/.local/bin`, `/usr/local/bin` | Tiers, engines, watchdog, three execution paths, process commands |
 | Session runtime | `src/router/process.py` | Runner generation, tmux spawn, ps/attach/logs/kill, metadata, linger |
-| Runner scripts | `<SESSIONS>/<s>.run.sh` | Ephemeral; remove themselves |
+| Runner scripts | `<SESSIONS>/<s>.run.sh`, `<SESSIONS>/<s>.boot.sh` | Ephemeral; remove themselves (`boot.sh` execs `run.sh`) |
 | Session metadata | `<SESSIONS>/<s>.json` | Tier, model, engine, start time, prompt, watchdog; removed on exit |
-| Exit status **[planned]** | `<SESSIONS>/<s>.exit` | Integer exit status (Stage 0B, S0-R16) |
+| Exit status | `<SESSIONS>/<s>.exit` | Integer exit status (Stage 0B, S0-R16); survives cleanup; not removed by `asessions rm` |
 | Console logs | `<LOGS>/<s>.log` | Raw PTY capture; not removed by `asessions rm` |
 | Tier entrypoints | `/usr/local/bin/{acheap,abalanced,asmart}` | Wrappers with `--help`, delegating to `arouter <tier>` |
 | Session auditing | `bin/asessions` → `src/sessions/` | Explorer, static list, transcripts, economics, `rm` |
@@ -285,8 +302,9 @@ Allowlist, denylist, and the `--auto-review` classifier for the rest. Re-run `./
 | Worker skill | `.cursor/skills/atools-repair/SKILL.md` | Headless repair protocol |
 | Global rules, guardrails, hooks | `~/.cursor/rules/`, `~/.cursor/cli-config.json`, `~/.config/git/hooks/{pre-commit,commit-msg}` | Policy |
 | Tier mapping | `~/.cursor/arouter-config.json` | Edit only via `arouter --set` |
-| Proof suites | `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh` | 5 + 6 assertions |
+| Proof suites | `proof/run_suite_engines.sh`, `proof/run_suite_session_persistence.sh`, `proof/run_suite_exit_code.sh`, `proof/run_suite_actl_s0.sh`, `proof/run_suite_commit_msg.sh`; `pytest test/actl` | engines 5, persistence 6, exit-code 10, Stage 0A gate 19, commit-msg 16 assertions plus the pytest suite |
 | Compliance audit | `audit/atools-compliance_audit.sh --cursor` | 49 checks (18 planned SKIPs); `--self-test`; spec in `audit/README.md` |
+| actl CLI (Stage 0) | `bin/actl` → `src/actl/`, `schemas/`, `config/graph.toml` | `doctor`, `init`, `next`, `sprint new`; run it from the repo, `install.sh` does not link it |
 
 ---
 
@@ -307,8 +325,11 @@ bash proof/run_suite_session_persistence.sh
 bash audit/atools-compliance_audit.sh --cursor
 bash audit/atools-compliance_audit.sh --self-test
 diff -u hooks/pre-commit ~/.config/git/hooks/pre-commit
-# after Stage 0B: bash proof/run_suite_exit_code.sh
-# after Stage 0A: bash proof/run_suite_actl_s0.sh
+bash proof/run_suite_exit_code.sh
+bash proof/run_suite_actl_s0.sh
+bash proof/run_suite_commit_msg.sh
+PYTHONPATH=src python3 -m pytest -q test/actl
+diff -u hooks/commit-msg ~/.config/git/hooks/commit-msg
 ```
 
 All must pass (and the diff be empty) after every change to `bin/`, `src/router/`, `src/sessions/`, `engines/`, `hooks/`, `install.sh` or the skill.
@@ -321,11 +342,11 @@ All must pass (and the diff be empty) after every change to `bin/`, `src/router/
 | Piped stdin in detached runs; cwd and worktrees | Resolved (§4C) |
 | `asessions rm` scope | Resolved (§4G) |
 | Installed vs repo hook | Resolved: synced by `install.sh` (§5C) |
-| Exit status of detached runs | **Decided, planned** (§4F, Stage 0B) |
+| Exit status of detached runs | Resolved (§4F, Stage 0B) |
 | Log retention owner | **Decided:** mechanisms stay in the suite components; policy for `actl`-dispatched sessions belongs to `actl` |
 | Sessions across several OS accounts | **Open:** options and a recommendation are in the addendum §8.3; decided at the start of Stage 4 |
 | `.git/hooks/pre-commit.local` inside worktrees | Unverified; do not rely on it |
 
 ## 10. Keeping this guide current
 
-The guide is updated when a Stage lands, on the schedule in the addendum §12.1: small after Stage 0 (retire the **[planned]** markers, add `actl doctor`, `run_suite_exit_code.sh` and `run_suite_actl_s0.sh`); **major after Stage 1** (add the hidden-proof loop: `actl dispatch-impl`, `wait`, `verify-impl`, `next`); medium after Stage 2 (`bundle`, `unpack`, `promote`, `replay`); **major after Stage 3** (oracle qualification and the self-hosting decision); then as Stages 4–6 ship. Each update follows the procedure in the addendum §12.2: re-verify every command against `--help` and the merged code, mark changed sections, run the commands once in a scratch worktree, refresh the baseline line, and have the Owner review before the next Stage's implementation starts.
+The guide is updated when a Stage lands, on the schedule in the addendum §12.1: small after Stage 0 (retire the **[planned]** markers, add `actl doctor`, `run_suite_exit_code.sh` and `run_suite_actl_s0.sh`; applied Oct 24, 2026); **major after Stage 1** (add the hidden-proof loop: `actl dispatch-impl`, `wait`, `verify-impl`, `next`); medium after Stage 2 (`bundle`, `unpack`, `promote`, `replay`); **major after Stage 3** (oracle qualification and the self-hosting decision); then as Stages 4–6 ship. Each update follows the procedure in the addendum §12.2: re-verify every command against `--help` and the merged code, mark changed sections, run the commands once in a scratch worktree, refresh the baseline line, and have the Owner review before the next Stage's implementation starts.
