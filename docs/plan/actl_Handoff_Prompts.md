@@ -7,7 +7,7 @@
 **Order**
 1. Commit the lock under `docs/` on a `wip/*` branch and merge it yourself (the hook blocks direct commits to `main`).
 2. Optional five-minute measurements that the addendum still lists as open (F16 group case, O-15); snippets below.
-3. Generate the repo dump (snippet below) and keep `paste.txt` (the `git log -p -3` diffs).
+3. Generate the repo dump (snippet below) and `atools_code_facts.txt` (generator in "Facts file" below); the facts file replaces the old paste.txt (`git log -p -3` diffs), which went stale when `bin/arouter` changed.
 4. Run **A1** (interfaces). Review and accept `src/actl/INTERFACES.md`; commit it.
 5. Run **A2**, **B** and **C** in parallel. They share only the accepted interface file.
 6. Integrate: merge the three outputs; run every gating suite (each must exit `1`); run the golden self-check (must exit `0`).
@@ -33,10 +33,10 @@
 | Prompt | Always attach | Also attach |
 |---|---|---|
 | A1 | `actl_Design.md`, core, addendum | repo dump (below) |
-| A2 | same three | `INTERFACES.md` (accepted A1 output), repo dump, `paste.txt`, `actl_Guide.md` |
-| B | same three | `INTERFACES.md`, repo dump, `paste.txt`, `actl_Guide.md` |
+| A2 | same three | `INTERFACES.md` (accepted A1 output), repo dump, `atools_code_facts.txt`, `actl_Guide.md` |
+| B | same three | `INTERFACES.md`, repo dump, `atools_code_facts.txt`, `actl_Guide.md` |
 | C | same three | `INTERFACES.md`, repo dump |
-| D | same three | every author output (specs, proofs, tests, fixtures), `INTERFACES.md`, `actl_Guide.md`, repo dump, `paste.txt` |
+| D | same three | every author output (specs, proofs, tests, fixtures), `INTERFACES.md`, `actl_Guide.md`, repo dump, `atools_code_facts.txt` |
 
 If the agent works inside the worktree, the first three files are already under `docs/`.
 
@@ -70,6 +70,15 @@ EOF
 
 ---
 
+### Facts file (`atools_code_facts.txt`)
+
+Regenerate it at the commit the authors work from; it replaces the old paste.txt. Run in `~/atools`, with `T` set to your scratch folder:
+
+```bash
+{ printf '# atools_code_facts.txt HEAD=%s VERSION=%s generated=%s\n' "$(git rev-parse --short HEAD)" "$(cat VERSION)" "$(date -u +%FT%TZ)"
+  git ls-files -- bin/arouter bin/asessions bin/actl 'src/router/*.py' 'src/core/*.py' 'engines/*.sh' hooks/pre-commit hooks/commit-msg rules/git-safety.md install.sh 'proof/run_suite_*.sh' .cursor/skills/atools-repair/SKILL.md audit/README.md | LC_ALL=C sort | while IFS= read -r f; do printf '==> %s <==\n' "$f"; git show "HEAD:$f"; printf '\n'; done; } > "${T:-/tmp}/atools_code_facts.txt"
+```
+
 ## 1. COMMON BLOCK (paste at the top of every author prompt)
 
 ```text
@@ -93,6 +102,8 @@ RULES
 8. Be concrete: exact commands, exact file paths, exact expected exit codes and substrings. No placeholders such as "TBD" or "etc.".
 9. Stay in scope: produce only the deliverables listed for your prompt.
 10. COMMITS: if you commit, end each commit subject with exactly one work-item tag: (WI-S<n>-SPEC) for specification text, (WI-S<n>-PROOF) for proofs, tests, fixtures and stubs, (WI-IFACE) for INTERFACES.md.
+
+PROOF QUALITY (mutation-tested): your proofs will be mutation-tested on fresh seeds. Test every boundary (n-1, n, n+1), every default, and the exact error class and exit code; assert exact values (file modes with stat.S_IMODE, counters after N operations, ordering with out-of-order inputs, exact error pointers), never 'non-empty' or '>= 128'. Add decoys: near-miss names, bool for int, tuple for list, empty string, NUL, trailing newline. Every guard needs a positive and a negative test; flag dead code for deletion instead of leaving it untested. Derive expectations independently of the implementation (a reference or a differential test). State which mutation classes each proof kills (flipped comparison, and/or swap, removed negation, constant +1, default flip). Do not edit INTERFACES.md or existing files under proof/, fixtures/ or test/actl/ (PB-2); add new files and your expected.d fragment.
 
 OUTPUT FORMAT
 - If you have a filesystem: write the files in place and finish by printing the tree of what you created plus the self-check below.
