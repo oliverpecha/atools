@@ -154,7 +154,19 @@ def test_reconstruct_resolved_escalation_clears_hold_status(tmp_path):
 
 # S41-seq:378 & 383: cand.is_file() and cand != p, and mkind == "spec"
 # Mutants: '!=' -> '==' (treats p as its own meta file) or 'mkind == "spec"' -> '!='
-def test_reconstruct_sidecar_meta_sets_active_spec(tmp_path):
+# S41-seq:378 (!= -> ==, and -> or) & S41-seq:383 (== -> !=)
+# When a patch artifact (solution_key-001.patch) has a companion stem sidecar (solution_key-001.meta.json)
+# specifying kind="spec" and seq=5:
+# - Candidate 1: solution_key-001.patch.meta.json (does NOT exist)
+# - Candidate 2: solution_key-001.meta.json (EXISTS)
+#
+# Original: candidate 1 is skipped (not is_file()), candidate 2 is read, mkind == "spec" matches,
+#           and state["active_spec"] becomes "spec-005.md".
+# Mutant 1 (seq:378 != -> ==): cand == p is False for both candidates, skipping sidecar processing.
+# Mutant 2 (seq:378 and -> or): cand != p is True for candidate 1, triggering is_file() or True -> True,
+#           raising FileNotFoundError on read, caught by except OSError, and breaking before candidate 2.
+# Mutant 3 (seq:383 == -> !=): mkind == "spec" becomes != "spec", ignoring spec sidecars.
+def test_reconstruct_sidecar_stem_meta_sets_active_spec(tmp_path):
     seq_mod = need("actl.seq")
     reconstruct = need_attr(seq_mod, "reconstruct")
     read_state = need_attr(seq_mod, "read_state")
@@ -165,18 +177,20 @@ def test_reconstruct_sidecar_meta_sets_active_spec(tmp_path):
     tag = "2026-10-16_demo-sprint"
     lay.ensure_sprint_tree(tag)
 
-    # Create an artifact file and its companion sidecar meta file
-    art = lay.sprint_dir(tag) / "spec-001.md"
-    art.write_text("# Spec Content", encoding="utf-8")
+    # Solution key artifact has an extension (.patch), so:
+    # cand 1 = p.with_name(p.name + ".meta.json") -> solution_key-001.patch.meta.json (does NOT exist)
+    # cand 2 = p.with_name(p.stem + ".meta.json") -> solution_key-001.meta.json (EXISTS)
+    art = lay.sprint_dir(tag) / "solution_key-001.patch"
+    art.write_text("patch content", encoding="utf-8")
 
     meta = {
         "kind": "spec",
-        "seq": 1,
+        "seq": 5,
         "sha256": "0" * 64,
     }
-    sidecar = lay.sprint_dir(tag) / "spec-001.md.meta.json"
+    sidecar = lay.sprint_dir(tag) / "solution_key-001.meta.json"
     sidecar.write_text(json.dumps(meta), encoding="utf-8")
 
     reconstruct(lay, tag)
     st = read_state(lay, tag)
-    assert st["active_spec"] == "spec-001.md", "Sidecar meta must set active_spec"
+    assert st["active_spec"] == "spec-005.md", f"Expected spec-005.md from sidecar, got: {st['active_spec']}"
