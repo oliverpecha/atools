@@ -221,10 +221,13 @@ S41-13 sprint.py:61 True to False: equivalent (same as S37-12). Subprocess stdou
 S41-14 cli.py:70 False to True: equivalent (same as EQ-D). Every CLI subcommand registers --json via store_true.
 S41-15 process.py:514 143 to 144: empirically killed-by test_s0_gap2_router.py::test_kill_overwrites_129_with_143[server-already-gone].
 S41-16 process.py:227 not deleted: empirically killed-by test_s0_gap3_process.py::test_get_running_sessions_filter.
-S41-17 process.py:690 1 to 2: out-of-scope pre-existing code from 2acaf3c. Prompt extraction positional argument offset.
+S41-17 process.py:690 1 to 2: dispatch_args[1:] extracts prompt_text stored solely in the metadata JSON session file and unread by any S0-R16 execution or verification path.
 S41-18 process.py:514 True to False: empirically killed-by test_s0_gap2_router.py::test_kill_overwrites_129_with_143.
-S41-19 process.py:737 True to False: out-of-scope pre-existing code from 2acaf3c (same as S23-11).
-S41-20 process.py:608 0o755 to 0o756: out-of-scope pre-existing code from 2acaf3c (same as S23-09).
-S41-21 process.py:172 False to True: out-of-scope pre-existing code from 2acaf3c (same as S11-42).
-S41-22 process.py:504 False to True: out-of-scope pre-existing code from 2acaf3c. Any CalledProcessError on kill is caught by enclosing except Exception.
+S41-19 process.py:737 True to False: capture text=True in subprocess.run tmux launch affects only the decoded error string printed to stderr on tmux launch failure; exit behavior and metadata cleanup are unaffected.
+S41-20 process.py:608 0o755 to 0o756: empirically killed-by test_s0_gap4_boot_mode.py::test_boot_trampoline_mode_is_0755. Verifies trampoline script permissions are strictly 0o755 and not world-writable 0o756.
+S41-21 process.py:172 False to True: check=False vs check=True in tmux list-sessions is equivalent because the call is guarded by an immediate try/except Exception that catches CalledProcessError and returns {}.
+S41-22 process.py:504 False to True: check=False vs check=True on kill -15 is equivalent because it sits inside a per-pid loop with try: ... except Exception: pass, which catches CalledProcessError if the process terminates concurrently.
 S41-23 process.py:107 True to False: empirically killed-by test_s0_gap3_process.py::test_wait_permission_error_returns_false_after_timeout.
+
+## G. Residual risk and standing rule
+First-pass survival on untuned seeds: seed 37 21/153 (13.7%), seed 41 23/153 (15.0%). Each new seed has found about nine real gaps, and fixing them did not lower the next seed's first-pass rate. Stage 0 is closed with this known tail. Standing rule: every later stage merge re-runs mutate_s0.py on the Stage 0 modules with a seed not used before, and a real gap in a protected file blocks the merge.
