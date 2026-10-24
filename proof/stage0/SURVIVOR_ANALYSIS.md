@@ -231,3 +231,10 @@ S41-23 process.py:107 True to False: empirically killed-by test_s0_gap3_process.
 
 ## G. Residual risk and standing rule
 First-pass survival on untuned seeds: seed 37 21/153 (13.7%), seed 41 23/153 (15.0%). Each new seed has found about nine real gaps, and fixing them did not lower the next seed's first-pass rate. Stage 0 is closed with this known tail. Standing rule: every later stage merge re-runs mutate_s0.py on the Stage 0 modules with a seed not used before, and a real gap in a protected file blocks the merge.
+
+### Verified full-harness closure metrics (all pytest suites wired to BASH_TARGETS)
+- Seed 37: TOTAL 153 | killed 137 | survived 8 | invalid 8
+  - Survivors (8): hashing:27, hashing:42, seq:103, sprint:61, process:668, process:687, process:98, process:181.
+- Seed 41: TOTAL 153 | killed 136 | survived 9 | invalid 8
+  - Survivors (9): hashing:42, ids:68, sprint:63, sprint:61, cli:70, process:690, process:737, process:172, process:504.
+  - process:608 (0o755 -> 0o756) verified killed by test_s0_gap4_boot_mode.py.
