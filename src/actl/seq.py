@@ -127,9 +127,9 @@ def state_lock(layout: Layout, tag: str) -> Iterator[None]:
 
 
 def _check_state_repo(layout: Layout, state: dict[str, Any]) -> None:
-    if state.get("repo") != layout.repo:
+    if "repo" in state and state["repo"] != layout.repo:
         raise StateIntegrityError(
-            f"state.repo {state.get('repo')!r} != layout.repo {layout.repo!r}"
+            f"state.repo {state['repo']!r} != layout.repo {layout.repo!r}"
         )
 
 
