@@ -48,7 +48,11 @@ is_authorized_pb2_modification() {
   local blob
   blob="$(git -C "$REPO" hash-object "$f" 2>/dev/null || true)"
   case "$f:$blob" in
+    "docs/plan/layout-transition-memo.md:a813524440dfdd2f9809f6730a3de85595d4808f") return 0 ;;
+    "docs/plan/runbooks/layout-transition-a-authoring.md:b0a9aa964f8ab8811a472fc92d36acea4465d341") return 0 ;;
     "fixtures/golden/artifacts/README.md:7e42b1641e858ed82d860170eb9d0321dd9d69c8") return 0 ;;
+    "tools/mutate.py:a2e4042a9e0c1c05c9dafff2e21948626ab68c19") return 0 ;;
+    "tools/unfiles.py:3faa8220b2afb6f359bd04e51b6235205b0375e6") return 0 ;;
     "fixtures/golden/artifacts/invalid/contract/budgets_forbidden.json:15f8a01683aa1db230cbfc91eaf371ce7ddde436") return 0 ;;
     "fixtures/golden/artifacts/invalid/contract/epoch_zero.json:a94eb76e65171e92d5062f84a33be0561b9fb778") return 0 ;;
     "fixtures/golden/artifacts/invalid/contract/id_pattern.json:e6636e9ccc91e384d2e07c15cc1e76f0a5c9b33e") return 0 ;;
@@ -182,8 +186,15 @@ is_authorized_pb2_modification() {
 is_allowed_addition() {
   local f="$1"
   [[ "$f" == "src/actl/INTERFACES.md" ]] && return 1
+  # L-6/PB-2 tools and locked LT docs: pin-attested only (never via glob; DC-1)
   case "$f" in
-    src/actl/*|schemas/*|proof/stage0/*|test/actl/*|fixtures/*|tools/*) return 0 ;;
+    tools/*|docs/plan/layout-transition-memo.md|docs/plan/runbooks/layout-transition-a-authoring.md)
+      is_authorized_pb2_modification "$f" && return 0
+      return 1
+      ;;
+  esac
+  case "$f" in
+    src/actl/*|schemas/*|proof/stage0/*|test/actl/*|fixtures/*) return 0 ;;
     docs/design/*|docs/plan/*|docs/guide/*) return 0 ;;
     config/graph.toml|bin/actl|install.sh|README.md|proof/run_suite_actl_s0.sh|proof/run_suite_gate_d.sh|docs/plan/spec-S0.md) return 0 ;;
     *) return 1 ;;
@@ -276,7 +287,7 @@ while IFS=$'\t' read -r st a b; do
   elif [[ "$st" == C* ]]; then
     bad "S0-R2.3 (PB-2): copy not allowed in frozen path: $a -> $b"
   fi
-done < <(git -c diff.renames=true diff --name-status -M "$FORK" -- proof fixtures test/actl src/actl/INTERFACES.md | grep -v $'\tproof/out/')
+done < <(git -c diff.renames=true diff --name-status -M "$FORK" -- proof fixtures test/actl src/actl/INTERFACES.md tools docs/plan/layout-transition-memo.md docs/plan/runbooks/layout-transition-a-authoring.md | grep -v $'\tproof/out/')
 
 # Negative self-checks (executed once when not in a self-test run)
 if [[ -z "${ACTL_P02_SELFTEST:-}" ]]; then
