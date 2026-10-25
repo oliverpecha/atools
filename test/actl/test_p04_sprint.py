@@ -9,7 +9,7 @@ import pytest
 from helpers import *  # noqa
 
 HEADER = "seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n"
-NEW_KEYS = {"sprint_tag", "slug", "base_sha", "sprint_dir", "handoff_dir", "spec_source", "active_spec", "seq"}
+NEW_KEYS = {"sprint_tag", "slug", "base_sha", "sprint_dir", "mailboxes_dir", "spec_source", "active_spec", "seq"}
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def test_sprint_new_happy_path(inited):
     sd = root / "records" / "target-repo" / tag
     runs = root / "sprints" / "target-repo" / tag / "runs"
     mailboxes = root / "sprints" / "target-repo" / tag / "mailboxes"
-    if d["sprint_dir"] != str(sd) or d["handoff_dir"] != str(mailboxes): fail("sprint_dir/handoff_dir wrong")
+    if d["sprint_dir"] != str(sd) or d["mailboxes_dir"] != str(mailboxes): fail("sprint_dir/mailboxes_dir wrong")
     for role in ROLES:
         if not (mailboxes / role / "inbox").is_dir() or not (mailboxes / role / "outbox").is_dir():
             fail("mailboxes dirs missing for %s" % role)

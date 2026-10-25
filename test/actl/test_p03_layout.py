@@ -67,7 +67,7 @@ def test_base_tree_and_modes_applied_regardless_of_umask(tmp_path):
         if mode(lay.outbox(TAG, role)) != 0o770: fail("%s outbox must be 0770, got %o" % (role, mode(lay.outbox(TAG, role))))
     for p in (lay.sprint_dir(TAG), lay.runs_dir(TAG), lay.logs_dir(TAG), lay.turns_dir(TAG), lay.mailboxes(TAG)):
         if not p.is_dir(): fail("%s was not created by ensure_sprint_tree" % p)
-    if not (r / "profiles" / "README.md").is_file(): fail("profiles/README.md missing")
+    if (r / "profiles" / "README.md").is_file(): fail("ensure_base_tree must not write profiles/README.md (actl init only, L-8)")
     if (r / "repos" / "target-repo").exists(): fail("ensure_base_tree must not create repos/target-repo")
 
 
