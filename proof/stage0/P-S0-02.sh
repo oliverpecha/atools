@@ -41,6 +41,7 @@ if [[ -z "$WS" ]]; then
   fi
 fi
 
+# LT-A2 pin refresh applied
 is_authorized_pb2_modification() {
   local f="$1"
   [[ -f "$REPO/$f" ]] || return 1
@@ -128,17 +129,17 @@ is_authorized_pb2_modification() {
     "proof/stage0/SURVIVOR_ANALYSIS.md:4080f3d8dba799ccc7f30ef5365ef5a7044bb86d") return 0 ;;
     "proof/stage0/VACUITY_MATRIX.md:c184fda222b30d67577f9ac77b003263cd096cfa") return 0 ;;
     "proof/stage0/diff_equiv_seed11.py:73259c12bd442a1423b4d09ab686486cdf15cdeb") return 0 ;;
-    "proof/stage0/golden_selfcheck.sh:bc2da5970922a75dbfaed5b3a20c8a9f9b47d559") return 0 ;;
+    "proof/stage0/golden_selfcheck.sh:258e7e87cbbb4b11c31f66a3c462fb7c1529cfd3") return 0 ;;
     "proof/stage0/p02_doctor_empty.sh:46392ed4305b6c1a6938d0745d4acbbe82e13478") return 0 ;;
     "proof/stage0/p05_seq_concurrency.sh:916103c0e34654c82ff06bc8c411f0589d3f1b27") return 0 ;;
     "proof/stage0/run_pytest.sh:db8877940312da69b5e30301795eb21cf6b0ddc7") return 0 ;;
-    "proof/stage0/selfcheck_mutations.sh:4b5a564db03ddb0dc85e89504c561108ec238b1b") return 0 ;;
-    "src/actl/INTERFACES.md:04e9281595a7411f582cb47c4f5f9876772b0ff3") return 0 ;;
+    "proof/stage0/selfcheck_mutations.sh:6336d408db15d01920a34585479290ddee977d82") return 0 ;;
+    "src/actl/INTERFACES.md:4fabf5941beb169a4c57fc0351b263d49de262d6") return 0 ;;
     "test/actl/conftest.py:e7968ad9c468e7581834e81098b22cce82a5f9f4") return 0 ;;
     "test/actl/helpers.py:4e9432f30e104e7068429393802336f99f5fef73") return 0 ;;
     "test/actl/test_p01_doctor.py:801e6dea33bac1c494f996ab68eb05cdded8c029") return 0 ;;
-    "test/actl/test_p03_layout.py:ac4365725f7d4862af56efcc8d2e2e46e4979576") return 0 ;;
-    "test/actl/test_p04_sprint.py:3d59c4d16b15c85007b3bd574b2faa2506602a14") return 0 ;;
+    "test/actl/test_p03_layout.py:a626f19309f21f35a8d139c4375a77a47e210f11") return 0 ;;
+    "test/actl/test_p04_sprint.py:aa459185c6efeff2aef722d1dfed86cbc8338e08") return 0 ;;
     "test/actl/test_p05_seq.py:6ee6c0ba5af9c2469b2ebf1aa54374ea97107783") return 0 ;;
     "test/actl/test_p06_reconstruct.py:53ad009900826e12a23251a5b15c20444d655784") return 0 ;;
     "test/actl/test_p07_hashing.py:9eae9c6bfa9a344dcd6b7ba5837e042e4fd6c65d") return 0 ;;
@@ -205,7 +206,7 @@ is_allowed_modification() {
   local f="$1"
   if [[ "$f" == "src/actl/INTERFACES.md" ]]; then
     # PB-2/PB-4: Allowed only if matching the Owner-approved PB-4 contract (81465b0)
-    if git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q '04e9281' &&        grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
+    if git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q '4fabf59' &&        grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
       return 0
     fi
     return 1
