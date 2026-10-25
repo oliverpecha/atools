@@ -174,7 +174,7 @@ Execute iterative code changes against deterministic test suites without user in
 ### A. Preparing a run
 
 1. Create an isolated worktree on a `wip/*` branch and `cd` into it: `git worktree add ../<name> -b wip/<task> && cd ../<name>`. Branch names, merge gates and parallel rules for the build are in the addendum §11.
-2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits, `(WI-<id>)` (convention in §4I).
+2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, `fixtures/`, `test/actl/`, `src/actl/INTERFACES.md`, and `tools/` under PB-2), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits, `(WI-<id>)` (convention in §4I).
 3. Confirm the suite is **Red on base**: it must exit `1` before the agent starts.
 
 ### B. Foreground run
@@ -231,7 +231,7 @@ Explorer keys: arrows or `w`/`s` to move, `Enter` to open a history item or atta
 
 ```bash
 bash proof/run_suite_<title>.sh   # re-run yourself; never trust the agent's claim
-git diff --name-only <base>..HEAD -- proof/ fixtures/   # must be empty if those paths are immutable
+git diff --name-only <base>..HEAD -- proof/ fixtures/ test/actl/ src/actl/INTERFACES.md tools/   # must be empty (PB-2)
 ```
 
 ### F. Exit status of a detached run **[updated: Stage 0B, requirement S0-R16]**
