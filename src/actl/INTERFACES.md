@@ -161,7 +161,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`reconstruct(layout: Layout, tag: str) -> int`** (`kind: function`)
 * **Preconditions:** `layout.sprint_dir(tag)` exists.
-* **Return value:** Highest `seq` integer (`>= 0`) across `runs/seq.highwater` (written by `reserve` before returning), `sprint_dir(tag)`, `runs_dir(tag)`, `handoff(tag)/*/*` (two levels, file names only), and `$ACTL_ROOT/workspaces/{tag}/implementer-*` via `parse_seq_from_name`. Replays existing `*.meta.json`, `qual-*.json`, `contract-*.json`, `closure-*.json`, `ev-*.json`, and `escalation-*.json` in `seq` order to deterministically restore `run_id`, `sprint_tag`, `active_spec`, `active_solution_key`, `active_oracle_draft`, `active_oracle`, `active_contract`, `epoch`, `status`, `active_stage`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
+* **Return value:** Highest `seq` integer (`>= 0`) across `runs/seq.highwater` (written by `reserve` before returning), `sprint_dir(tag)`, `runs_dir(tag)`, `mailboxes(tag)/*/*` (two levels, file names only), and `sprints/<repo>/<tag>/workspaces/implementer-*` via `parse_seq_from_name`. Replays existing `*.meta.json`, `qualification-*.json`, `contract-*.json`, `closure-*.json`, `verification-*.json`, and `escalation-*.json` in `seq` order to deterministically restore `run_id`, `sprint_tag`, `active_spec`, `active_solution_key`, `active_oracle_draft`, `active_oracle`, `active_contract`, `epoch`, `status`, `active_stage`, `attempts`, `closures_submitted`, `hard_caps_tripped`, and `grants`.
 * **Errors raised:** `FileNotFoundError` if `sprint_dir(tag)` is missing; `OSError` on write failure.
 * **Side effects:** Under `runs/state.lock`, rebuilds or updates `runs/state.json` atomically with `seq = max_seq`.
 * **Idempotence:** Idempotent when no new artifacts are created between calls.
@@ -293,9 +293,9 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`create_sprint(layout: Layout, slug: str, spec_path: Path | str | None = None) -> dict[str, Any]`** (`actl.sprint`, `kind: function`)
 * **Preconditions:** `validate_slug(slug)` is `True`; `layout.target_repo` is a valid git repo; minted `sprint_tag` does not exist; `spec_path` (if given) is an existing file.
-* **Return value:** Dict with keys `sprint_tag`, `slug`, `base_sha`, `sprint_dir`, `handoff_dir`, `spec_source`, `active_spec`, `seq`.
+* **Return value:** Dict with keys `sprint_tag`, `slug`, `base_sha`, `sprint_dir`, `mailboxes_dir`, `spec_source`, `active_spec`, `seq`.
 * **Errors raised:** `ValueError` on invalid slug or existing sprint tag; `FileNotFoundError` if `target_repo` or `spec_path` is missing.
-* **Side effects:** Creates sprint and handoff trees, `runs/state.json`, `runs/sessions.tsv` (header row), draft `sprint.toml` (`status = "draft"`, `live_run` omitted), and if `spec_path` is provided, reserves `seq = 1`, copies `spec-001.md` + `spec-001.md.meta.json`, and sets `spec_source = "imported"` and `active_spec = "spec-001.md"`.
+* **Side effects:** Creates sprint and mailboxes trees, `runs/state.json`, `runs/sessions.tsv` (header row), draft `sprint.toml` (`status = "draft"`, `live_run` omitted), and if `spec_path` is provided, reserves `seq = 1`, copies `spec-001.md` + `spec-001.md.meta.json`, and sets `spec_source = "imported"` and `active_spec = "spec-001.md"`.
 * **Idempotence:** Non-idempotent (refuses duplicate `sprint_tag` on the same date).
 
 
@@ -402,10 +402,10 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`verify_impl(layout: Layout, tag: str, closure_path: Path | None = None, worktree: Path | None = None, fail_fast: bool = True, session_info: dict[str, Any] | None = None, strict_tripwire: bool = False) -> dict[str, Any]`** (`actl.verify`, `kind: function`)
 * **Preconditions:** Sprint `tag` has an active contract and oracle. `closure_path=None` evaluates no closure (`G2` and the blocked-precondition check are skipped, nothing is stamped, `closures_submitted` is unchanged); `worktree=None` resolves to the attempt workspace `layout.workspace(f"implementer-{attempt_seq:03d}", tag)` (proposed; Owner to confirm).
-* **Return value:** Validated `ev-{seq}.json` dict (`exit_code` in `{0, 1, 3}`).
+* **Return value:** Validated `verification-{seq}.json` dict (`exit_code` in `{0, 1, 3}`).
 * **Errors raised:** `FileNotFoundError`, `ValueError`.
-* **Side effects:** Accepts `closure_path` at either `implementer-outputs/closure.json` or `closure-{seq:03d}.json`, stamps `kind="closure"`, `seq`, `parent=contract_id` into `runs/closure-{seq:03d}.json`, sets `ev.parent = f"closure-{attempt_seq:03d}.json"`, forces `G2` red if `session_info` has `lost=True` or `hard_cap=True`, evaluates post-`O2` blocked preconditions when `reason == "blocked"`, writes `runs/ev-{seq:03d}.json` (plus `handoff/{tag}/implementer-inputs/prior_attempt.json` when `exit_code == 1`, S1-R7), increments `closures_submitted` once per stamped closure via `update_state`, merges `scan_tripwires` output into `ev.tripwires` (a non-empty result makes the run red when `strict_tripwire=True`), and only then unlinks original `<LOG_DIR>/<session>.log` and `<METADATA_DIR>/<session>.exit`.
-* **Idempotence:** Non-idempotent (reserves a new `seq` and writes `runs/ev-{seq}.json` per call; deterministic outputs modulo `seq`, `id`, and `duration_ms`).
+* **Side effects:** Accepts `closure_path` at either `implementer-outputs/closure.json` or `closure-{seq:03d}.json`, stamps `kind="closure"`, `seq`, `parent=contract_id` into `runs/closure-{seq:03d}.json`, sets `verification.parent = f"closure-{attempt_seq:03d}.json"`, forces `G2` red if `session_info` has `lost=True` or `hard_cap=True`, evaluates post-`O2` blocked preconditions when `reason == "blocked"`, writes `runs/verification-{seq:03d}.json` (plus `sprints/<repo>/<tag>/mailboxes/implementer/inbox/prior_attempt.json` when `exit_code == 1`, S1-R7), increments `closures_submitted` once per stamped closure via `update_state`, merges `scan_tripwires` output into `verification.tripwires` (a non-empty result makes the run red when `strict_tripwire=True`), and only then unlinks original `<LOG_DIR>/<session>.log` and `<METADATA_DIR>/<session>.exit`.
+* **Idempotence:** Non-idempotent (reserves a new `seq` and writes `runs/verification-{seq}.json` per call; deterministic outputs modulo `seq`, `id`, and `duration_ms`).
 
 
 * **Session Helpers (`actl.session`, Stage 1 — names frozen here, full runtime behavior in `S1-R9`, `S1-R10`, `S1-R14`, `S1-R15`):**
@@ -422,14 +422,14 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Return value:** `{"name": str, "exit_code": int | None, "hard_cap": bool, "lost": bool, "log_sha256": str | None}` (`S1-R14`).
 * **Errors raised:** `ValueError` on invalid name; `RuntimeError` if `shutil.which("tmux")` is `None` (mapped to exit code `4`).
 * **Side effects:** Polls `tmux list-sessions`; calls `arouter kill` on watchdog overrun; reads `.exit` via `router.process.read_exit_code`.
-* **Idempotence:** Idempotent once session has exited and `.exit` file remains on disk. Must be called prior to `archive_session_log` (reads `.exit`; unlinked only after `ev` is written).
+* **Idempotence:** Idempotent once session has exited and `.exit` file remains on disk. Must be called prior to `archive_session_log` (reads `.exit`; unlinked only after `verification` is written).
 
 
 * **`archive_session_log(layout: Layout, tag: str, seq: int, session_name: str) -> str | None`** (`kind: function`)
 * **Preconditions:** Session `session_name` has terminated.
 * **Return value:** 64-char hex SHA-256 of raw `<LOG_DIR>/<session_name>.log`, or `None` if no log file exists (`S1-R15`).
 * **Errors raised:** `OSError`.
-* **Side effects:** Copies `<LOG_DIR>/<session_name>.log` to `runs/logs/impl-{seq:03d}.log` and `<METADATA_DIR>/<session_name>.exit` to `runs/logs/impl-{seq:03d}.exit` and verifies SHA-256; copies and verifies SHA-256 without unlinking; unlink handled by verify_impl after ev fsync (and after `ev` persistence when called from `dispatch-impl`).
+* **Side effects:** Copies `<LOG_DIR>/<session_name>.log` to `runs/logs/impl-{seq:03d}.log` and `<METADATA_DIR>/<session_name>.exit` to `runs/logs/impl-{seq:03d}.exit` and verifies SHA-256; copies and verifies SHA-256 without unlinking; unlink handled by verify_impl after verification fsync (and after `verification` persistence when called from `dispatch-impl`).
 * **Idempotence:** Not idempotent once original log is unlinked (returns existing hash if `runs/logs/impl-{seq:03d}.log` already exists).
 
 
@@ -484,7 +484,7 @@ Exit codes (`S0-R10`): `0` = ok/green, `1` = red (check/replay failed), `2` = us
 | --- | --- | --- | --- |
 | `actl doctor [--refresh] [--json]` | 0A (`S0-R1`) | `0`, `2`, `4` | Same keys as `baseline.json` (§3.3) |
 | `actl init --target <PATH\|URL> [--name <NAME>] [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `actl_root`, `target_repo`, `base_sha`, `created` |
-| `actl sprint new <slug> [--spec <FILE>] [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `sprint_tag`, `slug`, `base_sha`, `sprint_dir`, `handoff_dir`, `spec_source`, `active_spec`, `seq` |
+| `actl sprint new <slug> [--spec <FILE>] [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `sprint_tag`, `slug`, `base_sha`, `sprint_dir`, `mailboxes_dir`, `spec_source`, `active_spec`, `seq` |
 | `actl next --sprint <TAG> [--json]` | 0A/1/2 (`S0-R13`, `S1-R12`, `S2-R10`) | `0`, `2`, `3`, `4` | `action`, `command`, `reason` |
 | `actl selftest [--json]` | 1 (`S1-R3`) | `0`, `2`, `3`, `4` | `ok`, `exit_code`, `steps` |
 | `actl verify-impl --sprint <TAG> --closure <PATH> [--worktree <PATH>] [--no-fail-fast] [--strict-tripwire] [--json]` | 1 (`S1-R11`) | `0`, `1`, `2`, `3`, `4` | Exact `verification-{seq}.json` keys (§3.4) |
@@ -594,12 +594,12 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `kind`: `"spec" | "solution_key" | "oracle-draft"`, `seq`: `int >= 1`, `parent`: `str | null`, `sha256`: `str` (`^[0-9a-f]{64}$`)
 
 
-* **`attempt.json` (`handoff/{tag}/implementer-inputs/attempt.json` — `schemas/attempt.json`, `S1-R8`, `S1-R9`):**
+* **`attempt.json` (`sprints/<repo>/<tag>/mailboxes/implementer/inbox/attempt.json` — `schemas/attempt.json`, `S1-R8`, `S1-R9`):**
 * `seq`: `int >= 1`, `branch`: `str` (`^wip/[0-9]{3,}$`), `sprint_tag`: `str` (optional), `contract`: `str` (optional), `spec`: `str` (optional)
 
 
 
-### 3.5 `prior_attempt.json` (`handoff/{tag}/implementer-inputs/prior_attempt.json` — `schemas/prior_attempt.json`)
+### 3.5 `prior_attempt.json` (`sprints/<repo>/<tag>/mailboxes/implementer/inbox/prior_attempt.json` — `schemas/prior_attempt.json`)
 
 Strictly four keys (`additionalProperties: false`, `P-S1-15`):
 
@@ -755,11 +755,6 @@ Introspection contract for `P-S0-26`:
 * **O-2 (`solution_key` naming & state pointer):** `state.json` tracks `active_solution_key` and `active_oracle_draft` explicitly, and `promote_role` deduplicates by `(kind, parent, sha256)` where `parent == state["active_spec"]`.
 * **O-3 (Envelope & hunk escape):** Normative `fence="N"` (`N` in `3..9`, default `3`) on `FILE` and `PATCH` blocks scales both the block closing marker (`<`*N + `END_FILE`/`END_PATCH` + `>`*N) and inner `PATCH` hunk delimiters (`<`*(N+4) + ` SEARCH`, `=`*(N+4), `>`*(N+4) + ` REPLACE`).
 * **O-8 (`failing_line` sanitization):** Strip ANSI CSI (`\x1b\[[0-9;?]*[ -/]*[@-~]`) and OSC (`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`), replace `\r`, `\n`, and `\t` with single spaces, replace remaining code points `< 0x20` or `== 0x7f` (and lone `\x1b`) with `?`, and truncate to 300 Unicode code points.
-* **O-17 (Renamed layout properties and artifact methods):**
-  - `Layout.records` replaces `Layout.actl_repo` (matching memo section 3 rename of `actl-repo/` to `records/`).
-  - `Layout.profile(role)` replaces `Layout.homes(role)` (matching memo section 3 rename of `homes/<role>` to `profiles/<role>`).
-  - `Layout.mailboxes(tag)` replaces `Layout.handoff(tag)` (matching memo section 3 rename of `handoff/<tag>/` to `sprints/<repo>/<tag>/mailboxes/`).
-  - `StepResult.to_verification_step()` replaces `StepResult.to_ev_step()` (matching memo L-5 rename of `ev` to `verification`).
 
 ---
 
@@ -770,7 +765,7 @@ Introspection contract for `P-S0-26`:
 | **A-1** | Exact byte placement of the executable flag (`x`/`-`) in `manifest_sha256` (`S0-R6` says `"{relpath}\0{file_sha256}\n" extended with an x/- flag`). | (a) `"{relpath}\0{exec_flag}\0{file_sha256}\n"`<br>(b) `"{relpath}\0{file_sha256}\0{exec_flag}\n"` | **(a)** `f"{relpath}\0{exec_flag}\0{file_sha256}\n"` where `exec_flag` is `"x"` if `(st_mode & 0o111) != 0` else `"-"`. | Places metadata attributes (`relpath`, `exec_flag`) before the fixed 64-char digest and keeps NUL delimiters between all fields. Frozen here so all Stage 0–3 agents compute identical digests. |
 | **A-2** | `P-S0-26` runs in `run_suite_actl_s0.sh` (Stage 0A), before Stage 0B (`router.process.read_exit_code`) or Stage 1/2 modules exist, yet `INTERFACES.md` covers Stages 0–2. | (a) List only Stage 0A in `interfaces.json`.<br>(b) List all Stage 0–2 public boundary symbols with a `"stage"` field (`"0A"`, `"0B"`, `"1"`, `"2"`). | **(b)** Include `"stage"` on every `interfaces.json` entry; `P-S0-26` requires all `"0A"` entries in Stage 0A and checks `"0B"`/`"1"`/`"2"` entries when their module is present. | Satisfies both `PB-2` (single immutable `INTERFACES.md` across Stages 0–2) and `§11.1` (Stage 0A branch runs before 0B, 1, and 2). Defining `StepResult` in `actl.schemas` (re-exported in `actl.verify`) makes `StepResult` testable in Stage 0A. |
 | **A-3** | `S2-R8` writes `actl replay <role>-<n>` without `--sprint TAG`, whereas `turns/` lives under `specs/{sprint_tag}/runs/turns/`. | (a) Require `--sprint TAG`.<br>(b) Accept optional `--sprint TAG`; if omitted, resolve `<TURN_ID>` if it is a path or auto-select the sole sprint under `specs/`. | **(b)** `actl replay <TURN_ID> [--sprint <TAG>] [--json]`. | Supports the exact shorthand `actl replay <role>-<n>` in `S2-R8` for single-sprint roots while remaining unambiguous when multiple sprints exist. |
-| **A-4** | `S0-R7` states "Every artifact schema requires `kind`, `seq` and `parent` via `common.json`", while `P-S1-15` requires `prior_attempt.json` to have *only* 4 keys and `S2-R6` validates `oracle-decision.json` and `sprint-proposal.toml` before any `seq` is assigned. | (a) Force `kind`, `seq`, `parent` onto all 8 schemas.<br>(b) Require `kind`, `seq`, `parent` on sequenced `{kind}-{seq}` artifact schemas (`closure`, `ev`, `qual`, `contract`) and omit them on unsequenced files (`state`, `sprint`, `oracle-decision`, `prior_attempt`). | **(b)** Require `kind`, `seq`, `parent` via `common.json#/$defs/artifact_meta` on `closure`, `ev`, `qual`, `contract`; unsequenced schemas use `common.json` primitive `$defs` only. | Matches Design §4 ("every immutable artifact is named `{kind}-{seq}` ... Each file records `kind`, `seq`, and `parent`") and satisfies `P-S1-15`, `P-S0-09`, and `S2-R6` without conflict. |
+| **A-4** | `S0-R7` states "Every artifact schema requires `kind`, `seq` and `parent` via `common.json`", while `P-S1-15` requires `prior_attempt.json` to have *only* 4 keys and `S2-R6` validates `oracle-decision.json` and `sprint-proposal.toml` before any `seq` is assigned. | (a) Force `kind`, `seq`, `parent` onto all 8 schemas.<br>(b) Require `kind`, `seq`, `parent` on sequenced `{kind}-{seq}` artifact schemas (`closure`, `verification`, `qualification`, `contract`) and omit them on unsequenced files (`state`, `sprint`, `oracle-decision`, `prior_attempt`). | **(b)** Require `kind`, `seq`, `parent` via `common.json#/$defs/artifact_meta` on `closure`, `verification`, `qualification`, `contract`; unsequenced schemas use `common.json` primitive `$defs` only. | Matches Design §4 ("every immutable artifact is named `{kind}-{seq}` ... Each file records `kind`, `seq`, and `parent`") and satisfies `P-S1-15`, `P-S0-09`, and `S2-R6` without conflict. |
 
 ---
 
@@ -782,3 +777,9 @@ Introspection contract for `P-S0-26`:
 * **Approval route:** PB-4 and D-28 approval as given by the Owner on 2026-10-25.
 * **Conditions:** Cross-family delta review before merge; PB-1 re-verified.
 * **Delta review verdict:** pending.
+* **Proposed decisions (awaiting Owner ratification):**
+  1. Layout property names: `Layout.records`, `Layout.profile`, `Layout.mailboxes` (memo names the profile concept; records/mailboxes follow section 3).
+  2. JSON key `handoff_dir` renamed to `mailboxes_dir`.
+  3. Profile directory mode: Design aligned to spec/tests at `0755` (memo does not state a mode).
+  4. `profiles/README.md` written by `actl init` only (L-8).
+  5. `sprint-proposal` rejecting `repo` removed (memo does not support it).
