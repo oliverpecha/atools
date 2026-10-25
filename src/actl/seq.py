@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from actl.errors import StateIntegrityError
 from actl.hashing import canonical_json
 from actl.ids import format_artifact_id, parse_seq_from_name
 from actl.layout import Layout
@@ -125,14 +126,25 @@ def state_lock(layout: Layout, tag: str) -> Iterator[None]:
         raise
 
 
+def _check_state_repo(layout: Layout, state: dict[str, Any]) -> None:
+    if state.get("repo") != layout.repo:
+        raise StateIntegrityError(
+            f"state.repo {state.get('repo')!r} != layout.repo {layout.repo!r}"
+        )
+
+
 def read_state(layout: Layout, tag: str) -> dict[str, Any]:
     sf = layout.state_file(tag)
     if not sf.is_file():
         raise FileNotFoundError(f"State file missing for {tag}")
     try:
-        return json.loads(sf.read_text(encoding="utf-8"))
+        state = json.loads(sf.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid state JSON: {exc}") from exc
+    if not isinstance(state, dict):
+        raise ValueError("State JSON must be an object")
+    _check_state_repo(layout, state)
+    return state
 
 
 def update_state(layout: Layout, tag: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -176,10 +188,11 @@ def reserve(layout: Layout, tag: str, kind: str) -> int:
         return next_seq
 
 
-def _default_state(tag: str, max_seq: int) -> dict[str, Any]:
+def _default_state(tag: str, max_seq: int, repo: str = "target-repo") -> dict[str, Any]:
     return {
         "run_id": "run-" + hashlib.sha256(tag.encode("utf-8")).hexdigest()[:12],
         "sprint_tag": tag,
+        "repo": repo,
         "seq": max_seq,
         "epoch": 1,
         "status": "draft",
@@ -220,13 +233,18 @@ def reconstruct(layout: Layout, tag: str) -> int:
             max_seq = max(max_seq, _scan_seq(p))
         for p in runs_dir.iterdir() if runs_dir.is_dir() else []:
             max_seq = max(max_seq, _scan_seq(p))
-        handoff = layout.handoff(tag)
-        if handoff.is_dir():
-            for role_dir in handoff.iterdir():
-                if role_dir.is_dir():
-                    for p in role_dir.iterdir():
-                        max_seq = max(max_seq, _scan_seq(p))
-        ws = layout.root / "workspaces" / tag
+        mailboxes = layout.mailboxes(tag)
+        if mailboxes.is_dir():
+            for role_dir in mailboxes.iterdir():
+                if not role_dir.is_dir():
+                    continue
+                for box_dir in role_dir.iterdir():
+                    if box_dir.is_dir():
+                        for p in box_dir.iterdir():
+                            max_seq = max(max_seq, _scan_seq(p))
+                    else:
+                        max_seq = max(max_seq, _scan_seq(box_dir))
+        ws = layout.root / "sprints" / layout.repo / tag / "workspaces"
         if ws.is_dir():
             for p in ws.iterdir():
                 max_seq = max(max_seq, _scan_seq(p))
@@ -241,9 +259,10 @@ def reconstruct(layout: Layout, tag: str) -> int:
             except (json.JSONDecodeError, ValueError, OSError):
                 state = None
         if state is None:
-            state = _default_state(tag, max_seq)
+            state = _default_state(tag, max_seq, repo=layout.repo)
         else:
             state["seq"] = max_seq
+            state["repo"] = layout.repo
             state["epoch"] = 1
             state["status"] = "draft"
             state["active_stage"] = None
@@ -285,16 +304,20 @@ def reconstruct(layout: Layout, tag: str) -> int:
                 state["active_oracle_draft"] = name
             elif name.startswith("oracle-") and not name.startswith("oracle-draft-"):
                 state["active_oracle"] = name
-            elif name.startswith("qual-") and name.endswith(".json") and not name.endswith(".meta.json"):
+            elif (
+                name.startswith("qualification-")
+                and name.endswith(".json")
+                and not name.endswith(".meta.json")
+            ):
                 try:
                     q = json.loads(p.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError) as exc:
-                    raise ValueError(f"Corrupt qual artifact {name}: {exc}") from exc
+                    raise ValueError(f"Corrupt qualification artifact {name}: {exc}") from exc
                 if not isinstance(q, dict):
-                    raise ValueError(f"Qual artifact {name} is not a dict")
-                errs = schemas.validate("qual", q)
+                    raise ValueError(f"Qualification artifact {name} is not a dict")
+                errs = schemas.validate("qualification", q)
                 if errs:
-                    raise ValueError(f"Invalid qual artifact {name}: {errs}")
+                    raise ValueError(f"Invalid qualification artifact {name}: {errs}")
                 attempts = dict(state.get("attempts") or {})
                 attempts["oracle"] = int(attempts.get("oracle", 0)) + 1
                 state["attempts"] = attempts
@@ -355,13 +378,17 @@ def reconstruct(layout: Layout, tag: str) -> int:
                     elif esc.get("status") == "resolved":
                         if state.get("status") == "hold":
                             state["status"] = "running"
-            elif name.startswith("ev-") and name.endswith(".json") and not name.endswith(".meta.json"):
+            elif (
+                name.startswith("verification-")
+                and name.endswith(".json")
+                and not name.endswith(".meta.json")
+            ):
                 try:
                     ev = json.loads(p.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError) as exc:
-                    raise ValueError(f"Corrupt ev artifact {name}: {exc}") from exc
+                    raise ValueError(f"Corrupt verification artifact {name}: {exc}") from exc
                 if not isinstance(ev, dict):
-                    raise ValueError(f"ev artifact {name} is not a dict")
+                    raise ValueError(f"verification artifact {name} is not a dict")
                 ev_stage = ev.get("stage")
                 attempts = dict(state.get("attempts") or {})
                 if ev_stage in attempts:
@@ -395,6 +422,7 @@ def reconstruct(layout: Layout, tag: str) -> int:
                     break
 
         state["seq"] = max_seq
+        state["repo"] = layout.repo
         errs = schemas.validate("state", state)
         if errs:
             raise ValueError(f"State validation failed during reconstruct: {errs}")
