@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "ev.json",
+  "$id": "verification.json",
   "type": "object",
   "additionalProperties": false,
   "allOf": [
@@ -24,12 +24,12 @@
     "session"
   ],
   "properties": {
-    "kind": { "const": "ev" },
+    "kind": { "const": "verification" },
     "seq": { "type": "integer", "minimum": 1 },
     "parent": { "type": ["string", "null"] },
     "id": {
       "type": "string",
-      "pattern": "^ev-[0-9]{3,}\\Z"
+      "pattern": "^verification-[0-9]{3,}\\Z"
     },
     "stage": {
       "type": "string",

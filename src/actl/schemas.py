@@ -17,8 +17,8 @@ VALID_KINDS = (
     "sprint",
     "sprint-proposal",
     "closure",
-    "ev",
-    "qual",
+    "verification",
+    "qualification",
     "contract",
     "oracle-decision",
     "prior_attempt",
@@ -78,7 +78,7 @@ class StepResult:
     duration_ms: int = 0
     failing_line: str | None = None
 
-    def to_ev_step(self) -> dict[str, Any]:
+    def to_verification_step(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "cmd": self.cmd,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "qual.json",
+  "$id": "qualification.json",
   "type": "object",
   "additionalProperties": false,
   "allOf": [
@@ -23,12 +23,12 @@
     "diagnostic_case"
   ],
   "properties": {
-    "kind": { "const": "qual" },
+    "kind": { "const": "qualification" },
     "seq": { "type": "integer", "minimum": 1 },
     "parent": { "type": ["string", "null"] },
     "id": {
       "type": "string",
-      "pattern": "^qual-[0-9]{3,}\\Z"
+      "pattern": "^qualification-[0-9]{3,}\\Z"
     },
     "oracle": { "type": "string" },
     "spec": { "type": "string" },
