@@ -27,7 +27,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 ### S0-R2 Additive-change rule
 - S0-R2.1 Workstream 0A, measured against `ACTL_FORK_POINT`: added files are free; modified files are a subset of `{install.sh, README.md}`; no deleted or renamed files.
 - S0-R2.2 Workstream 0B: the set of changed files is exactly `{src/router/process.py}`.
-- S0-R2.3 PB-2: `git diff --name-only <fork>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md` is empty for both workstreams (for authoring-side edits after the pin, `P-S0-02` uses an allowlist of attested blobs for authoring-side edits, D-28).
+- S0-R2.3 PB-2: `git diff --name-only <fork>..HEAD -- proof fixtures test/actl src/actl/INTERFACES.md tools` is empty for both workstreams (for authoring-side edits after the pin, `P-S0-02` uses an allowlist of attested blobs for authoring-side edits, D-28).
 - S0-R2.4 The engines suite, the session-persistence suite (when `agent` exists) and the audit keep their baseline results (`audit ... --cursor` exit 0, `--self-test` pass).
 - S0-R2.5 Red on base: P-S0-02 also requires that workstream work exists (0A: at least `src/actl/cli.py` and `bin/actl` added; 0B: `process.py` modified), so an empty branch is red.
 - Proof: P-S0-02 (`proof/stage0/P-S0-02.sh`, Part 2).
