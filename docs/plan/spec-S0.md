@@ -37,7 +37,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - S0-R3.2 Path table (INTERFACES 1.1): `records`, `target_repo=repos/{repo}`, `baseline_file`, `sprint_dir=records/{repo}/{tag}`, `runs_dir=sprints/{repo}/{tag}/runs`, `logs_dir`, `turns_dir`, `state_file`, `state_lock`, `sessions_file`, `sprint_toml=records/{repo}/{tag}/sprint.toml`, `mailboxes=sprints/{repo}/{tag}/mailboxes`, `inbox/outbox=sprints/{repo}/{tag}/mailboxes/{role}/inbox|outbox`, `workspace(name, tag=None)=sprints/{repo}/{tag}/workspaces/{name}`, `profile(role)=profiles/{role}`.
 - S0-R3.3 Roles are exactly `architect, challenger, implementer, curator`. Unknown roles raise `ValueError`.
 - S0-R3.4 Rejected with `ValueError`: tags failing `validate_sprint_tag` (including `..`, absolute, `a/b`, trailing newline, NUL, invalid calendar date); workspace names that are empty, `.`, `..`, contain `/`, `\`, NUL or a control character `< 0x20`/`0x7f`.
-- S0-R3.5 `ensure_base_tree()` creates exactly `records, sprints, repos, profiles/{4 roles}` and writes `profiles/README.md`; applies `0700` to `records/` and `0755` to `sprints repos profiles`. `ensure_sprint_tree(tag)` creates sprint, runs, logs, turns, mailboxes, workspaces dirs and, per role, inbox `0750` and outbox `0770`. Both are idempotent and apply modes regardless of umask. Modes are asserted with `stat.S_IMODE(os.lstat(p).st_mode)` (identical for UID 0 and non-root). `repos/{repo}` is not created.
+- S0-R3.5 `ensure_base_tree()` creates exactly `records, sprints, repos, profiles/{4 roles}` (does not write `profiles/README.md`; that is `actl init` only, L-8); applies `0700` to `records/` and `0755` to `sprints repos profiles`. `ensure_sprint_tree(tag)` creates sprint, runs, logs, turns, mailboxes, workspaces dirs and, per role, inbox `0750` and outbox `0770`. Both are idempotent and apply modes regardless of umask. Modes are asserted with `stat.S_IMODE(os.lstat(p).st_mode)` (identical for UID 0 and non-root). `repos/{repo}` is not created.
 - S0-R3.6 Wrong-repo guard: every function that loads state verifies `state["repo"] == layout.repo` and `sprint.repo == layout.repo`, raising `StateIntegrityError` (exit code 3) on mismatch.
 - Proof: P-S0-03 (`test_p03_layout.py`).
 
@@ -48,7 +48,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - S0-R4.4 `base_sha` is the full 40-character HEAD of the target's default branch.
 - S0-R4.5 Created: sprint, mailboxes, and runs trees (S0-R3), `runs/state.json` (`repo = layout.repo`, `run_id = "run-" + sha256(tag)[:12]`, `seq 0`, `epoch 1`, `status draft`, all `active_*` null, counters 0), `runs/sessions.tsv` with exactly the header `seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n`, and the draft `sprint.toml` (S0-R8, recording `repo = layout.repo`). `live_run` is NOT written.
 - S0-R4.6 With `--spec F`: `seq.reserve` yields `1`; `spec-001.md` is a byte copy; `spec-001.md.meta.json` = `{kind: "spec", seq: 1, parent: null, sha256}`; `spec_source = "imported"`, `active_spec = "spec-001.md"`, `runs/seq.highwater = "1\n"`. A missing `F` exits `2`.
-- S0-R4.7 `--json` keys: `sprint_tag slug base_sha sprint_dir handoff_dir spec_source active_spec seq`.
+- S0-R4.7 `--json` keys: `sprint_tag slug base_sha sprint_dir mailboxes_dir spec_source active_spec seq`.
 - Proof: P-S0-04 (`test_p04_sprint.py`).
 
 ### S0-R5 Sequence allocator and reconstruction
@@ -70,7 +70,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - S0-R7.2 `verification`, `qualification`, `contract` require `kind, seq, parent` through `common.json#/$defs/artifact_meta`; `closure` does not require them (agent drafts); the contract schema carries no budget fields. Both `state` and `sprint` record a `repo` field.
 - S0-R7.3 `validate(kind, obj)` returns a list of `{path, message}` sorted by `(path, message)`, `[]` iff valid, never raises on bad data, raises `ValueError` only for an unknown kind or schema load failure. A non-object root reports `"/"`.
 - S0-R7.4 It never delegates to `jsonschema`: results are identical with `sys.modules["jsonschema"] = None` (O-1).
-- S0-R7.5 `sprint` may omit `live_run` only when `status == "draft"`; `sprint-proposal` requires `live_run` and rejects `sprint_tag base_sha repo status spec_source repo_test_cmd`.
+- S0-R7.5 `sprint` may omit `live_run` only when `status == "draft"`; `sprint-proposal` requires `live_run` and rejects `sprint_tag base_sha status spec_source repo_test_cmd`.
 - S0-R7.6 Fixtures: 24 valid documents and 60 invalid documents (>= 4 per kind, 11 kinds) in `fixtures/golden/artifacts/`, each invalid case with its exact expected pointer set in `invalid/index.json`.
 - Proof: P-S0-08 (`test_p08_schemas.py`).
 
