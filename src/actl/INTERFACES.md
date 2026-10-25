@@ -6,6 +6,7 @@ Baseline: `atools` commit `2acaf3c`, `VERSION` `v0.1.7`
 Revision note: 2026-10-19 baseline header moved to 2acaf3c / v0.1.7; no interface changed; approved by Owner (PB-4).
 Revision note: 2026-10-20 align C-2, C-3, F-17 per spec-S0-rulings.md; approved by Owner (PB-4).
 Revision note: 2026-10-19 error types, scope parse/validate split, validator error paths, state_lock threading, reserve highwater, run_id rule and verify_impl effects clarified; `actl.errors` added (3 entries); no signature removed; applied at Owner request (PB-4).
+Revision note: 2026-10-25 Layout transition (L-1 to L-11); Layout(root, repo="target-repo"), Layout.profile, Layout.records, verification and qualification artifact kinds; approved by Owner (PB-4).
 Status: Normative interface contract for `S0-R15` (`PB-2`, `PB-4`). Changes after Owner acceptance require explicit Owner approval and a revision note in this file.
 
 ---
@@ -18,25 +19,25 @@ All `actl` modules live under `src/actl/` and are imported as `actl.<module>` wi
 
 Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph`). Valid roles are `"architect"`, `"challenger"`, `"implementer"`, `"curator"`. All methods reject empty strings, leading `/`, `\`, NUL bytes, `.` or `..` path segments, and paths resolving outside their parent directory by raising `ValueError`.
 
-* **`Layout(root: Path | str | None = None) -> None`** (`kind: class`)
-* **Preconditions:** `root` is `None` or a valid filesystem path.
-* **Return value:** Initialized `Layout` instance (`self.root` resolved to absolute `Path`).
-* **Errors raised:** `ValueError` if `root` contains NUL bytes.
+* **`Layout(root: Path | str | None = None, repo: str = "target-repo") -> None`** (`kind: class`)
+* **Preconditions:** `root` is `None` or a valid filesystem path; `repo` is a non-empty string naming the target repository.
+* **Return value:** Initialized `Layout` instance (`self.root` resolved to absolute `Path`, `self.repo` set to `repo`).
+* **Errors raised:** `ValueError` if `root` contains NUL bytes or `repo` is invalid.
 * **Side effects:** Reads `os.environ.get("ACTL_ROOT")` when `root is None`; touches no files.
 * **Idempotence:** Pure / idempotent.
 
 
-* **`Layout.actl_repo -> Path`** (`kind: property`) / **`Layout.target_repo -> Path`** (`kind: property`) / **`Layout.baseline_file -> Path`** (`kind: property`)
+* **`Layout.records -> Path`** (`kind: property`) / **`Layout.target_repo -> Path`** (`kind: property`) / **`Layout.baseline_file -> Path`** (`kind: property`)
 * **Preconditions:** Valid `Layout` instance.
-* **Return value:** `Path` to `$ACTL_ROOT/actl-repo`, `$ACTL_ROOT/repos/target-repo`, and `$ACTL_ROOT/baseline.json` respectively.
+* **Return value:** `Path` to `$ACTL_ROOT/records`, `$ACTL_ROOT/repos/{self.repo}`, and `$ACTL_ROOT/baseline.json` respectively.
 * **Errors raised:** None.
 * **Side effects:** None.
 * **Idempotence:** Pure / idempotent.
 
 
-* **`Layout.sprint_dir(tag: str) -> Path`** / **`Layout.runs_dir(tag: str) -> Path`** / **`Layout.logs_dir(tag: str) -> Path`** / **`Layout.turns_dir(tag: str) -> Path`** / **`Layout.state_file(tag: str) -> Path`** / **`Layout.state_lock(tag: str) -> Path`** / **`Layout.sessions_file(tag: str) -> Path`** / **`Layout.sprint_toml(tag: str) -> Path`** / **`Layout.handoff(tag: str) -> Path`** (`kind: method`)
+* **`Layout.sprint_dir(tag: str) -> Path`** / **`Layout.runs_dir(tag: str) -> Path`** / **`Layout.logs_dir(tag: str) -> Path`** / **`Layout.turns_dir(tag: str) -> Path`** / **`Layout.state_file(tag: str) -> Path`** / **`Layout.state_lock(tag: str) -> Path`** / **`Layout.sessions_file(tag: str) -> Path`** / **`Layout.sprint_toml(tag: str) -> Path`** / **`Layout.mailboxes(tag: str) -> Path`** (`kind: method`)
 * **Preconditions:** `tag` is a single relative POSIX path segment passing `actl.ids.validate_sprint_tag(tag)`.
-* **Return value:** `Path` under `$ACTL_ROOT/actl-repo/specs/{tag}` (`sprint_dir`, `runs_dir` = `.../runs`, `logs_dir` = `.../runs/logs`, `turns_dir` = `.../runs/turns`, `state_file` = `.../runs/state.json`, `state_lock` = `.../runs/state.lock`, `sessions_file` = `.../runs/sessions.tsv`, `sprint_toml` = `.../sprint.toml`) or `$ACTL_ROOT/handoff/{tag}` (`handoff`).
+* **Return value:** `Path` under `$ACTL_ROOT/records/{self.repo}/{tag}` (`sprint_dir`, `sprint_toml` = `.../sprint.toml`), `$ACTL_ROOT/sprints/{self.repo}/{tag}/runs` (`runs_dir`, `logs_dir` = `.../logs`, `turns_dir` = `.../turns`, `state_file` = `.../state.json`, `state_lock` = `.../state.lock`, `sessions_file` = `.../sessions.tsv`), or `$ACTL_ROOT/sprints/{self.repo}/{tag}/mailboxes` (`mailboxes`).
 * **Errors raised:** `ValueError` on invalid `tag` or traversal attempt.
 * **Side effects:** None.
 * **Idempotence:** Pure / idempotent.
@@ -44,7 +45,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`Layout.inbox(tag: str, role: str) -> Path`** / **`Layout.outbox(tag: str, role: str) -> Path`** (`kind: method`)
 * **Preconditions:** `tag` passes `validate_sprint_tag(tag)`; `role` is in `("architect", "challenger", "implementer", "curator")`.
-* **Return value:** `Path` to `$ACTL_ROOT/handoff/{tag}/{role}-inputs` (`inbox`) or `$ACTL_ROOT/handoff/{tag}/{role}-outputs` (`outbox`).
+* **Return value:** `Path` to `$ACTL_ROOT/sprints/{self.repo}/{tag}/mailboxes/{role}/inbox` (`inbox`) or `$ACTL_ROOT/sprints/{self.repo}/{tag}/mailboxes/{role}/outbox` (`outbox`).
 * **Errors raised:** `ValueError` on invalid `tag` or unknown `role`.
 * **Side effects:** None.
 * **Idempotence:** Pure / idempotent.
@@ -52,15 +53,15 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`Layout.workspace(name: str, tag: str | None = None) -> Path`** (`kind: method`)
 * **Preconditions:** `name` is a single relative segment (no `/`, `..`, `\`, NUL, or control chars `< 0x20` / `0x7f`); `tag` (if provided) passes `validate_sprint_tag(tag)`.
-* **Return value:** `Path` to `$ACTL_ROOT/workspaces/{tag}/{name}` when `tag` is provided, else `$ACTL_ROOT/workspaces/{name}`.
+* **Return value:** `Path` to `$ACTL_ROOT/sprints/{self.repo}/{tag}/workspaces/{name}` when `tag` is provided, else `$ACTL_ROOT/sprints/{self.repo}/workspaces/{name}`.
 * **Errors raised:** `ValueError` on invalid `name`.
 * **Side effects:** None.
 * **Idempotence:** Pure / idempotent.
 
 
-* **`Layout.homes(role: str) -> Path`** (`kind: method`)
+* **`Layout.profile(role: str) -> Path`** (`kind: method`)
 * **Preconditions:** `role` is in `("architect", "challenger", "implementer", "curator")`.
-* **Return value:** `Path` to `$ACTL_ROOT/homes/{role}`.
+* **Return value:** `Path` to `$ACTL_ROOT/profiles/{role}`.
 * **Errors raised:** `ValueError` on unknown `role`.
 * **Side effects:** None.
 * **Idempotence:** Pure / idempotent.
@@ -70,7 +71,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Preconditions:** Process has write permission on `self.root.parent`.
 * **Return value:** `None`.
 * **Errors raised:** `OSError` on filesystem permission failure.
-* **Side effects:** Creates `$ACTL_ROOT/{actl-repo/specs,handoff,workspaces,repos,homes/{role}}`; applies `0700` to `actl-repo/` and `0755` to `handoff/`, `workspaces/`, `repos/`, `homes/`.
+* **Side effects:** Creates `$ACTL_ROOT/{records,sprints,repos,profiles/{role}}` and `$ACTL_ROOT/profiles/README.md`; applies `0700` to `records/` and `0755` to `sprints/`, `repos/`, `profiles/`.
 * **Idempotence:** Idempotent.
 
 
@@ -78,7 +79,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Preconditions:** `tag` passes `validate_sprint_tag(tag)`.
 * **Return value:** `None`.
 * **Errors raised:** `ValueError` on invalid `tag`; `OSError` on filesystem error.
-* **Side effects:** Calls `ensure_base_tree()`; creates `sprint_dir(tag)`, `runs_dir(tag)`, `logs_dir(tag)`, `turns_dir(tag)`, `handoff(tag)`, and for each role creates `inbox(tag, role)` (`0750`) and `outbox(tag, role)` (`0770`).
+* **Side effects:** Calls `ensure_base_tree()`; creates `sprint_dir(tag)`, `runs_dir(tag)`, `logs_dir(tag)`, `turns_dir(tag)`, `mailboxes(tag)`, and for each role creates `inbox(tag, role)` (`0750`) and `outbox(tag, role)` (`0770`).
 * **Idempotence:** Idempotent.
 
 
@@ -122,20 +123,20 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 
 * **`format_artifact_id(kind: str, seq: int) -> str`** (`kind: function`)
-* **Preconditions:** `kind` in `("spec", "solution_key", "oracle", "oracle-draft", "qual", "contract", "closure", "ev", "escalation", "live-decision", "implementer")`; `seq >= 1`.
+* **Preconditions:** `kind` in `("spec", "solution_key", "oracle", "oracle-draft", "qualification", "contract", "closure", "verification", "escalation", "live-decision", "implementer")`; `seq >= 1`.
 * **Return value:** `f"{kind}-{seq:03d}"`.
 * **Errors raised:** `ValueError` on unknown `kind` or `seq < 1`. **Side effects:** None. **Idempotence:** Pure.
 
 
 * **`format_artifact_filename(kind: str, seq: int) -> str`** (`kind: function`)
 * **Preconditions:** Same as `format_artifact_id`.
-* **Return value:** `f"spec-{seq:03d}.md"` for `spec`, `f"solution_key-{seq:03d}.patch"` for `solution_key`, `f"{kind}-{seq:03d}"` for directory kinds (`oracle`, `oracle-draft`), and `f"{kind}-{seq:03d}.json"` for JSON record kinds (`qual`, `contract`, `closure`, `ev`, `escalation`, `live-decision`).
+* **Return value:** `f"spec-{seq:03d}.md"` for `spec`, `f"solution_key-{seq:03d}.patch"` for `solution_key`, `f"{kind}-{seq:03d}"` for directory kinds (`oracle`, `oracle-draft`), and `f"{kind}-{seq:03d}.json"` for JSON record kinds (`qualification`, `contract`, `closure`, `verification`, `escalation`, `live-decision`).
 * **Errors raised:** `ValueError` on unknown `kind` or `seq < 1`. **Side effects:** None. **Idempotence:** Pure.
 
 
 * **`parse_seq_from_name(name: str) -> int | None`** (`kind: function`)
 * **Preconditions:** `name` is a filename or directory basename.
-* **Return value:** Extracted integer `seq` if `name` matches `^(?:(spec)-([0-9]{3,})\.md|(solution_key)-([0-9]{3,})\.patch|(oracle|oracle-draft|implementer)-([0-9]{3,})|(qual|contract|closure|ev|escalation|live-decision)-([0-9]{3,})\.json)\Z`, else `None`.
+* **Return value:** Extracted integer `seq` if `name` matches `^(?:(spec)-([0-9]{3,})\.md|(solution_key)-([0-9]{3,})\.patch|(oracle|oracle-draft|implementer)-([0-9]{3,})|(qualification|contract|closure|verification|escalation|live-decision)-([0-9]{3,})\.json)\Z`, else `None`.
 * **Errors raised:** None. **Side effects:** None. **Idempotence:** Pure.
 
 
@@ -214,7 +215,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 ### 1.5 `actl.schemas` (`src/actl/schemas.py`) — Owning Stage: Stage 0A (`S0-R7`, `S0-R14`, `S0-R15`)
 
 * **`validate(kind: str, obj: Any) -> list[dict[str, str]]`** (`kind: function`)
-* **Preconditions:** `kind` is in `("common", "state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt")`.
+* **Preconditions:** `kind` is in `("common", "state", "sprint", "sprint-proposal", "closure", "verification", "qualification", "contract", "oracle-decision", "prior_attempt", "meta", "attempt")`.
 * **Return value:** List of `{"path": str, "message": str}` dicts sorted by `(path, message)` produced exclusively by the in-tree stdlib validator (never delegating to `jsonschema`). `path` is the RFC 6901 JSON Pointer of the failing instance location (decimal array indices; `~` escaped as `~0`, `/` as `~1`), with the root written as `"/"`. A `type`, `enum`, `const`, `pattern`, `minimum`, `minLength` or `maxLength` violation reports the offending value (for example `/steps/0/exit_code`); a missing `required` property reports the property that should exist (`/<parent>/<prop>`); a rejected `additionalProperties` reports the extra property; `anyOf`/`oneOf` report one entry at the instance with all branch failures in `message`. Raises `ValueError` at schema load if a schema contains an unsupported keyword. Empty list `[]` iff `obj` conforms to `schemas/{kind}.json`.
 * **Errors raised:** `ValueError` ONLY if `kind` is unknown or schema load fails. Never raises on invalid `obj` data.
 * **Side effects:** Reads `schemas/*.json`. **Idempotence:** Pure / idempotent.
@@ -233,7 +234,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Errors raised:** `TypeError` on missing required fields. **Side effects:** None. **Idempotence:** Pure.
 
 
-* **`StepResult.to_ev_step() -> dict[str, Any]`** (`kind: method`)
+* **`StepResult.to_verification_step() -> dict[str, Any]`** (`kind: method`)
 * **Preconditions:** Valid `StepResult` instance.
 * **Return value:** `{"id": self.id, "cmd": self.cmd, "exit_code": self.exit_code, "output_sha256": self.output_sha256}`.
 * **Errors raised:** None. **Side effects:** None. **Idempotence:** Pure.
@@ -482,15 +483,15 @@ Exit codes (`S0-R10`): `0` = ok/green, `1` = red (check/replay failed), `2` = us
 | Command & Synopsis | Stage | Exit Codes | `--json` Top-Level Keys |
 | --- | --- | --- | --- |
 | `actl doctor [--refresh] [--json]` | 0A (`S0-R1`) | `0`, `2`, `4` | Same keys as `baseline.json` (§3.3) |
-| `actl init --target <PATH\|URL> [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `actl_root`, `target_repo`, `base_sha`, `created` |
+| `actl init --target <PATH\|URL> [--name <NAME>] [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `actl_root`, `target_repo`, `base_sha`, `created` |
 | `actl sprint new <slug> [--spec <FILE>] [--json]` | 0A (`S0-R4`) | `0`, `2`, `4` | `sprint_tag`, `slug`, `base_sha`, `sprint_dir`, `handoff_dir`, `spec_source`, `active_spec`, `seq` |
 | `actl next --sprint <TAG> [--json]` | 0A/1/2 (`S0-R13`, `S1-R12`, `S2-R10`) | `0`, `2`, `3`, `4` | `action`, `command`, `reason` |
 | `actl selftest [--json]` | 1 (`S1-R3`) | `0`, `2`, `3`, `4` | `ok`, `exit_code`, `steps` |
-| `actl verify-impl --sprint <TAG> --closure <PATH> [--worktree <PATH>] [--no-fail-fast] [--strict-tripwire] [--json]` | 1 (`S1-R11`) | `0`, `1`, `2`, `3`, `4` | Exact `ev-{seq}.json` keys (§3.4) |
-| `actl dispatch-impl --sprint <TAG> [--mode detach\|foreground] [--tier cheap\|balanced\|smart] [--engine <ENG>] [--no-run] [--strict-tripwire] [--json]` | 1 (`S1-R9`) | `0`, `1`, `2`, `3`, `4` | `sprint_tag`, `seq`, `session_name`, `worktree`, `inputs_dir`, `closure_path`, `mode`, `no_run`, `ev_id`, `exit_code` |
+| `actl verify-impl --sprint <TAG> --closure <PATH> [--worktree <PATH>] [--no-fail-fast] [--strict-tripwire] [--json]` | 1 (`S1-R11`) | `0`, `1`, `2`, `3`, `4` | Exact `verification-{seq}.json` keys (§3.4) |
+| `actl dispatch-impl --sprint <TAG> [--mode detach\|foreground] [--tier cheap\|balanced\|smart] [--engine <ENG>] [--no-run] [--strict-tripwire] [--json]` | 1 (`S1-R9`) | `0`, `1`, `2`, `3`, `4` | `sprint_tag`, `seq`, `session_name`, `worktree`, `inputs_dir`, `closure_path`, `mode`, `no_run`, `verification_id`, `exit_code` |
 | `actl wait <SESSION_NAME> [--sprint <TAG>] [--timeout <SEC>] [--json]` | 1 (`S1-R14`) | `0`, `1`, `2`, `4` | `name`, `exit_code`, `hard_cap`, `lost`, `log_sha256` |
 | `actl bundle <purpose> --sprint <TAG> [--out <FILE|->] [--osc52] [--clip] [--include <PATH>...] [--max-chars <N>] [--model <NAME>] [--json]` | 2 (`S2-R2`) | `0`, `2`, `4` | `turn_id`, `role`, `purpose`, `turn_dir`, `bundle_path`, `bundle_sha256`, `sentinel`, `chars`, `files`, `model_hint` |
-| `actl unpack <purpose> --sprint <TAG> [-f <FILE> \| --paste] [--turn <TURN_ID>] [--amend] [--json]` | 2 (`S2-R4`) | `0`, `2`, `3`, `4` | Exact `unpack.json` keys (§3.6) |
+| `actl unpack <purpose> --sprint <TAG> [-f <FILE> \| --paste \| --drawer <PATH>] [--turn <TURN_ID>] [--amend] [--json]` | 2 (`S2-R4`) | `0`, `2`, `3`, `4` | Exact `unpack.json` keys (§3.6) |
 | `actl replay <TURN_ID> [--sprint <TAG>] [--json]` | 2 (`S2-R8`) | `0`, `1`, `2`, `3`, `4` | `turn_id`, `match`, `stored_ok`, `replayed_ok`, `diffs` |
 | `actl promote <role> --sprint <TAG> [--json]` | 2 (`S2-R9`) | `0`, `2`, `3`, `4` | `sprint_tag`, `role`, `promoted`, `staged_to`, `active_spec`, `active_solution_key`, `active_oracle_draft` |
 
@@ -498,12 +499,13 @@ Exit codes (`S0-R10`): `0` = ok/green, `1` = red (check/replay failed), `2` = us
 
 ## 3. File Formats & Schemas
 
-All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalProperties: false`. Sequenced immutable JSON artifacts (`closure`, `ev`, `qual`, `contract`) require `kind` (`str`), `seq` (`int >= 1`), and `parent` (`str | null`) via `schemas/common.json#/$defs/artifact_meta`. Sidecar metadata files (`*.meta.json`) use `schemas/meta.json`. Unsequenced files (`state.json`, `sprint.toml`, `sprint-proposal.toml`, `closure-draft.json`, `oracle-decision.json`, `prior_attempt.json`, `attempt.json`) do not require `kind` or `parent` (`attempt.json` records `seq` and `branch` for the dispatched workspace).
+All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalProperties: false`. Sequenced immutable JSON artifacts (`closure`, `verification`, `qualification`, `contract`) require `kind` (`str`), `seq` (`int >= 1`), and `parent` (`str | null`) via `schemas/common.json#/$defs/artifact_meta`. Sidecar metadata files (`*.meta.json`) use `schemas/meta.json`. Unsequenced files (`state.json`, `sprint.toml`, `sprint-proposal.toml`, `closure-draft.json`, `oracle-decision.json`, `prior_attempt.json`, `attempt.json`) do not require `kind` or `parent` (`attempt.json` records `seq` and `branch` for the dispatched workspace).
 
-### 3.1 `state.json` (`specs/{sprint_tag}/runs/state.json` — `schemas/state.json`)
+### 3.1 `state.json` (`sprints/{repo}/{sprint_tag}/runs/state.json` — `schemas/state.json`)
 
 * `run_id`: `str` (`run-` followed by the first 12 hex characters of the SHA-256 of `sprint_tag`; deterministic so `reconstruct` can rebuild it; proposed, Owner to confirm)
 * `sprint_tag`: `str` (`^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-z0-9][a-z0-9-]{1,40}$`)
+* `repo`: `str` (name of the target repository, e.g. `"target-repo"`)
 * `seq`: `int >= 0` (monotonic counter; only field mutated in Stage 0)
 * `epoch`: `int >= 1` (initialized to `1`)
 * `status`: `"draft" | "running" | "hold" | "done" | "aborted"` (initialized to `"draft"`)
@@ -519,14 +521,15 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `grants`: `{"oracle": int >= 0, "implementer": int >= 0, "live": int >= 0, "curator": int >= 0}`
 * `tmux_sessions`: `list[str]`
 
-### 3.2 `sprint.toml` (`specs/{sprint_tag}/sprint.toml` — `schemas/sprint.json`) & `config/graph.toml`
+### 3.2 `sprint.toml` (`records/{repo}/{sprint_tag}/sprint.toml` — `schemas/sprint.json`) & `config/graph.toml`
 
 * `sprint_tag`: `str` (`YYYY-MM-DD_{slug}`)
 * `base_sha`: `str` (`^[0-9a-f]{40}\Z`)
+* `repo`: `str` (default `"target-repo"` in `actl sprint new`)
 * `status`: `"draft" | "frozen"` (default `"draft"` in `actl sprint new`)
 * `spec_source`: `"architect_qna" | "imported"`
 * `after`: `list[str]` (default `[]`)
-* `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `status`, `spec_source`, and `repo_test_cmd`)
+* `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `repo`, `status`, `spec_source`, and `repo_test_cmd`)
 * `approval_live_run`: `"architect" | "owner"` (default `"architect"`)
 * `solution_key_exposure`: `"full" | "hidden"` (default `"full"`)
 * `owner_review_triggers`: `list["grant_attempts" | "waive_mutant" | "update_scope" | "reopen_oracle" | "retry_live"]` (default `[]`)
@@ -549,14 +552,14 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `installed_sync_diffs`: `{"hooks/pre-commit": str, "rules/git-safety.md": str, ".cursor/skills/atools-repair/SKILL.md": str}`
 * `warnings`: `list[str]`
 
-### 3.4 `ev-{seq}.json`, `StepResult`, `session`, and Other Stage 0 Schemas (`S0-R7`, `S1-R1`, `S1-R14`)
+### 3.4 `verification-{seq}.json`, `StepResult`, `session`, and Other Stage 0 Schemas (`S0-R7`, `S1-R1`, `S1-R14`)
 
-* **`ev-{seq}.json` (`schemas/ev.json`):**
-* `kind`: `"ev"`, `seq`: `int >= 1`, `parent`: `str | null`, `id`: `str` (`^ev-[0-9]{3,}$`)
+* **`verification-{seq}.json` (`schemas/verification.json`):**
+* `kind`: `"verification"`, `seq`: `int >= 1`, `parent`: `str | null`, `id`: `str` (`^verification-[0-9]{3,}$`)
 * `stage`: `"guards" | "offline" | "live" | "blocked_check"`
 * `oracle`: `str`, `contract`: `str`, `head`: `str` (`^[0-9a-f]{40}\Z`), `exit_code`: `int (0..255) | null`
 * `parent`: `str | null` (set to evaluated closure filename `"closure-{seq:03d}.json"` when evaluating a closure)
-* `steps`: `list[{"id": str, "cmd": str, "exit_code": int, "output_sha256": str}]` (produced by `StepResult.to_ev_step()`)
+* `steps`: `list[{"id": str, "cmd": str, "exit_code": int, "output_sha256": str}]` (produced by `StepResult.to_verification_step()`)
 * `failing_step`: `str | null`, `failing_line`: `str | null` (max 300 chars, single line)
 * `tripwires`: `list[{"source": "transcript" | "log", "line_no": int, "pattern": str, "excerpt": str}]`
 * `halt`: `{"reason": "integrity_mismatch" | "selftest_failed" | "wrapper_rejected" | "unsupported_cap" | "architect_unavailable"} | null`
@@ -569,8 +572,8 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `solution_key_divergence`: `{"requirement_id": str, "rationale": str} | null`
 
 
-* **`qual-{seq}.json` (`schemas/qual.json`):**
-* `kind`: `"qual"`, `seq`: `int >= 1`, `parent`: `str | null`, `id`: `str` (`^qual-[0-9]{3,}$`)
+* **`qualification-{seq}.json` (`schemas/qualification.json`):**
+* `kind`: `"qualification"`, `seq`: `int >= 1`, `parent`: `str | null`, `id`: `str` (`^qualification-[0-9]{3,}$`)
 * `oracle`: `str`, `spec`: `str`, `base_sha`: `str`, `manifest_sha256`: `str` (`^[0-9a-f]{64}$`)
 * `null_base`: `"red" | "green"`, `solution_key_guards`: `"green" | "red"`, `solution_key_green`: `str` (`^[0-3]/3$`), `solution_key_repo_test`: `"green" | "red"`
 * `mutants`: `list[{"name": str, "killed": bool, "apply_error": bool}]`
@@ -638,8 +641,8 @@ Introspection contract for `P-S0-26`:
   {"module": "actl.errors", "name": "UsageError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
   {"module": "actl.errors", "name": "StateIntegrityError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
   {"module": "actl.errors", "name": "EnvError", "kind": "class", "stage": "0A", "params": [{"name": "message", "type": "str"}], "returns": "None"},
-  {"module": "actl.layout", "name": "Layout", "kind": "class", "stage": "0A", "params": [{"name": "root", "type": "Path | str | None"}], "returns": "None"},
-  {"module": "actl.layout", "name": "Layout.actl_repo", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
+  {"module": "actl.layout", "name": "Layout", "kind": "class", "stage": "0A", "params": [{"name": "root", "type": "Path | str | None"}, {"name": "repo", "type": "str"}], "returns": "None"},
+  {"module": "actl.layout", "name": "Layout.records", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.target_repo", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.baseline_file", "kind": "property", "stage": "0A", "params": [], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.sprint_dir", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
@@ -650,11 +653,11 @@ Introspection contract for `P-S0-26`:
   {"module": "actl.layout", "name": "Layout.state_lock", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.sessions_file", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.sprint_toml", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
-  {"module": "actl.layout", "name": "Layout.handoff", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
+  {"module": "actl.layout", "name": "Layout.mailboxes", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.inbox", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}, {"name": "role", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.outbox", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}, {"name": "role", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.workspace", "kind": "method", "stage": "0A", "params": [{"name": "name", "type": "str"}, {"name": "tag", "type": "str | None"}], "returns": "Path"},
-  {"module": "actl.layout", "name": "Layout.homes", "kind": "method", "stage": "0A", "params": [{"name": "role", "type": "str"}], "returns": "Path"},
+  {"module": "actl.layout", "name": "Layout.profile", "kind": "method", "stage": "0A", "params": [{"name": "role", "type": "str"}], "returns": "Path"},
   {"module": "actl.layout", "name": "Layout.ensure_base_tree", "kind": "method", "stage": "0A", "params": [], "returns": "None"},
   {"module": "actl.layout", "name": "Layout.ensure_sprint_tree", "kind": "method", "stage": "0A", "params": [{"name": "tag", "type": "str"}], "returns": "None"},
   {"module": "actl.ids", "name": "validate_slug", "kind": "function", "stage": "0A", "params": [{"name": "slug", "type": "str"}], "returns": "bool"},
@@ -678,7 +681,7 @@ Introspection contract for `P-S0-26`:
   {"module": "actl.schemas", "name": "validate", "kind": "function", "stage": "0A", "params": [{"name": "kind", "type": "str"}, {"name": "obj", "type": "Any"}], "returns": "list[dict[str, str]]"},
   {"module": "actl.schemas", "name": "load_expected", "kind": "function", "stage": "0A", "params": [{"name": "expected_dir", "type": "Path | str | None"}], "returns": "dict[str, Any]"},
   {"module": "actl.schemas", "name": "StepResult", "kind": "class", "stage": "0A", "params": [{"name": "id", "type": "str"}, {"name": "cmd", "type": "str"}, {"name": "exit_code", "type": "int"}, {"name": "output_sha256", "type": "str"}, {"name": "output_tail", "type": "str"}, {"name": "duration_ms", "type": "int"}, {"name": "failing_line", "type": "str | None"}], "returns": "None"},
-  {"module": "actl.schemas", "name": "StepResult.to_ev_step", "kind": "method", "stage": "0A", "params": [], "returns": "dict[str, Any]"},
+  {"module": "actl.schemas", "name": "StepResult.to_verification_step", "kind": "method", "stage": "0A", "params": [], "returns": "dict[str, Any]"},
   {"module": "actl.scope", "name": "ScopeRule", "kind": "class", "stage": "0A", "params": [{"name": "kind", "type": "str"}, {"name": "pattern", "type": "str"}, {"name": "is_literal", "type": "bool"}, {"name": "line_no", "type": "int"}], "returns": "None"},
   {"module": "actl.scope", "name": "parse", "kind": "function", "stage": "0A", "params": [{"name": "text", "type": "str"}], "returns": "list[ScopeRule]"},
   {"module": "actl.scope", "name": "validate", "kind": "function", "stage": "0A", "params": [{"name": "rules", "type": "list[ScopeRule]"}], "returns": "list[str]"},
@@ -716,16 +719,16 @@ Introspection contract for `P-S0-26`:
 
 | Requirement | Stage 0 Names Used |
 | --- | --- |
-| **`S1-R1`** (`StepResult` & `ev`) | `actl.schemas.StepResult`, `actl.schemas.StepResult.to_ev_step`, `actl.schemas.validate("ev", ...)`, `actl.hashing.file_sha256` |
+| **`S1-R1`** (`StepResult` & `ev`) | `actl.schemas.StepResult`, `actl.schemas.StepResult.to_verification_step`, `actl.schemas.validate("verification", ...)`, `actl.hashing.file_sha256` |
 | **`S1-R2`** (Order, halt vs red) | `actl.schemas.StepResult`, CLI exit codes (`0` ok, `1` red, `3` halt) |
 | **`S1-R3`** (Guards `G1–G6` & self-tests) | `actl.hashing.manifest_sha256` (`G1`), `actl.schemas.validate("closure", ...)` (`G2`), `actl.scope.parse`, `actl.scope.validate`, `actl.scope.match` (`G3`, `G4`), `actl.layout.Layout` |
 | **`S1-R4`** (Oracle staging for `O1`) | `actl.layout.Layout.sprint_dir`, `actl.layout.Layout.workspace` |
 | **`S1-R5`** (`O1` execution) | `actl.schemas.StepResult`, `actl.hashing.file_sha256` |
 | **`S1-R6`** (`O2` execution) | `actl.sprint.load_sprint_toml` (`repo_test_cmd`), `actl.schemas.StepResult`, `actl.hashing.file_sha256` |
-| **`S1-R7`** (`ev` & `prior_attempt` emission) | `actl.seq.reserve`, `actl.seq.read_state`, `actl.ids.format_artifact_id`, `actl.ids.format_artifact_filename`, `actl.hashing.canonical_json`, `actl.schemas.validate` (`"ev"`, `"prior_attempt"`), `actl.layout.Layout.runs_dir`, `actl.layout.Layout.inbox` |
+| **`S1-R7`** (`ev` & `prior_attempt` emission) | `actl.seq.reserve`, `actl.seq.read_state`, `actl.ids.format_artifact_id`, `actl.ids.format_artifact_filename`, `actl.hashing.canonical_json`, `actl.schemas.validate` (`"verification"`, `"prior_attempt"`), `actl.layout.Layout.runs_dir`, `actl.layout.Layout.inbox` |
 | **`S1-R8`** (Implementer skill) | `actl.layout.Layout.inbox`, `actl.layout.Layout.outbox`, `actl.ids.format_artifact_filename("closure", seq)`, `schemas/closure.json`, `schemas/closure-draft.json`, `schemas/attempt.json` (`attempt.json`) |
 | **`S1-R9`** (`actl dispatch-impl`) | `actl.cli` (`register`), `actl.layout.Layout` (`target_repo`, `workspace`, `inbox`, `outbox`), `actl.seq.reserve`, `actl.seq.update_state`, `actl.ids.slug_from_tag`, `actl.ids.format_session_name`, `actl.ids.validate_session_name`, `actl.sprint.load_sprint_toml` |
-| **`S1-R10`** (Tripwire) | `actl.layout.Layout` (`actl_repo`, `logs_dir`), `actl.schemas.validate("ev", ...)` |
+| **`S1-R10`** (Tripwire) | `actl.layout.Layout` (`records`, `logs_dir`), `actl.schemas.validate("verification", ...)` |
 | **`S1-R11`** (`actl verify-impl`) | `actl.cli` (`register`), `actl.layout.Layout`, `actl.ids.parse_seq_from_name`, `actl.schemas.load_expected` (in tests) |
 | **`S1-R12`** (`actl next` Phase 3 rules) | `actl.next.decide_next`, `next_rules/phase3.py` (`PRIORITY=30`, `evaluate`), `actl.layout.Layout`, `actl.seq.read_state`, `router.process.read_exit_code`, `router.process.get_exit_path` |
 | **`S1-R13`** (Determinism) | `actl.hashing.canonical_json`, `actl.hashing.json_sha256`, `actl.hashing.file_sha256`, `actl.hashing.manifest_sha256` |
@@ -742,7 +745,7 @@ Introspection contract for `P-S0-26`:
 | **`S2-R9`** (`actl promote`) | `actl.cli` (`register`), `actl.layout.Layout` (`sprint_dir`, `outbox`, `inbox`), `actl.seq.reserve`, `actl.seq.read_state`, `actl.seq.update_state`, `actl.ids.format_artifact_id`, `actl.ids.format_artifact_filename`, `actl.hashing.file_sha256`, `actl.hashing.manifest_sha256` |
 | **`S2-R10`** (`actl next` Phases 1–2 rules) | `actl.next.decide_next`, `next_rules/phase12.py` (`PRIORITY=10`, `evaluate`), `actl.layout.Layout`, `actl.seq.read_state` |
 | **`S2-R11`** (Role prompt files) | `actl.layout.Layout` (`inbox`, `outbox` conventions) |
-| **`S2-R12`** (Bridge safety) | `actl.layout.Layout` (`actl_repo`, `target_repo`), `actl.scope.parse`, `actl.scope.validate` |
+| **`S2-R12`** (Bridge safety) | `actl.layout.Layout` (`records`, `target_repo`), `actl.scope.parse`, `actl.scope.validate` |
 
 ---
 
@@ -752,6 +755,11 @@ Introspection contract for `P-S0-26`:
 * **O-2 (`solution_key` naming & state pointer):** `state.json` tracks `active_solution_key` and `active_oracle_draft` explicitly, and `promote_role` deduplicates by `(kind, parent, sha256)` where `parent == state["active_spec"]`.
 * **O-3 (Envelope & hunk escape):** Normative `fence="N"` (`N` in `3..9`, default `3`) on `FILE` and `PATCH` blocks scales both the block closing marker (`<`*N + `END_FILE`/`END_PATCH` + `>`*N) and inner `PATCH` hunk delimiters (`<`*(N+4) + ` SEARCH`, `=`*(N+4), `>`*(N+4) + ` REPLACE`).
 * **O-8 (`failing_line` sanitization):** Strip ANSI CSI (`\x1b\[[0-9;?]*[ -/]*[@-~]`) and OSC (`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`), replace `\r`, `\n`, and `\t` with single spaces, replace remaining code points `< 0x20` or `== 0x7f` (and lone `\x1b`) with `?`, and truncate to 300 Unicode code points.
+* **O-17 (Renamed layout properties and artifact methods):**
+  - `Layout.records` replaces `Layout.actl_repo` (matching memo section 3 rename of `actl-repo/` to `records/`).
+  - `Layout.profile(role)` replaces `Layout.homes(role)` (matching memo section 3 rename of `homes/<role>` to `profiles/<role>`).
+  - `Layout.mailboxes(tag)` replaces `Layout.handoff(tag)` (matching memo section 3 rename of `handoff/<tag>/` to `sprints/<repo>/<tag>/mailboxes/`).
+  - `StepResult.to_verification_step()` replaces `StepResult.to_ev_step()` (matching memo L-5 rename of `ev` to `verification`).
 
 ---
 
@@ -763,3 +771,14 @@ Introspection contract for `P-S0-26`:
 | **A-2** | `P-S0-26` runs in `run_suite_actl_s0.sh` (Stage 0A), before Stage 0B (`router.process.read_exit_code`) or Stage 1/2 modules exist, yet `INTERFACES.md` covers Stages 0–2. | (a) List only Stage 0A in `interfaces.json`.<br>(b) List all Stage 0–2 public boundary symbols with a `"stage"` field (`"0A"`, `"0B"`, `"1"`, `"2"`). | **(b)** Include `"stage"` on every `interfaces.json` entry; `P-S0-26` requires all `"0A"` entries in Stage 0A and checks `"0B"`/`"1"`/`"2"` entries when their module is present. | Satisfies both `PB-2` (single immutable `INTERFACES.md` across Stages 0–2) and `§11.1` (Stage 0A branch runs before 0B, 1, and 2). Defining `StepResult` in `actl.schemas` (re-exported in `actl.verify`) makes `StepResult` testable in Stage 0A. |
 | **A-3** | `S2-R8` writes `actl replay <role>-<n>` without `--sprint TAG`, whereas `turns/` lives under `specs/{sprint_tag}/runs/turns/`. | (a) Require `--sprint TAG`.<br>(b) Accept optional `--sprint TAG`; if omitted, resolve `<TURN_ID>` if it is a path or auto-select the sole sprint under `specs/`. | **(b)** `actl replay <TURN_ID> [--sprint <TAG>] [--json]`. | Supports the exact shorthand `actl replay <role>-<n>` in `S2-R8` for single-sprint roots while remaining unambiguous when multiple sprints exist. |
 | **A-4** | `S0-R7` states "Every artifact schema requires `kind`, `seq` and `parent` via `common.json`", while `P-S1-15` requires `prior_attempt.json` to have *only* 4 keys and `S2-R6` validates `oracle-decision.json` and `sprint-proposal.toml` before any `seq` is assigned. | (a) Force `kind`, `seq`, `parent` onto all 8 schemas.<br>(b) Require `kind`, `seq`, `parent` on sequenced `{kind}-{seq}` artifact schemas (`closure`, `ev`, `qual`, `contract`) and omit them on unsequenced files (`state`, `sprint`, `oracle-decision`, `prior_attempt`). | **(b)** Require `kind`, `seq`, `parent` via `common.json#/$defs/artifact_meta` on `closure`, `ev`, `qual`, `contract`; unsequenced schemas use `common.json` primitive `$defs` only. | Matches Design §4 ("every immutable artifact is named `{kind}-{seq}` ... Each file records `kind`, `seq`, and `parent`") and satisfies `P-S1-15`, `P-S0-09`, and `S2-R6` without conflict. |
+
+---
+
+## 8. Owner Amendment Note (2026-10-25)
+
+* **Date:** 2026-10-25
+* **Approver:** Owner
+* **Scope:** L-1 through L-11 (layout, names, courier, profiles)
+* **Approval route:** PB-4 and D-28 approval as given by the Owner on 2026-10-25.
+* **Conditions:** Cross-family delta review before merge; PB-1 re-verified.
+* **Delta review verdict:** pending.
