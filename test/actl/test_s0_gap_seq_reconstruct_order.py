@@ -66,16 +66,16 @@ def _install_spy(monkeypatch):
     return reads
 
 
-# T4b -- ev-002 (path-order AFTER closure-003 in runs/) and closure-003.  Kills a replay that
+# T4b -- verification-002 (path-order AFTER closure-003 in runs/) and closure-003.  Kills a replay that
 # follows directory/path order: (1) result must not depend on iterdir order, (2) the files that
-# reconstruct actually reads must be read in non-decreasing seq order (ev-002 before closure-003).
+# reconstruct actually reads must be read in non-decreasing seq order (verification-002 before closure-003).
 @pytest.mark.parametrize("reverse", [False, True], ids=["iter-asc", "iter-desc"])
 def test_reconstruct_order_independent_of_iterdir_and_reads_in_seq_order(tmp_path, monkeypatch, reverse):
     lay = _layout(tmp_path)
     sd, rd = lay.sprint_dir(TAG), lay.runs_dir(TAG)
     (sd / "contract-001.json").write_text(json.dumps({"epoch": 1}), encoding="utf-8")
-    (rd / "ev-002.json").write_text(json.dumps(
-        {"kind": "ev", "seq": 2, "parent": None, "id": "ev-002", "exit_code": 1}), encoding="utf-8")
+    (rd / "verification-002.json").write_text(json.dumps(
+        {"kind": "verification", "seq": 2, "parent": None, "id": "verification-002", "exit_code": 1}), encoding="utf-8")
     (rd / "closure-003.json").write_text(json.dumps(
         {"kind": "closure", "seq": 3, "parent": None, "reason": "done"}), encoding="utf-8")
     (sd / "contract-999.json").write_text(json.dumps({"epoch": 1}), encoding="utf-8")
@@ -105,8 +105,8 @@ def test_reconstruct_order_independent_of_iterdir_and_reads_in_seq_order(tmp_pat
 def test_reconstruct_result_identical_for_both_iteration_orders(tmp_path, monkeypatch):
     lay = _layout(tmp_path)
     sd, rd = lay.sprint_dir(TAG), lay.runs_dir(TAG)
-    (rd / "ev-002.json").write_text(json.dumps(
-        {"kind": "ev", "seq": 2, "parent": None, "id": "ev-002", "exit_code": 1}), encoding="utf-8")
+    (rd / "verification-002.json").write_text(json.dumps(
+        {"kind": "verification", "seq": 2, "parent": None, "id": "verification-002", "exit_code": 1}), encoding="utf-8")
     (rd / "closure-003.json").write_text(json.dumps(
         {"kind": "closure", "seq": 3, "parent": None, "reason": "done"}), encoding="utf-8")
     (sd / "contract-005.json").write_text(json.dumps({"epoch": 2}), encoding="utf-8")

@@ -33,7 +33,10 @@ def test_ensure_base_tree_creates_missing_root_parents(tmp_path):
     assert not root.parent.exists()
     Layout(root).ensure_base_tree()
     assert root.is_dir()
-    assert (root / "actl-repo" / "specs").is_dir()
+    assert (root / "records").is_dir()
+    assert (root / "sprints").is_dir()
+    assert (root / "profiles").is_dir()
+    assert (root / "repos").is_dir()
 
 
 def test_ensure_sprint_tree_creates_missing_root_parents(tmp_path):

@@ -106,6 +106,6 @@ def test_schemas_oneof_instance_location_error():
     from actl import schemas
     # Schema oneOf must report error at the instance location per INTERFACES §1.5
     schema = {"type": "object", "oneOf": [{"required": ["a"]}, {"type": "string"}]}
-    errors = schemas.validate_schema_direct(schema, {}) if hasattr(schemas, "validate_schema_direct") else schemas.validate("qual", {})
+    errors = schemas.validate_schema_direct(schema, {}) if hasattr(schemas, "validate_schema_direct") else schemas.validate("qualification", {})
     # Assert validation error exists without crashing
     assert isinstance(errors, list)

@@ -65,7 +65,7 @@ def _decide(repo, root):
 
 
 def _setstatus(root, status):
-    p = root / "actl-repo" / "specs" / TAG / "runs" / "state.json"
+    p = root / "sprints" / "target-repo" / TAG / "runs" / "state.json"
     d = json.loads(p.read_text()); d["status"] = status; p.write_text(json.dumps(d))
 
 

@@ -1,6 +1,6 @@
 # actl Guide: Running Agent Loops with the atools Suite (and, as it lands, actl)
 
-**Revision:** Oct 24, 2026. **Baseline:** `atools` `main` at `6b61504` (`VERSION` v0.1.8; Stage 0 closed, tag `stage-0-verified`), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
+**Revision:** Oct 25, 2026. **Baseline:** `atools` `main` at `6b61504` (`VERSION` v0.1.8; Stage 0 closed, tag `stage-0-verified`), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Layout transition (memo L-1..L-11) is authored on `wip/layout-amend-a` and not yet implemented. Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
 
 **Where this guide fits.** It tells agents how to run loops that get the build Stages implemented. The plan lives in `actl_Build_Plan-Stages0to2.md` (core) and `actl_Build_Plan-Stages0to2_addendum.md` (Stage specifications, branch protocol in its §11, guide update schedule in its §12); the long-term design is `actl_Design.md`. This guide is updated on the schedule in §10 below.
 
@@ -96,11 +96,21 @@ Interactive Cursor runs are tmux-backed too, and `asessions` does show running s
 | Command | Purpose |
 |---|---|
 | `actl doctor [--refresh] [--json]` | Environment baseline. Runs the engines, persistence and exit-code suites and the audit (minutes), writes `$ACTL_ROOT/baseline.json` on the first run only, exits `4` if `tmux` or the audit script is missing |
-| `actl init --target <path-or-url> [--json]` | Create the tree under `$ACTL_ROOT` (default `~/actl-graph`) and clone the target repository (for a local path the base is the source repo's checked-out branch) |
-| `actl sprint new <slug> [--spec FILE] [--json]` | Mint `YYYY-MM-DD_<slug>` (`$ACTL_TODAY` overrides the date), pin `base_sha`, create `runs/state.json`, `runs/sessions.tsv` and a draft `sprint.toml` |
+| `actl init --target <path-or-url> [--json]` | Create the tree under `$ACTL_ROOT` (default `~/actl-graph`) and clone the target repository into `repos/<name>` (for a local path the base is the source repo's checked-out branch). Writes `profiles/README.md`. |
+| `actl sprint new <slug> [--spec FILE] [--json]` | Mint `YYYY-MM-DD_<slug>` (`$ACTL_TODAY` overrides the date), pin `base_sha`, create `sprints/<repo>/<tag>/runs/{state.json,sessions.tsv}` and a draft `records/<repo>/<tag>/sprint.toml` |
 | `actl next --sprint <TAG> [--json]` | Print the next action (a pure function of the sprint files) |
 
-Exit codes for every command: `0` ok, `1` red, `2` usage or schema error, `3` halt, `4` environment. Every command accepts `--json` and honours `NO_COLOR`. Contract: `src/actl/INTERFACES.md`; specification: `docs/plan/spec-S0.md`; proofs: `bash proof/run_suite_actl_s0.sh` and `PYTHONPATH=src python3 -m pytest -q test/actl`; golden fixture: `fixtures/golden/`. In local mode (one uid) Invariant P is a convention.
+`$ACTL_ROOT` layout (three lifetimes; see Design §1.5 and the layout-transition memo):
+
+```text
+$ACTL_ROOT/
+├── repos/<repo>/                         target repositories
+├── records/<repo>/<tag>/                 STORAGE (git, actl only): sprint.toml, specs, oracles, contracts, closeout/
+├── sprints/<repo>/<tag>/                 TRANSIENT: runs/, mailboxes/<role>/{inbox,outbox}, workspaces/
+└── profiles/<role>/                      PERSISTENT per-persona HOME (architect, challenger, implementer, curator)
+```
+
+Artifact receipts use `verification-NNN.json` and `qualification-NNN.json`. Exit codes for every command: `0` ok, `1` red, `2` usage or schema error, `3` halt, `4` environment. Every command accepts `--json` and honours `NO_COLOR`. Contract: `src/actl/INTERFACES.md`; specification: `docs/plan/spec-S0.md`; proofs: `bash proof/run_suite_actl_s0.sh` and `PYTHONPATH=src python3 -m pytest -q test/actl`; golden fixture: `fixtures/golden/`. In local mode (one uid) Invariant P is a convention.
 
 ## 3. Installation & Setup **[updated]**
 
@@ -164,7 +174,7 @@ Execute iterative code changes against deterministic test suites without user in
 ### A. Preparing a run
 
 1. Create an isolated worktree on a `wip/*` branch and `cd` into it: `git worktree add ../<name> -b wip/<task> && cd ../<name>`. Branch names, merge gates and parallel rules for the build are in the addendum §11.
-2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, fixtures and tests that define "done"), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits, `(WI-<id>)` (convention in §4I).
+2. Write `/tmp/Runbook_<title>.md`: goal, files in scope, **immutable paths** (always `proof/`, `fixtures/`, `test/actl/`, `src/actl/INTERFACES.md`, and `tools/` under PB-2), the designated test suite (which must already be executable; the skill no longer changes permissions), and the work-item tag to use in commits, `(WI-<id>)` (convention in §4I).
 3. Confirm the suite is **Red on base**: it must exit `1` before the agent starts.
 
 ### B. Foreground run
@@ -221,7 +231,7 @@ Explorer keys: arrows or `w`/`s` to move, `Enter` to open a history item or atta
 
 ```bash
 bash proof/run_suite_<title>.sh   # re-run yourself; never trust the agent's claim
-git diff --name-only <base>..HEAD -- proof/ fixtures/   # must be empty if those paths are immutable
+git diff --name-only <base>..HEAD -- proof/ fixtures/ test/actl/ src/actl/INTERFACES.md tools/   # must be empty (PB-2)
 ```
 
 ### F. Exit status of a detached run **[updated: Stage 0B, requirement S0-R16]**

@@ -2,7 +2,7 @@
   "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
   "epoch": 1,
   "id": "contract-005",
-  "kind": "qual",
+  "kind": "qualification",
   "oracle": {
     "id": "oracle-003",
     "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -10,7 +10,7 @@
   },
   "parent": null,
   "qual": {
-    "id": "qual-004",
+    "id": "qualification-004",
     "seq": 4,
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },

@@ -69,6 +69,29 @@ printf 'x = "AKIAIOSFODNN7EXAMPLE"\n' | grep -Eq "$SECRET_RE" && ok "G5 self-tes
 printf 'y = eval("1")\n' | grep -Eq "$FORBID_RE" && ok "G6 self-test catches synthetic eval" || bad "G6 self-test failed"
 printf 'retrieval = 1\n' | grep -Eq "$FORBID_RE" && bad "G6 self-test false positive on 'retrieval'" || ok "G6 self-test no false positive"
 
+# F006 tripwire pattern (spec O-5): anchored to records/ — bare word "records" must not match (DC-9)
+F006_RE='records/|/etc/actl|probe\.sh|/proofs/|/mutants/'
+printf 'open("$ACTL_ROOT/records/x")\n' | grep -Eq "$F006_RE" && ok "F006 self-test catches records/ path" || bad "F006 self-test missed records/ path"
+printf 'n_records = len(items)\n' | grep -Eq "$F006_RE" && bad "F006 self-test false positive on bare word records" || ok "F006 self-test no false positive on bare word records"
+
+# Layout transition fixture invariants (L-5, L-10): renamed kinds and repo-scoped install path
+[[ -d "$GOLDEN/artifacts/valid/verification" && -d "$GOLDEN/artifacts/valid/qualification" ]] \
+  && [[ ! -d "$GOLDEN/artifacts/valid/ev" && ! -d "$GOLDEN/artifacts/valid/qual" ]] \
+  && ok "golden artifact dirs use verification/qualification (not ev/qual)" \
+  || bad "golden artifact dirs missing verification/qualification or still have ev/qual"
+grep -q '"kind": "verification"' "$GOLDEN/artifacts/valid/verification/verification_base.json" \
+  && ok "verification_base kind is verification" \
+  || bad "verification_base kind is not verification"
+grep -q '"kind": "qualification"' "$GOLDEN/artifacts/valid/qualification/qualification_base.json" \
+  && ok "qualification_base kind is qualification" \
+  || bad "qualification_base kind is not qualification"
+grep -q 'records/target-repo' "$GOLDEN/build_golden.sh" \
+  && ok "build_golden install path is repo-scoped under records/" \
+  || bad "build_golden.sh missing records/target-repo install path"
+grep -q '"repo":"target-repo"' "$GOLDEN/build_golden.sh" \
+  && ok "build_golden state template records repo field" \
+  || bad "build_golden.sh state template missing repo field"
+
 # 3. oracle + repo-test runner
 run_tests() { # on failure prints "STEP ..." and "LINE ..."
   local repo="$1" out rc fl stem name

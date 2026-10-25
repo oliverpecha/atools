@@ -44,6 +44,12 @@ mutant M15 "solution key sabotaged: avatar field returns the email" "sed -i 's#+
 mutant M16 "a mutant patch no longer applies"         "echo 'garbage' > sprint/oracle/mutants/private_200.patch"
 mutant M17 "second survivor planted (photo_count_off neutralised)" "sed -i 's/len(user\\[\"photos\"\\]) + 1/len(user[\"photos\"])/' sprint/oracle/mutants/photo_count_off.patch"
 mutant M18 "proof 01 deleted"                         "rm sprint/oracle/proofs/01_public.sh"
+# Layout transition (L-5, L-10): fixture-level mutants for renamed kinds and repo-scoped paths
+mutant M19 "verification kind renamed back to ev"     "sed -i 's/\"kind\": \"verification\"/\"kind\": \"ev\"/' artifacts/valid/verification/verification_base.json"
+mutant M20 "qualification kind renamed back to qual"  "sed -i 's/\"kind\": \"qualification\"/\"kind\": \"qual\"/' artifacts/valid/qualification/qualification_base.json"
+mutant M21 "verification dir renamed to ev"           "mv artifacts/valid/verification artifacts/valid/ev"
+mutant M22 "build_golden records path reverted"       "sed -i 's#records/target-repo#actl-repo/specs#' build_golden.sh"
+mutant M23 "repo field removed from state template"   "sed -i 's/\"repo\":\"target-repo\",//' build_golden.sh"
 echo "=========================================="
 if (( fails == 0 )); then echo "selfcheck_mutations: control green, all $n planted defects detected"; exit 0; fi
 echo "selfcheck_mutations: $fails problem(s) over $n mutants"; exit 1

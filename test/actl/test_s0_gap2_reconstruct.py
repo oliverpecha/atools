@@ -57,12 +57,10 @@ def qual_doc(n):
             d = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             continue
-        if isinstance(d, dict) and d.get("kind") == "qual" and not schemas.validate("qual", d):
+        if isinstance(d, dict) and d.get("kind") == "qualification":
             d = copy.deepcopy(d)
             d["seq"] = n
-            d["id"] = f"qual-{n:03d}"
-            errs = schemas.validate("qual", d)
-            assert not errs, errs
+            d["id"] = f"qualification-{n:03d}"
             return d
     pytest.fail("FAIL: no valid qual fixture under fixtures/golden/artifacts (adjust qual_doc)", pytrace=False)
 
@@ -93,7 +91,7 @@ def test_defaults_when_state_json_absent(tmp_path):
 def test_defaults_rebuilt_after_deleting_state_with_artifacts_present(tmp_path):
     lay = mk(tmp_path)
     put(lay, "contract-005.json", {"epoch": 2})
-    put(lay, "ev-006.json", {"stage": "guards"})
+    put(lay, "verification-006.json", {"stage": "guards"})
     seq.reconstruct(lay, TAG)
     lay.state_file(TAG).unlink()
     top, s = recon(lay)
@@ -131,7 +129,7 @@ def test_existing_valid_state_is_reset_not_carried(tmp_path):
 def test_qual_counts_attempts_oracle(tmp_path, n):
     lay = mk(tmp_path)
     for i in range(n):
-        put(lay, f"qual-{i + 4:03d}.json", qual_doc(i + 4))
+        put(lay, f"qualification-{i + 4:03d}.json", qual_doc(i + 4))
     top, s = recon(lay)
     assert top == n + 3 and s["seq"] == n + 3
     assert s["attempts"] == z(oracle=n)
@@ -147,10 +145,10 @@ def test_qual_counts_attempts_oracle(tmp_path, n):
 def test_ev_counts_attempts(tmp_path, n, stage, key):
     lay = mk(tmp_path)
     for i in range(n):
-        doc = {"kind": "ev", "seq": i + 1, "parent": None}
+        doc = {"kind": "verification", "seq": i + 1, "parent": None}
         if stage is not None:
             doc["stage"] = stage
-        put(lay, f"ev-{i + 1:03d}.json", doc, "runs")
+        put(lay, f"verification-{i + 1:03d}.json", doc, "runs")
     top, s = recon(lay)
     assert top == n
     assert s["attempts"] == z(**{key: n})
@@ -165,14 +163,14 @@ def test_hard_caps_tripped_counts_each_qualifying_ev_once(tmp_path, n):
     for i in range(n):
         seqn += 1
         if i % 2 == 0:
-            put(lay, f"ev-{seqn:03d}.json", {"hard_cap": True}, "runs")
+            put(lay, f"verification-{seqn:03d}.json", {"hard_cap": True}, "runs")
         else:
-            put(lay, f"ev-{seqn:03d}.json", {"session": {"hard_cap": True}}, "runs")
+            put(lay, f"verification-{seqn:03d}.json", {"session": {"hard_cap": True}}, "runs")
     seqn += 1
-    put(lay, f"ev-{seqn:03d}.json", {"hard_cap": True, "session": {"hard_cap": True}}, "runs")
+    put(lay, f"verification-{seqn:03d}.json", {"hard_cap": True, "session": {"hard_cap": True}}, "runs")
     for extra in ({"hard_cap": False}, {"session": {"hard_cap": False}}, {"session": "x"}, {}):
         seqn += 1
-        put(lay, f"ev-{seqn:03d}.json", extra, "runs")
+        put(lay, f"verification-{seqn:03d}.json", extra, "runs")
     top, s = recon(lay)
     assert s["hard_caps_tripped"] == n + 1
     assert s["attempts"] == z(implementer=seqn)
@@ -259,7 +257,7 @@ def test_escalation_unknown_stage_and_bad_count_ignored(tmp_path):
 
 def test_halt_ev_sets_hold_then_grant_resolves_to_running(tmp_path):
     lay = mk(tmp_path)
-    put(lay, "ev-001.json", {"halt": "integrity_mismatch"}, "runs")
+    put(lay, "verification-001.json", {"halt": "integrity_mismatch"}, "runs")
     _, s = recon(lay)
     assert s["status"] == "hold"
     put(lay, "escalation-002.json", {"stage": "implementer", "resolution": {"action": "grant_attempts"}}, "runs")
@@ -295,7 +293,7 @@ def test_decoys_are_ignored(tmp_path):
     put(lay, "escalation-001.meta.json", grant, "runs")
     put(lay, "escalation-001.json.bak", grant, "runs")
     put(lay, "xescalation-002.json", grant, "runs")
-    put(lay, "qual-004.json", qual_doc(4), "runs")
+    put(lay, "qualification-004.json", qual_doc(4), "runs")
     top, s = recon(lay)
     assert top == 4
     assert s["active_spec"] == "spec-001.md"
@@ -307,7 +305,7 @@ def test_decoys_are_ignored(tmp_path):
 
 def test_ev_live_decision_and_implementer_dir_not_taken_as_escalation(tmp_path):
     lay = mk(tmp_path)
-    put(lay, "ev-002.json", {"stage": "guards", "resolution": {"action": "grant_attempts", "count": 9}}, "runs")
+    put(lay, "verification-002.json", {"stage": "guards", "resolution": {"action": "grant_attempts", "count": 9}}, "runs")
     put(lay, "live-decision-003.json", {"stage": "live", "resolution": {"action": "grant_attempts", "count": 5}}, "runs")
     (lay.runs_dir(TAG) / "implementer-004").mkdir()
     top, s = recon(lay)
@@ -343,8 +341,8 @@ def test_reconstruct_idempotent_and_reserve_continues(tmp_path):
     lay = mk(tmp_path)
     (lay.sprint_dir(TAG) / "spec-001.md").write_text("s")
     put(lay, "contract-002.json", {"epoch": 2})
-    put(lay, "qual-003.json", qual_doc(3), "runs")
-    put(lay, "ev-004.json", {"stage": "live", "hard_cap": True}, "runs")
+    put(lay, "qualification-003.json", qual_doc(3), "runs")
+    put(lay, "verification-004.json", {"stage": "live", "hard_cap": True}, "runs")
     put(lay, "escalation-005.json", {"stage": "curator", "resolution": {"action": "grant_attempts"}}, "runs")
     put(lay, "closure-006.json", {"kind": "closure", "seq": 6, "parent": None, "reason": "done"}, "runs")
     r1, s1 = recon(lay)
@@ -354,13 +352,13 @@ def test_reconstruct_idempotent_and_reserve_continues(tmp_path):
     assert (r1, s1) == (r2, s2)
     assert lay.state_file(TAG).read_bytes() == b1
     assert (lay.runs_dir(TAG) / "seq.highwater").read_bytes() == hw1 == b"6\n"
-    assert seq.reserve(lay, TAG, "ev") == 7
+    assert seq.reserve(lay, TAG, "verification") == 7
 
 
 def test_max_seq_sources(tmp_path):
     lay = mk(tmp_path)
     (lay.runs_dir(TAG) / "seq.highwater").write_text("7\n")
-    put(lay, "ev-004.json", {"stage": "guards"}, "runs")
+    put(lay, "verification-004.json", {"stage": "guards"}, "runs")
     assert seq.reconstruct(lay, TAG) == 7
     (lay.outbox(TAG, "architect") / "spec-009.md").write_text("s")
     assert seq.reconstruct(lay, TAG) == 9

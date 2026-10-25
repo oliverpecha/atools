@@ -1,3 +1,5 @@
+> **Historical record (layout transition).** This file captures collision analysis against the pre-transition Design paths (`actl-repo/`, `handoff/`, `ev-NNN`, `qual-NNN`). It is retained as-written for audit trail. Normative current names are in `actl_Design.md` and `docs/plan/layout-transition-memo.md` (L-1..L-11). Do not treat path strings below as current requirements.
+
 ### 1. POSIX Isolation, File Permissions & Multi-Account Collisions
 
 * **1.1. Architect Lost Write/Edit Path to `scope.txt` After Splitting `UID plan` (§1.5, §5.2.3, §5.4.2)**

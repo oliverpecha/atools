@@ -1,21 +1,21 @@
 {
   "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
-  "diagnostic_case": "solution_key_conflict",
-  "id": "qual-004",
-  "kind": "qual",
+  "diagnostic_case": "none",
+  "id": "qualification-004",
+  "kind": "qualification",
   "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "mutants": [
     {
-      "apply_error": true,
-      "killed": false,
-      "name": "a.patch"
+      "apply_error": false,
+      "killed": true,
+      "name": "contact_leak.patch"
     }
   ],
-  "null_base": "green",
+  "null_base": "amber",
   "oracle": "oracle-003",
   "parent": null,
   "seq": 4,
-  "solution_key_green": "2/3",
+  "solution_key_green": "3/3",
   "solution_key_guards": "green",
   "solution_key_repo_test": "green",
   "spec": "spec-001"

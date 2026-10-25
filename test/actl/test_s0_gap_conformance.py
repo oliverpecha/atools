@@ -125,10 +125,10 @@ ENUMS = [
     ("sprint", "status", {"draft", "frozen"}),
     ("state", "status", {"draft", "running", "hold", "done", "aborted"}),
     ("state", "active_stage", {"intake", "oracle", "implementer", "live", "curator", "closeout"}),
-    ("ev", "stage", {"guards", "offline", "live", "blockedcheck"}),
-    ("ev", "halt.reason",
+    ("verification", "stage", {"guards", "offline", "live", "blockedcheck"}),
+    ("verification", "halt.reason",
      {"integritymismatch", "selftestfailed", "wrapperrejected", "unsupportedcap", "architectunavailable"}),
-    ("qual", "diagnostic_case", {"none", "pureoraclefailure", "solutionkeyconflict"}),
+    ("qualification", "diagnostic_case", {"none", "pureoraclefailure", "solutionkeyconflict"}),
     ("closure", "reason", {"done", "blocked"}),
 ]
 
@@ -159,7 +159,7 @@ def _eff_min(ctx):
 
 
 NUMERIC = [
-    ("ev", "exit_code", 0, 255),
+    ("verification", "exit_code", 0, 255),
     ("state", "seq", 0, None),
     ("state", "epoch", 1, None),
     ("contract", "seq", 1, None),
@@ -186,15 +186,15 @@ def test_numeric_bounds_schema_and_section3_agree(schema, prop, lo, hi):
 
 
 def test_ev_exit_code_is_nullable():
-    types = {t for ts in _collect(_prop("ev", "exit_code"), "type") for t in (ts if isinstance(ts, list) else [ts])}
+    types = {t for ts in _collect(_prop("verification", "exit_code"), "type") for t in (ts if isinstance(ts, list) else [ts])}
     assert "null" in types or any(
-        isinstance(n, dict) and n.get("type") == "null" for n, _, _ in _subs(_prop("ev", "exit_code")))
+        isinstance(n, dict) and n.get("type") == "null" for n, _, _ in _subs(_prop("verification", "exit_code")))
 
 
 # ---------- sha patterns ----------
 SHAS = [
-    ("ev", "head", 40), ("qual", "base_sha", 40), ("contract", "base_sha", 40), ("sprint", "base_sha", 40),
-    ("qual", "manifest_sha256", 64), ("meta", "sha256", 64),
+    ("verification", "head", 40), ("qualification", "base_sha", 40), ("contract", "base_sha", 40), ("sprint", "base_sha", 40),
+    ("qualification", "manifest_sha256", 64), ("meta", "sha256", 64),
 ]
 
 

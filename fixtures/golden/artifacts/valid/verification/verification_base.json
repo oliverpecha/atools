@@ -5,8 +5,8 @@
   "failing_step": "O1:02_no_email.sh",
   "halt": null,
   "head": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
-  "id": "ev-007",
-  "kind": "ev",
+  "id": "verification-007",
+  "kind": "verification",
   "oracle": "oracle-003",
   "parent": "closure-006.json",
   "seq": 7,
@@ -15,7 +15,7 @@
   "steps": [
     {
       "cmd": "guard:scope",
-      "exit_code": "x",
+      "exit_code": 0,
       "id": "G3",
       "output_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },

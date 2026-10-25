@@ -87,9 +87,9 @@ Code style observed (follow it): top-level packages under `src/` imported as `fr
 | Gap | Today | Design requirement | First Stage that closes it |
 |---|---|---|---|
 | Who judges "done" | The agent runs the suite itself (`SKILL.md` step 4) | `actl` runs guards, oracle and repo tests externally after the session; agent sees only `failing_step`/`failing_line` (Inv. `P`, §5.4–5.5) | 1 |
-| Typed artifacts | Free text in, free text out | Schema-validated `closure`, `qual`, `ev`, `contract`, `oracle-decision`, `prior_attempt` (§4) | 0 (schemas), 1–3 (use) |
+| Typed artifacts | Free text in, free text out | Schema-validated `closure`, `qualification`, `verification`, `contract`, `oracle-decision`, `prior_attempt` (§4) | 0 (schemas), 1–3 (use) |
 | Identity of things | None | `{kind}-{seq}`, hashes, `base_sha`, contract tag; no "latest" (§4) | 0 |
-| Hand-offs between personas | The human copies things | Account-partitioned mailbox `handoff/` with `*-inputs/` and `*-outputs/` and promotion by `actl` (§1.5) | 0 (layout), 2 (bundle/unpack, promote) |
+| Hand-offs between personas | The human copies things | Account-partitioned mailbox `sprints/<repo>/<tag>/mailboxes/<role>/{inbox,outbox}` and promotion by `actl` (§1.5) | 0 (layout), 2 (bundle/unpack, promote) |
 | Persona independence | One session type | Four personas, cross-family preferred (`F`), fresh context (`C`) | 2–3 |
 | Mechanical qualification of an oracle | None | `Q1–Q5` with `diagnostic_case` (§5.2) | 3 |
 | Attempts, budgets, escalation | Watchdog timeout only | Counters, epochs, escalation router (§5.4, §6) | 4 |
@@ -105,7 +105,7 @@ The expansion is *additive*: `src/actl/` is a new top-level package beside `src/
 
 | Item | Stages 0–3 (single uid, local mode) | From Stage 4 / 6 |
 |---|---|---|
-| Invariant `P` (Implementer cannot read oracle) | **Convention only.** Oracle lives in `actl-repo/` (created `700`), but the agent runs as the same uid and *can* read it. Mitigations: never put oracle paths in any prompt; clone to a workspace outside `ACTL_ROOT/actl-repo`; transcript tripwire (Stage 1, `S1-R10`) flags any access | Real: dedicated `implementer` account (Stage 4); all accounts (Stage 6) |
+| Invariant `P` (Implementer cannot read oracle) | **Convention only.** Oracle lives in `records/` (created `700`), but the agent runs as the same uid and *can* read it. Mitigations: never put oracle paths in any prompt; clone to a workspace outside `ACTL_ROOT/records`; transcript tripwire (Stage 1, `S1-R10`) flags any access | Real: dedicated `implementer` account (Stage 4); all accounts (Stage 6) |
 | Invariant `C` | By discipline: only artifacts in `*-inputs/` are given to a persona | OS-enforced with per-persona `HOME` |
 | Invariant `S` (no sub-agents, own session) | Not enforced | Stage 6 (`--disallowedTools Agent`, tmux) |
 | Invariant `F` (cross-family) | Recorded by hand: `bundle` asks for the model name; stored per turn | `sessions.tsv` `model_family` |
