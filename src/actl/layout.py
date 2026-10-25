@@ -168,15 +168,17 @@ class Layout:
     def ensure_sprint_tree(self, tag: str) -> None:
         _check_tag(tag)
         self.ensure_base_tree()
+        # chmod every intermediate segment (mkdir parents=True alone leaves umask modes)
         for p in (
+            self.records / self.repo,
             self.sprint_dir(tag),
+            self.root / "sprints" / self.repo,
+            self.root / "sprints" / self.repo / tag,
             self.runs_dir(tag),
             self.logs_dir(tag),
             self.turns_dir(tag),
             self.mailboxes(tag),
-            self._resolve_contained(
-                self.root / "sprints" / self.repo / tag / "workspaces"
-            ),
+            self.root / "sprints" / self.repo / tag / "workspaces",
         ):
             _mkdir(self._resolve_contained(p), 0o755)
         for role in ROLES:
