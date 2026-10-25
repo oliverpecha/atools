@@ -5,7 +5,7 @@
 3. **Symmetric mailbox.** Every role has `{role}-inputs/` (staged read-only by actl) and `{role}-outputs/` (role-writable). `plan-box` splits into `architect-outputs/` and `challenger-outputs/`.
 4. **Removed mechanisms.** Delete the unlink/re-create trick, the `0440` and `0750`/`0770` toggling, and the thread restore. Keep one vault copy of the Architect thread for recovery only.
 5. **Cleanup.** The Challenger gets the same `pkill` and private `/tmp` cleanup as `implementer` and `curator`. Phase 2 qualification runs as `challenger`.
-6. **`target-repo` access.** `repos/target-repo` becomes a group-readable export (`0750 actl:cloners`) that only actl can write to. Oracle material stays only in `actl-repo`, which is `chmod 700`.
+6. **`target-repo` access.** `repos/target-repo` becomes a group-readable export (`0750 actl:cloners`) that only actl can write to. Oracle material stays only in `records`, which is `chmod 700`.
 7. **P restated minimally.** P covers the Implementer's LLM session. Add one residual-risk line: candidate code can read the oracle during Offline and Live runs. The defences are mutants, the Live Run and graduation. No extra lint or output caps.
 
 ## Sprint, policy and approvals

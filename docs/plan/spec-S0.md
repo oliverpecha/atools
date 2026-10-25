@@ -11,7 +11,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - Exit codes of the product CLI (S0-R10, D-8): `0` ok, `1` red, `2` usage/schema/parse, `3` halt, `4` environment.
 - Validation error pointer convention (INTERFACES 1.5, frozen): root is `"/"`; a missing required property is reported as `"/<parent>/<prop>"`; an extra property as `"/<extra>"`; type/enum/pattern/minimum violations at the offending value; `~` is `~0` and `/` is `~1`. See SA-22 and SA-23 for the tension with RFC 6901.
 - All proofs read the repo under test from `ACTL_REPO` (default: their own repo root) so the same proofs run against stand-ins (section 8).
-- Golden facts: `base_sha = 01d880bc3176cdd8f31d72e67bb3eba54d634378`, tag `2026-10-16_public-profiles`, install seq layout `spec-001, solution_key-002, oracle-003, qual-004, contract-005`, `state.seq = 5`.
+- Golden facts: `base_sha = 01d880bc3176cdd8f31d72e67bb3eba54d634378`, tag `2026-10-16_public-profiles`, install seq layout `spec-001, solution_key-002, oracle-003, qualification-004, contract-005`, `state.seq = 5`.
 
 ## 1. Requirements (testable expansion)
 
@@ -33,19 +33,20 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - Proof: P-S0-02 (`proof/stage0/P-S0-02.sh`, Part 2).
 
 ### S0-R3 Layout
-- S0-R3.1 `Layout(root)` is the only constructor of target-tree paths. Root = argument, else `$ACTL_ROOT`, else `$HOME/actl-graph`; `self.root` is resolved absolute; a NUL in `root` raises `ValueError`.
-- S0-R3.2 Path table (INTERFACES 1.1): `actl_repo`, `target_repo=repos/target-repo`, `baseline_file`, `sprint_dir=actl-repo/specs/{tag}`, `runs_dir`, `logs_dir`, `turns_dir`, `state_file`, `state_lock`, `sessions_file`, `sprint_toml`, `handoff=handoff/{tag}`, `inbox/outbox={role}-inputs/-outputs`, `workspace(name, tag=None)`, `homes(role)`.
+- S0-R3.1 `Layout(root=None, repo="target-repo")` is the only constructor of target-tree paths. Root = argument, else `$ACTL_ROOT`, else `$HOME/actl-graph`; repo = argument, else `"target-repo"`; `self.root` is resolved absolute; `self.repo` is the repository name string; a NUL in `root` raises `ValueError`.
+- S0-R3.2 Path table (INTERFACES 1.1): `records`, `target_repo=repos/{repo}`, `baseline_file`, `sprint_dir=records/{repo}/{tag}`, `runs_dir=sprints/{repo}/{tag}/runs`, `logs_dir`, `turns_dir`, `state_file`, `state_lock`, `sessions_file`, `sprint_toml=records/{repo}/{tag}/sprint.toml`, `mailboxes=sprints/{repo}/{tag}/mailboxes`, `inbox/outbox=sprints/{repo}/{tag}/mailboxes/{role}/inbox|outbox`, `workspace(name, tag=None)=sprints/{repo}/{tag}/workspaces/{name}`, `profile(role)=profiles/{role}`.
 - S0-R3.3 Roles are exactly `architect, challenger, implementer, curator`. Unknown roles raise `ValueError`.
 - S0-R3.4 Rejected with `ValueError`: tags failing `validate_sprint_tag` (including `..`, absolute, `a/b`, trailing newline, NUL, invalid calendar date); workspace names that are empty, `.`, `..`, contain `/`, `\`, NUL or a control character `< 0x20`/`0x7f`.
-- S0-R3.5 `ensure_base_tree()` creates exactly `actl-repo/specs, handoff, workspaces, repos, homes/{4 roles}` and applies `0700` to `actl-repo/` and `0755` to `handoff workspaces repos homes`. `ensure_sprint_tree(tag)` creates sprint, runs, logs, turns, handoff dirs and, per role, inbox `0750` and outbox `0770`. Both are idempotent and apply modes regardless of umask. Modes are asserted with `stat.S_IMODE(os.lstat(p).st_mode)` (identical for UID 0 and non-root). `repos/target-repo` is not created.
+- S0-R3.5 `ensure_base_tree()` creates exactly `records, sprints, repos, profiles/{4 roles}` and writes `profiles/README.md`; applies `0700` to `records/` and `0755` to `sprints repos profiles`. `ensure_sprint_tree(tag)` creates sprint, runs, logs, turns, mailboxes, workspaces dirs and, per role, inbox `0750` and outbox `0770`. Both are idempotent and apply modes regardless of umask. Modes are asserted with `stat.S_IMODE(os.lstat(p).st_mode)` (identical for UID 0 and non-root). `repos/{repo}` is not created.
+- S0-R3.6 Wrong-repo guard: every function that loads state verifies `state["repo"] == layout.repo` and `sprint.repo == layout.repo`, raising `StateIntegrityError` (exit code 3) on mismatch.
 - Proof: P-S0-03 (`test_p03_layout.py`).
 
 ### S0-R4 Init and sprint creation
-- S0-R4.1 `actl init --target <path|url>` clones with `--local --no-hardlinks` (path) and `-c core.hooksPath=/dev/null` into `repos/target-repo`; history is preserved; `--json` keys `actl_root target_repo base_sha created`; repeating with the same target exits `0`; a different target over an existing clone, or a non-git target, exits `2` (SA-5).
+- S0-R4.1 `actl init --target <path|url> [--name <repo>]` clones with `--local --no-hardlinks` (path) and `-c core.hooksPath=/dev/null` into `repos/<repo>` (default name `target-repo`); history is preserved; writes `profiles/README.md`; `--json` keys `actl_root target_repo base_sha created`; repeating with the same target exits `0`; a different target over an existing clone, or a non-git target, exits `2` (SA-5).
 - S0-R4.2 `actl sprint new <slug> [--spec FILE]`: slug must match `^[a-z0-9][a-z0-9-]{1,40}\Z` (so `ab`..41 chars OK; `a`, `-ab`, `Ab`, `a_b`, 42 chars, `ab\n`, non-ASCII are exit `2` and create nothing).
 - S0-R4.3 Tag = `YYYY-MM-DD_{slug}` from `$ACTL_TODAY` (valid ISO date) else the local date. An existing tag exits `2` and leaves the existing sprint byte-identical.
 - S0-R4.4 `base_sha` is the full 40-character HEAD of the target's default branch.
-- S0-R4.5 Created: sprint and handoff trees (S0-R3), `runs/state.json` (`run_id = "run-" + sha256(tag)[:12]`, `seq 0`, `epoch 1`, `status draft`, all `active_*` null, counters 0), `runs/sessions.tsv` with exactly the header `seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n`, and the draft `sprint.toml` (S0-R8). `live_run` is NOT written.
+- S0-R4.5 Created: sprint, mailboxes, and runs trees (S0-R3), `runs/state.json` (`repo = layout.repo`, `run_id = "run-" + sha256(tag)[:12]`, `seq 0`, `epoch 1`, `status draft`, all `active_*` null, counters 0), `runs/sessions.tsv` with exactly the header `seq\tsession\trole\tengine\tmodel\tmodel_family\tturns\ttool_calls\ttokens\tcost_usd\texit_code\taccepted_items\tescalation_alerts_sent\n`, and the draft `sprint.toml` (S0-R8, recording `repo = layout.repo`). `live_run` is NOT written.
 - S0-R4.6 With `--spec F`: `seq.reserve` yields `1`; `spec-001.md` is a byte copy; `spec-001.md.meta.json` = `{kind: "spec", seq: 1, parent: null, sha256}`; `spec_source = "imported"`, `active_spec = "spec-001.md"`, `runs/seq.highwater = "1\n"`. A missing `F` exits `2`.
 - S0-R4.7 `--json` keys: `sprint_tag slug base_sha sprint_dir handoff_dir spec_source active_spec seq`.
 - Proof: P-S0-04 (`test_p04_sprint.py`).
@@ -54,7 +55,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - S0-R5.1 `reserve(layout, tag, kind) -> int` holds `fcntl.flock(LOCK_EX)` on `runs/state.lock` (re-entrant per thread), computes `max(state.seq, highwater) + 1`, writes `"<n>\n"` to `seq.highwater` and `state.json` atomically (temp file, fsync, `os.replace`, fsync of the directory), and returns `n` before any artifact is written. Valid kinds: those of `format_artifact_id` plus `implementer`. Errors: `ValueError` (kind/tag), `FileNotFoundError` (no sprint state).
 - S0-R5.2 50 parallel reservations (10 processes x 5) return the 50 distinct contiguous numbers `6..55` (golden `seq = 5`), strictly increasing per process; 8 threads in one process are also distinct. Highwater wins over a lower `state.seq`.
 - S0-R5.3 A `SIGKILL` at an arbitrary instant leaves `state.json` parseable, `highwater >= every number already returned`, and the next `reserve` returns a number above all of them.
-- S0-R5.4 `reconstruct(layout, tag) -> int` returns `max(highwater, highest seq in file/dir names)` scanning `sprint_dir`, `runs_dir`, `handoff/{tag}/*/*` (two levels) and `workspaces/{tag}/implementer-*`; it rewrites a schema-valid `state.json` (restoring `sprint_tag`, `run_id`, `epoch`, `active_contract` from `contract-*.json`) and is idempotent. The next `reserve` continues at `+1`.
+- S0-R5.4 `reconstruct(layout, tag) -> int` returns `max(highwater, highest seq in file/dir names)` scanning `sprint_dir` (`records/{repo}/{tag}`), `runs_dir` (`sprints/{repo}/{tag}/runs`), `mailboxes` (`sprints/{repo}/{tag}/mailboxes/*/*`, two levels) and `workspaces/{tag}/implementer-*`; it rewrites a schema-valid `state.json` (restoring `repo`, `sprint_tag`, `run_id`, `epoch`, `active_contract` from `contract-*.json`) and is idempotent. The next `reserve` continues at `+1`.
 - Proofs: P-S0-05 (`test_p05_seq.py`), P-S0-06 (`test_p06_reconstruct.py`).
 
 ### S0-R6 Canonical hashing
@@ -65,11 +66,11 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 - Proof: P-S0-07 (`test_p07_hashing.py`).
 
 ### S0-R7 Schemas
-- S0-R7.1 Schemas `common state sprint sprint-proposal closure ev qual contract oracle-decision prior_attempt meta attempt` live in `schemas/*.json`, draft 2020-12, top-level `additionalProperties: false` (except the defs-only `common`).
-- S0-R7.2 `ev`, `qual`, `contract` require `kind, seq, parent` through `common.json#/$defs/artifact_meta`; `closure` does not require them (agent drafts); the contract schema carries no budget fields.
+- S0-R7.1 Schemas `common state sprint sprint-proposal closure verification qualification contract oracle-decision prior_attempt meta attempt` live in `schemas/*.json`, draft 2020-12, top-level `additionalProperties: false` (except the defs-only `common`).
+- S0-R7.2 `verification`, `qualification`, `contract` require `kind, seq, parent` through `common.json#/$defs/artifact_meta`; `closure` does not require them (agent drafts); the contract schema carries no budget fields. Both `state` and `sprint` record a `repo` field.
 - S0-R7.3 `validate(kind, obj)` returns a list of `{path, message}` sorted by `(path, message)`, `[]` iff valid, never raises on bad data, raises `ValueError` only for an unknown kind or schema load failure. A non-object root reports `"/"`.
 - S0-R7.4 It never delegates to `jsonschema`: results are identical with `sys.modules["jsonschema"] = None` (O-1).
-- S0-R7.5 `sprint` may omit `live_run` only when `status == "draft"`; `sprint-proposal` requires `live_run` and rejects `sprint_tag base_sha status spec_source repo_test_cmd`.
+- S0-R7.5 `sprint` may omit `live_run` only when `status == "draft"`; `sprint-proposal` requires `live_run` and rejects `sprint_tag base_sha repo status spec_source repo_test_cmd`.
 - S0-R7.6 Fixtures: 24 valid documents and 60 invalid documents (>= 4 per kind, 11 kinds) in `fixtures/golden/artifacts/`, each invalid case with its exact expected pointer set in `invalid/index.json`.
 - Proof: P-S0-08 (`test_p08_schemas.py`).
 
@@ -82,7 +83,7 @@ Date: 2026-10-20. Inputs: Design rev. 2, core plan, addendum (wins over core; De
 ### S0-R9 Golden fixture
 - S0-R9.1 `fixtures/golden/` has the layout of addendum 5.8 plus `expected_text/`, `vectors/`, `sprint/scope_overrides/`. It is deterministic, offline, LLM-free, stdlib-only.
 - S0-R9.2 `build_golden.sh <dest>` prints the same `base_sha` on every run; every git call sets `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null -c core.hooksPath=/dev/null`, fixed identity and `2026-01-01T00:00:00+0000`.
-- S0-R9.3 `build_golden.sh --install-sprint ROOT [--tag T]` installs `spec-001.md, solution_key-002.patch, oracle-003/ (with solution_key.patch), qual-004.json, contract-005.json, sprint.toml (frozen, live_run none), runs/state.json (seq 5), runs/sessions.tsv` and the target clone, with hashes consistent with S0-R6.
+- S0-R9.3 `build_golden.sh --install-sprint ROOT [--tag T]` installs `spec-001.md, solution_key-002.patch, oracle-003/ (with solution_key.patch), qualification-004.json, contract-005.json, sprint.toml (frozen, live_run none, repo target-repo), runs/state.json (seq 5, repo target-repo), runs/sessions.tsv` and the target clone, with hashes consistent with S0-R6.
 - S0-R9.4 Case table (`expected.d/base.json`): null base red at `O1:01_public.sh`; key green; good green; `bad_scope` G3; `bad_testcount` G4; `bad_secret` G5; `bad_forbidden` G6; `bad_proof_o1` `O1:02_no_email.sh`; `bad_regression_o2` `O2:test_users::test_get_user_unknown_returns_none`; mutants killed exactly by their `coverage.md` proofs (`contact_leak`->02, `private_200`->03, `photo_count_off`->probe only); `avatar_drop` survives all.
 - S0-R9.5 Permission proofs use `S_IMODE(os.lstat(...))`.
 - Proofs: P-S0-10 (`golden_selfcheck.sh`), P-S0-13 (hook immunity, Part 2).
@@ -226,7 +227,7 @@ Scope: added lines of the candidate diff only, all files except paths matched by
 | F003 | `\bsubprocess\b` | process spawn (needs Owner allow per path) |
 | F004 | `\b(socket\|urllib\.request\|http\.client\|requests\|httpx\|aiohttp)\b` | network from offline proofs |
 | F005 | `\b(pickle\|marshal)\.loads?\(` | unsafe deserialisation |
-| F006 | `actl-repo\|/etc/actl\|probe\.sh\|/proofs/\|/mutants/` | oracle access (Invariant P tripwire) |
+| F006 | `records/\|/etc/actl\|probe\.sh\|/proofs/\|/mutants/` | oracle access (Invariant P tripwire) |
 | F007 | `git +push\|--no-verify\|core\.hooksPath` | repo-safety rules |
 | F008 | `\bsudo\b\|chmod +(-R +)?[0-7]*7[0-7]*7` | privilege/permission widening |
 Self-test (mandatory before every use, Design 5.5): synthetic positives for each rule and negatives (`retrieval = 1`, `execute_work`) - the golden self-check already carries the F001 positive and the `retrieval` negative.
