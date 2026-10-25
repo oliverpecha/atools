@@ -70,7 +70,7 @@ def test_fifty_parallel_processes_get_distinct_monotonic_numbers(tmp_path):
     if sorted(flat) != list(range(6, 56)): fail("numbers must be the contiguous range 6..55, got %s" % sorted(flat))
     for l in per:
         if l != sorted(l) or len(set(l)) != len(l): fail("per-process numbers must be strictly increasing: %s" % l)
-    st = json.loads((root / "actl-repo" / "specs" / TAG / "runs" / "state.json").read_text())
+    st = json.loads((root / "sprints" / "target-repo" / TAG / "runs" / "state.json").read_text())
     if st["seq"] != 55: fail("final state.seq must be 55, got %s" % st["seq"])
 
 
@@ -80,7 +80,7 @@ def test_threads_in_one_process_are_distinct(tmp_path):
     from actl import seq
     lay = Layout(root)
     with ThreadPoolExecutor(8) as ex:
-        res = list(ex.map(lambda _: seq.reserve(lay, TAG, "ev"), range(40)))
+        res = list(ex.map(lambda _: seq.reserve(lay, TAG, "verification"), range(40)))
     if len(set(res)) != 40: fail("threads obtained duplicate numbers")
     if sorted(res) != list(range(6, 46)): fail("thread numbers not contiguous")
 
@@ -98,7 +98,7 @@ def test_sigkill_mid_reserve_leaves_no_duplicate_and_valid_state(tmp_path):
     seen += [int(x) for x in p.stdout.read().split()]
     if len(seen) < 10: fail("worker produced too few numbers (%d) to test a kill" % len(seen))
     if len(set(seen)) != len(seen): fail("duplicate numbers before the kill")
-    runs = root / "actl-repo" / "specs" / TAG / "runs"
+    runs = root / "sprints" / "target-repo" / TAG / "runs"
     try:
         json.loads((runs / "state.json").read_text())
     except Exception as e:
@@ -107,5 +107,5 @@ def test_sigkill_mid_reserve_leaves_no_duplicate_and_valid_state(tmp_path):
     if hw < max(seen): fail("highwater %d is below an already-returned number %d" % (hw, max(seen)))
     from actl.layout import Layout
     from actl import seq
-    n = seq.reserve(Layout(root), TAG, "ev")
+    n = seq.reserve(Layout(root), TAG, "verification")
     if n <= max(seen) or n in seen: fail("post-kill reserve returned %d, not above every returned number (max %d)" % (n, max(seen)))

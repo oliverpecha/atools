@@ -10,8 +10,8 @@ from helpers import *  # noqa
 TMPL = (GOLDEN / "expected_text" / "sprint.toml.tmpl").read_text()
 
 
-def _render(tag, base, status="draft", source="architect_qna", live=""):
-    return (TMPL.replace("{{sprint_tag}}", tag).replace("{{base_sha}}", base).replace("{{status}}", status)
+def _render(tag, base, repo="target-repo", status="draft", source="architect_qna", live=""):
+    return (TMPL.replace("{{sprint_tag}}", tag).replace("{{base_sha}}", base).replace("{{repo}}", repo).replace("{{status}}", status)
             .replace("{{spec_source}}", source).replace("{{live_run_line}}", live))
 
 
@@ -48,7 +48,7 @@ def test_draft_sprint_toml_equals_golden_text(tmp_path):
     root = _init(tmp_path)
     r = run_actl(["sprint", "new", "demo"], root=root)
     if r.returncode != 0: fail("sprint new failed: %s" % r.stderr[-300:])
-    got = (root / "actl-repo" / "specs" / "2026-10-16_demo" / "sprint.toml").read_text()
+    got = (root / "records" / "target-repo" / "2026-10-16_demo" / "sprint.toml").read_text()
     want = _render("2026-10-16_demo", BASE_SHA)
     if got != want: fail("draft sprint.toml differs from expected_text/sprint.toml.tmpl:\n--- got\n%s--- want\n%s" % (got, want))
 
@@ -57,7 +57,7 @@ def test_imported_spec_variant_text(tmp_path):
     root = _init(tmp_path); spec = tmp_path / "s.md"; spec.write_text("# s\n")
     r = run_actl(["sprint", "new", "imp", "--spec", str(spec)], root=root)
     if r.returncode != 0: fail("sprint new --spec failed")
-    got = (root / "actl-repo" / "specs" / "2026-10-16_imp" / "sprint.toml").read_text()
+    got = (root / "records" / "target-repo" / "2026-10-16_imp" / "sprint.toml").read_text()
     if got != _render("2026-10-16_imp", BASE_SHA, source="imported"): fail("imported-spec draft sprint.toml text wrong")
 
 
@@ -71,5 +71,5 @@ def test_defaults_really_come_from_graph_toml(tmp_path):
     root = _init(tmp_path, repo=repo)
     r = run_actl(["sprint", "new", "demo"], root=root, repo=repo)
     if r.returncode != 0: fail("sprint new failed in the scratch repo: %s" % r.stderr[-300:])
-    got = (root / "actl-repo" / "specs" / "2026-10-16_demo" / "sprint.toml").read_text()
+    got = (root / "records" / "target-repo" / "2026-10-16_demo" / "sprint.toml").read_text()
     if "max_epochs = 7" not in got: fail("draft sprint.toml ignored the edited graph.toml (defaults are hard-coded)")

@@ -161,99 +161,99 @@
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/exit_code_above_255.json",
+      "kind": "verification",
+      "file": "verification/exit_code_above_255.json",
       "expect_paths": [
         "/exit_code"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/exit_code_negative.json",
+      "kind": "verification",
+      "file": "verification/exit_code_negative.json",
       "expect_paths": [
         "/exit_code"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/exit_code_type.json",
+      "kind": "verification",
+      "file": "verification/exit_code_type.json",
       "expect_paths": [
         "/exit_code"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/stage_enum.json",
+      "kind": "verification",
+      "file": "verification/stage_enum.json",
       "expect_paths": [
         "/stage"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/head_pattern.json",
+      "kind": "verification",
+      "file": "verification/head_pattern.json",
       "expect_paths": [
         "/head"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/step_exit_code_type.json",
+      "kind": "verification",
+      "file": "verification/step_exit_code_type.json",
       "expect_paths": [
         "/steps/0/exit_code"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/failing_line_too_long.json",
+      "kind": "verification",
+      "file": "verification/failing_line_too_long.json",
       "expect_paths": [
         "/failing_line"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/halt_reason_enum.json",
+      "kind": "verification",
+      "file": "verification/halt_reason_enum.json",
       "expect_paths": [
         "/halt/reason"
       ]
     },
     {
-      "kind": "ev",
-      "file": "ev/missing_kind.json",
+      "kind": "verification",
+      "file": "verification/missing_kind.json",
       "expect_paths": [
         "/kind"
       ]
     },
     {
-      "kind": "qual",
-      "file": "qual/null_base_enum.json",
+      "kind": "qualification",
+      "file": "qualification/null_base_enum.json",
       "expect_paths": [
         "/null_base"
       ]
     },
     {
-      "kind": "qual",
-      "file": "qual/green_pattern.json",
+      "kind": "qualification",
+      "file": "qualification/green_pattern.json",
       "expect_paths": [
         "/solution_key_green"
       ]
     },
     {
-      "kind": "qual",
-      "file": "qual/killed_type.json",
+      "kind": "qualification",
+      "file": "qualification/killed_type.json",
       "expect_paths": [
         "/mutants/0/killed"
       ]
     },
     {
-      "kind": "qual",
-      "file": "qual/manifest_pattern.json",
+      "kind": "qualification",
+      "file": "qualification/manifest_pattern.json",
       "expect_paths": [
         "/manifest_sha256"
       ]
     },
     {
-      "kind": "qual",
-      "file": "qual/diagnostic_enum.json",
+      "kind": "qualification",
+      "file": "qualification/diagnostic_enum.json",
       "expect_paths": [
         "/diagnostic_case"
       ]

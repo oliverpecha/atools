@@ -105,7 +105,7 @@ def test_sprint_new_captures_default_branch(tmp_path):
     target.rename(lay.target_repo)
     
     sprint.create_sprint(lay, "testslug")
-    sprint_dirs = list((lay.root / "actl-repo" / "specs").glob("*_testslug"))
+    sprint_dirs = list((lay.root / "records" / "target-repo").glob("*_testslug"))
     assert len(sprint_dirs) == 1
     st_file = sprint_dirs[0] / "sprint.toml"
     assert f'base_sha = "{main_sha}"' in st_file.read_text(encoding="utf-8")

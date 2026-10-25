@@ -9,7 +9,7 @@ import pytest
 from helpers import *  # noqa
 
 ART = GOLDEN / "artifacts"
-KINDS = ["state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt"]
+KINDS = ["state", "sprint", "sprint-proposal", "closure", "verification", "qualification", "contract", "oracle-decision", "prior_attempt", "meta", "attempt"]
 INDEX = json.loads((ART / "invalid" / "index.json").read_text())["cases"]
 VALID = sorted((p.parent.name, p) for p in (ART / "valid").glob("*/*.json"))
 
@@ -39,7 +39,7 @@ def test_invalid_artifacts_fail_at_exact_pointers(case):
             fail("error entries must be {path, message} strings: %r" % e)
     got = sorted({e["path"] for e in errs})
     exp = sorted(case["expect_paths"])
-    if case["file"] == "ev/halt_reason_enum.json" and got == ["/halt"]:
+    if case["file"] == "verification/halt_reason_enum.json" and got == ["/halt"]:
         exp = ["/halt"]
     elif case["file"] == "closure/divergence_missing_rationale.json" and got == ["/solution_key_divergence"]:
         exp = ["/solution_key_divergence"]
@@ -79,14 +79,14 @@ def test_validator_is_in_tree_and_ignores_jsonschema():
 
 def test_schema_files_shape():
     sd = REPO / "schemas"
-    names = ["common", "state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract", "oracle-decision", "prior_attempt", "meta", "attempt"]
+    names = ["common", "state", "sprint", "sprint-proposal", "closure", "verification", "qualification", "contract", "oracle-decision", "prior_attempt", "meta", "attempt"]
     for n in names:
         if not (sd / (n + ".json")).exists(): fail("schemas/%s.json missing" % n)
     for n in names:
         s = json.loads((sd / (n + ".json")).read_text())
         if "2020-12" not in s.get("$schema", ""): fail("schemas/%s.json must declare draft 2020-12" % n)
         if n != "common" and s.get("additionalProperties") is not False: fail("schemas/%s.json must set additionalProperties false at the top" % n)
-    for n in ("ev", "qual", "contract"):
+    for n in ("verification", "qualification", "contract"):
         if "artifact_meta" not in (sd / (n + ".json")).read_text(): fail("schemas/%s.json must use common.json#/$defs/artifact_meta" % n)
     req = json.dumps(json.loads((sd / "closure.json").read_text()).get("required", []))
     for k in ("kind", "seq", "parent"):
@@ -96,8 +96,9 @@ def test_schema_files_shape():
 
 def test_golden_install_artifacts_validate(tmp_path):
     root = tmp_path / "r"; install_golden(root)
-    v = _validate(); sd = root / "actl-repo" / "specs" / TAG
-    for kind, p in (("state", sd / "runs" / "state.json"), ("qual", sd / "qual-004.json"), ("contract", sd / "contract-005.json")):
+    v = _validate(); sd = root / "records" / "target-repo" / TAG
+    runs = root / "sprints" / "target-repo" / TAG / "runs"
+    for kind, p in (("state", runs / "state.json"), ("qualification", sd / "qualification-004.json"), ("contract", sd / "contract-005.json")):
         errs = v(kind, json.loads(p.read_text()))
         if errs: fail("installed golden %s invalid: %s" % (p.name, errs))
     errs = v("sprint", tomllib.loads((sd / "sprint.toml").read_text()))

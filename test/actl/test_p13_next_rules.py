@@ -63,7 +63,7 @@ def _decide(repo, root):
 
 
 def _set(root, **kw):
-    p = root / "actl-repo" / "specs" / TAG / "runs" / "state.json"
+    p = root / "sprints" / "target-repo" / TAG / "runs" / "state.json"
     d = json.loads(p.read_text()); d.update(kw); p.write_text(json.dumps(d))
 
 

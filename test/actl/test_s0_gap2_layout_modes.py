@@ -32,18 +32,27 @@ def mode(p):
 
 def expected(lay, sprint):
     r = lay.root
-    m = {r: 0o755, r / "actl-repo": 0o700, r / "actl-repo" / "specs": 0o755}
-    for d in ("handoff", "workspaces", "repos", "homes"):
-        m[r / d] = 0o755
+    repo = lay.repo
+    m = {r: 0o755, r / "records": 0o700, r / "sprints": 0o755, r / "repos": 0o755, r / "profiles": 0o755}
     for role in ROLES:
-        m[r / "homes" / role] = 0o755
+        m[r / "profiles" / role] = 0o755
     if sprint:
-        sd = r / "actl-repo" / "specs" / TAG
-        for p in (sd, sd / "runs", sd / "runs" / "logs", sd / "runs" / "turns", r / "handoff" / TAG):
-            m[p] = 0o755
+        sd = r / "records" / repo / TAG
+        runs = r / "sprints" / repo / TAG / "runs"
+        m[r / "records" / repo] = 0o755
+        m[sd] = 0o755
+        m[r / "sprints" / repo] = 0o755
+        m[r / "sprints" / repo / TAG] = 0o755
+        m[runs] = 0o755
+        m[runs / "logs"] = 0o755
+        m[runs / "turns"] = 0o755
+        mb = r / "sprints" / repo / TAG / "mailboxes"
+        m[mb] = 0o755
         for role in ROLES:
-            m[r / "handoff" / TAG / f"{role}-inputs"] = 0o750
-            m[r / "handoff" / TAG / f"{role}-outputs"] = 0o770
+            m[mb / role] = 0o755
+            m[mb / role / "inbox"] = 0o750
+            m[mb / role / "outbox"] = 0o770
+        m[r / "sprints" / repo / TAG / "workspaces"] = 0o755
     return m
 
 
@@ -58,12 +67,12 @@ def found_dirs(root):
 def test_paths_agree_with_layout_accessors(tmp_path):
     lay = Layout(tmp_path / "root")
     r = lay.root
-    assert lay.actl_repo == r / "actl-repo"
-    assert lay.homes("curator") == r / "homes" / "curator"
-    assert lay.inbox(TAG, "architect") == r / "handoff" / TAG / "architect-inputs"
-    assert lay.outbox(TAG, "architect") == r / "handoff" / TAG / "architect-outputs"
-    assert lay.logs_dir(TAG) == r / "actl-repo" / "specs" / TAG / "runs" / "logs"
-    assert lay.turns_dir(TAG) == r / "actl-repo" / "specs" / TAG / "runs" / "turns"
+    assert lay.records == r / "records"
+    assert lay.profile("curator") == r / "profiles" / "curator"
+    assert lay.inbox(TAG, "architect") == r / "sprints" / "target-repo" / TAG / "mailboxes" / "architect" / "inbox"
+    assert lay.outbox(TAG, "architect") == r / "sprints" / "target-repo" / TAG / "mailboxes" / "architect" / "outbox"
+    assert lay.logs_dir(TAG) == r / "sprints" / "target-repo" / TAG / "runs" / "logs"
+    assert lay.turns_dir(TAG) == r / "sprints" / "target-repo" / TAG / "runs" / "turns"
 
 
 def test_base_tree_exact_modes_and_exact_dir_set(tmp_path, umask):

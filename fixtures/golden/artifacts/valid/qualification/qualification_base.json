@@ -1,13 +1,13 @@
 {
   "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
   "diagnostic_case": "none",
-  "id": "qual-004",
-  "kind": "qual",
+  "id": "qualification-004",
+  "kind": "qualification",
   "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "mutants": [
     {
       "apply_error": false,
-      "killed": "yes",
+      "killed": true,
       "name": "contact_leak.patch"
     }
   ],

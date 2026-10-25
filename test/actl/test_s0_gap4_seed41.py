@@ -128,13 +128,13 @@ def test_reconstruct_resolved_escalation_clears_hold_status(tmp_path):
     tag = "2026-10-16_demo-sprint"
     lay.ensure_sprint_tree(tag)
 
-    # 1. ev artifact with halt=True puts state["status"] into "hold" (seq.py line 374)
+    # 1. verification artifact with halt=True puts state["status"] into "hold" (seq.py line 374)
     ev_doc = {
         "seq": 1,
         "stage": "implementer",
         "halt": True,
     }
-    (lay.runs_dir(tag) / "ev-001.json").write_text(json.dumps(ev_doc), encoding="utf-8")
+    (lay.runs_dir(tag) / "verification-001.json").write_text(json.dumps(ev_doc), encoding="utf-8")
 
     # 2. Subsequent escalation with status="resolved" reaches line 356:
     # elif esc.get("status") == "resolved":

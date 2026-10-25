@@ -88,8 +88,8 @@ def test_seq_active_contract(tmp_path):
     l = _lay(tmp_path)
     (l.sprint_dir(TAG) / "spec-001.md").write_text("s")
     # Artifact with kind != "contract" must NOT set active_contract
-    (l.runs_dir(TAG) / "ev-002.json").write_text(json.dumps({"stage": "live", "hard_cap": True}))
-    (l.runs_dir(TAG) / "ev-002.meta.json").write_text(json.dumps({"kind": "notes", "seq": 2}))
+    (l.runs_dir(TAG) / "verification-002.json").write_text(json.dumps({"stage": "live", "hard_cap": True}))
+    (l.runs_dir(TAG) / "verification-002.meta.json").write_text(json.dumps({"kind": "notes", "seq": 2}))
     seq.reconstruct(l, TAG)
     state = seq.read_state(l, TAG)
     assert state.get("active_contract") is None

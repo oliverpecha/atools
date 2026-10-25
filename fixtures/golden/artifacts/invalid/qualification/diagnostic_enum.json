@@ -1,9 +1,9 @@
 {
   "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
-  "diagnostic_case": "none",
-  "id": "qual-004",
-  "kind": "qual",
-  "manifest_sha256": "abc",
+  "diagnostic_case": "weird",
+  "id": "qualification-004",
+  "kind": "qualification",
+  "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "mutants": [
     {
       "apply_error": false,
