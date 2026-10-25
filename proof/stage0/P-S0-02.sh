@@ -42,6 +42,7 @@ if [[ -z "$WS" ]]; then
 fi
 
 # LT-A2 pin refresh applied
+# LT-A3 pin refresh applied
 is_authorized_pb2_modification() {
   local f="$1"
   [[ -f "$REPO/$f" ]] || return 1
@@ -140,10 +141,10 @@ is_authorized_pb2_modification() {
     "test/actl/test_p01_doctor.py:801e6dea33bac1c494f996ab68eb05cdded8c029") return 0 ;;
     "test/actl/test_p03_layout.py:a626f19309f21f35a8d139c4375a77a47e210f11") return 0 ;;
     "test/actl/test_p04_sprint.py:aa459185c6efeff2aef722d1dfed86cbc8338e08") return 0 ;;
-    "test/actl/test_p05_seq.py:6ee6c0ba5af9c2469b2ebf1aa54374ea97107783") return 0 ;;
+    "test/actl/test_p05_seq.py:e5842861d77291ae966a579bff59c19b95926a11") return 0 ;;
     "test/actl/test_p06_reconstruct.py:53ad009900826e12a23251a5b15c20444d655784") return 0 ;;
     "test/actl/test_p07_hashing.py:9eae9c6bfa9a344dcd6b7ba5837e042e4fd6c65d") return 0 ;;
-    "test/actl/test_p08_schemas.py:f5fe7513bd3b6f73bd43a51f2a8f94ddfeea60a1") return 0 ;;
+    "test/actl/test_p08_schemas.py:5742caf9b383ede5dba684a03aef0c5f0d397eaf") return 0 ;;
     "test/actl/test_p09_defaults.py:964c43016d04c0a6a36f2c2f39db598234aec496") return 0 ;;
     "test/actl/test_p11_cli.py:2f4df77eaa2779fb08ddec7bcb6ed91ca4155392") return 0 ;;
     "test/actl/test_p12_scope.py:c68869b8c468ddc2f964d0665f10c0ea57d5225a") return 0 ;;
@@ -155,10 +156,10 @@ is_authorized_pb2_modification() {
     "test/actl/test_s0_gap2_hashing.py:c0eac4944fad85b4d14ac77e6e56bbd0cf9f08ce") return 0 ;;
     "test/actl/test_s0_gap2_ids.py:2c75ed6138670db8a928f86dcaab8f879cc6633b") return 0 ;;
     "test/actl/test_s0_gap2_layout_modes.py:b1c2074c34cce2536949c2b6f07ad8b2bd899703") return 0 ;;
-    "test/actl/test_s0_gap2_reconstruct.py:bd82f5c38ecc6c54ce39d874a2bca7397e0f8099") return 0 ;;
+    "test/actl/test_s0_gap2_reconstruct.py:16ce09fabd8ad1c2ff9bd758235e46c02f00c36e") return 0 ;;
     "test/actl/test_s0_gap2_router.py:8e48d0bae2ccda7ba38a90b7fd0e2ffb901683c0") return 0 ;;
-    "test/actl/test_s0_gap2_schemas.py:1e65a73bacda06504a65fddee9f301d947d41ab1") return 0 ;;
-    "test/actl/test_s0_gap2_seed23.py:5b35610dba17116b3078a32e86e5e024c0c60075") return 0 ;;
+    "test/actl/test_s0_gap2_schemas.py:cb5e51245985b1fd2febb62cec718f12282594db") return 0 ;;
+    "test/actl/test_s0_gap2_seed23.py:19dd849e8f3c200900898e8f16ed80bf9bc54a6e") return 0 ;;
     "test/actl/test_s0_gap2_sprint.py:3decde7cd680d5e01f59da7518f0b4e222a64573") return 0 ;;
     "test/actl/test_s0_gap2_validator_scope.py:046ce519ed4d579df98959ee3590039b86cbae98") return 0 ;;
     "test/actl/test_s0_gap3_hashing_tuples.py:dc540f124c40b1cf11410089ab4994d6a68f3c17") return 0 ;;
@@ -171,12 +172,12 @@ is_authorized_pb2_modification() {
     "test/actl/test_s0_gap4_boot_mode.py:5218305a8d85c99d328f86d55659211d7492b80f") return 0 ;;
     "test/actl/test_s0_gap4_seed41.py:50d9f9017455c8dfdf6efc397431fa9120756c08") return 0 ;;
     "test/actl/test_s0_gap_cli_json_errors.py:ce3b917d24eb3521b9a5c47e743feee2fe02347f") return 0 ;;
-    "test/actl/test_s0_gap_conformance.py:42fae773818daa62106f8db437bd7ff4287283f8") return 0 ;;
+    "test/actl/test_s0_gap_conformance.py:74f7d520061e0c2b72b3c5e46689b4e3a51d832e") return 0 ;;
     "test/actl/test_s0_gap_hashing.py:eed1bf0ba92857b86b2ce06cd6576ed50c9b11e1") return 0 ;;
-    "test/actl/test_s0_gap_ids.py:4ed1d12e1abc5decb9f7be1c53e660c909ad2d8d") return 0 ;;
+    "test/actl/test_s0_gap_ids.py:90fa4fa9de886505f56a012abe76f88464f227d3") return 0 ;;
     "test/actl/test_s0_gap_layout.py:2f306f2de8689e965c9e12d0e91ad25ed6ed148d") return 0 ;;
     "test/actl/test_s0_gap_next_rule_signatures.py:4d7ad2a7d164456d474fcaa47f49ffff282ab43e") return 0 ;;
-    "test/actl/test_s0_gap_schemas_oneof.py:712f589efcaf1b3e2cb29bce9cf7f3a20613bb1e") return 0 ;;
+    "test/actl/test_s0_gap_schemas_oneof.py:7b8816b6711e8a129024161444bd937ab79edae1") return 0 ;;
     "test/actl/test_s0_gap_scope_globs.py:1bc0cb99ba9e1c4c8190d05952dc2d438e470c8e") return 0 ;;
     "test/actl/test_s0_gap_seq_reconstruct_order.py:37147844e9c104250953474166c98541f6f10342") return 0 ;;
     "test/actl/test_s0_gap_sprint_initial_state.py:76ffa996368712c70e6ddb6f2a34e97aa21cb215") return 0 ;;
