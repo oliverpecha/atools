@@ -72,7 +72,7 @@ def test_seq_corrupt_hw(tmp_path):
     l = _lay(tmp_path)
     l.state_file(TAG).write_text(json.dumps({"seq": 0, "status": "draft"}))
     (l.runs_dir(TAG) / "seq.highwater").write_text("bad\n")
-    assert seq.reserve(l, TAG, "ev") == 1
+    assert seq.reserve(l, TAG, "verification") == 1
 
 # 5. Kill seq.py:310 (or -> and in contract epoch validation)
 def test_seq_contract_epoch(tmp_path):

@@ -179,7 +179,7 @@ def errs_at(kind, doc):
 
 def test_fixture_inventory():
     have = {k for k, _, _ in cases()}
-    for k in ("state", "sprint", "sprint-proposal", "closure", "ev", "qual", "contract"):
+    for k in ("state", "sprint", "sprint-proposal", "closure", "verification", "qualification", "contract"):
         assert k in have, f"no valid fixture for {k}"
 
 
@@ -251,10 +251,10 @@ def test_resolver_driven_numeric_and_length_boundaries():
 PINNED = [
     ("state", ["seq"], "minimum", 0), ("state", ["epoch"], "minimum", 1),
     ("state", ["closures_submitted"], "minimum", 0), ("state", ["hard_caps_tripped"], "minimum", 0),
-    ("closure", ["seq"], "minimum", 1), ("ev", ["seq"], "minimum", 1), ("qual", ["seq"], "minimum", 1),
+    ("closure", ["seq"], "minimum", 1), ("verification", ["seq"], "minimum", 1), ("qualification", ["seq"], "minimum", 1),
     ("contract", ["seq"], "minimum", 1), ("contract", ["epoch"], "minimum", 1),
     ("meta", ["seq"], "minimum", 1), ("attempt", ["seq"], "minimum", 1),
-    ("ev", ["exit_code"], "minimum", 0), ("ev", ["exit_code"], "maximum", 255),
+    ("verification", ["exit_code"], "minimum", 0), ("verification", ["exit_code"], "maximum", 255),
 ] + [(k, [name], "minimum", 1) for k in ("sprint", "sprint-proposal")
      for name in ("min_attempts_before_block", "max_epochs")] \
   + [(k, ["max_attempts", r], "minimum", 1) for k in ("sprint", "sprint-proposal")
@@ -272,6 +272,12 @@ def test_pinned_bounds(kind, tokens, kw, val):
     m = copy.deepcopy(doc)
     set_path(m, tokens, val)
     assert not [e for e in errs_at(kind, m) if e[0] == path and MSG[kw] in e[1]], f"{kind} {path}={val} rejected"
+
+
+@pytest.mark.parametrize("kind", ["ev", "qual"])
+def test_old_kind_names_rejected_as_schemas(kind):
+    with pytest.raises(ValueError):
+        schemas.validate(kind, {})
 
 
 # ---------- static lints over the raw schema files ----------

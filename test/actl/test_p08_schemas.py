@@ -54,8 +54,9 @@ def test_never_raises_on_garbage_and_root_pointer_is_slash():
         if not errs or "/" not in [e["path"] for e in errs]: fail("non-object root must report path '/': %r -> %r" % (junk, errs))
 
 
-def test_unknown_kind_raises_value_error():
-    with pytest.raises(ValueError): _validate()("no-such-kind", {})
+@pytest.mark.parametrize("kind", ["no-such-kind", "ev", "qual"])
+def test_unknown_kind_raises_value_error(kind):
+    with pytest.raises(ValueError): _validate()(kind, {})
 
 
 def test_pointer_escaping_tilde_and_slash():

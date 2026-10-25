@@ -18,7 +18,7 @@ from actl.layout import Layout
 from actl import seq
 lay = Layout(%r)
 for _ in range(int(sys.argv[1])):
-    print(seq.reserve(lay, %r, "ev"), flush=True)
+    print(seq.reserve(lay, %r, "verification"), flush=True)
 """
 
 
@@ -37,15 +37,17 @@ def test_single_reserve_semantics(tmp_path):
     from actl.layout import Layout
     from actl import seq
     lay = Layout(root)
-    n = seq.reserve(lay, TAG, "qual")
+    n = seq.reserve(lay, TAG, "qualification")
     if n != 6: fail("first reserve after the golden state (seq=5) must return 6, got %r" % n)
     st = json.loads(lay.state_file(TAG).read_text())
     if st["seq"] != 6: fail("state.json seq must equal the reserved number")
     if (lay.runs_dir(TAG) / "seq.highwater").read_text() != "6\n": fail("seq.highwater must hold '6' + newline")
     if seq.reserve(lay, TAG, "implementer") != 7: fail("kind 'implementer' must be accepted and monotonic")
     with pytest.raises(ValueError): seq.reserve(lay, TAG, "bogus-kind")
-    with pytest.raises(ValueError): seq.reserve(lay, "../x", "ev")
-    with pytest.raises(FileNotFoundError): seq.reserve(lay, "2026-10-17_absent", "ev")
+    with pytest.raises(ValueError): seq.reserve(lay, TAG, "ev")
+    with pytest.raises(ValueError): seq.reserve(lay, TAG, "qual")
+    with pytest.raises(ValueError): seq.reserve(lay, "../x", "verification")
+    with pytest.raises(FileNotFoundError): seq.reserve(lay, "2026-10-17_absent", "verification")
 
 
 def test_highwater_wins_over_lower_state_seq(tmp_path):
@@ -54,7 +56,7 @@ def test_highwater_wins_over_lower_state_seq(tmp_path):
     from actl import seq
     lay = Layout(root)
     (lay.runs_dir(TAG) / "seq.highwater").write_text("40\n")
-    if seq.reserve(lay, TAG, "ev") != 41: fail("reserve must use max(state.seq, highwater) + 1 (highwater=40, state=5)")
+    if seq.reserve(lay, TAG, "verification") != 41: fail("reserve must use max(state.seq, highwater) + 1 (highwater=40, state=5)")
 
 
 def test_fifty_parallel_processes_get_distinct_monotonic_numbers(tmp_path):

@@ -145,10 +145,10 @@ def test_qual_counts_attempts_oracle(tmp_path, n):
 def test_ev_counts_attempts(tmp_path, n, stage, key):
     lay = mk(tmp_path)
     for i in range(n):
-        doc = {"kind": "ev", "seq": i + 1, "parent": None}
+        doc = {"kind": "verification", "seq": i + 1, "parent": None}
         if stage is not None:
             doc["stage"] = stage
-        put(lay, f"ev-{i + 1:03d}.json", doc, "runs")
+        put(lay, f"verification-{i + 1:03d}.json", doc, "runs")
     top, s = recon(lay)
     assert top == n
     assert s["attempts"] == z(**{key: n})
@@ -163,14 +163,14 @@ def test_hard_caps_tripped_counts_each_qualifying_ev_once(tmp_path, n):
     for i in range(n):
         seqn += 1
         if i % 2 == 0:
-            put(lay, f"ev-{seqn:03d}.json", {"hard_cap": True}, "runs")
+            put(lay, f"verification-{seqn:03d}.json", {"hard_cap": True}, "runs")
         else:
-            put(lay, f"ev-{seqn:03d}.json", {"session": {"hard_cap": True}}, "runs")
+            put(lay, f"verification-{seqn:03d}.json", {"session": {"hard_cap": True}}, "runs")
     seqn += 1
-    put(lay, f"ev-{seqn:03d}.json", {"hard_cap": True, "session": {"hard_cap": True}}, "runs")
+    put(lay, f"verification-{seqn:03d}.json", {"hard_cap": True, "session": {"hard_cap": True}}, "runs")
     for extra in ({"hard_cap": False}, {"session": {"hard_cap": False}}, {"session": "x"}, {}):
         seqn += 1
-        put(lay, f"ev-{seqn:03d}.json", extra, "runs")
+        put(lay, f"verification-{seqn:03d}.json", extra, "runs")
     top, s = recon(lay)
     assert s["hard_caps_tripped"] == n + 1
     assert s["attempts"] == z(implementer=seqn)

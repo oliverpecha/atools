@@ -17,11 +17,11 @@ import pytest
 from actl import ids
 
 KINDS = [
-    "spec", "solution_key", "oracle", "oracle-draft", "qual", "contract",
-    "closure", "ev", "escalation", "live-decision", "implementer",
+    "spec", "solution_key", "oracle", "oracle-draft", "qualification", "contract",
+    "closure", "verification", "escalation", "live-decision", "implementer",
 ]
 BAD_SEQS = [0, -1, True, False, "1", None, 1.5]
-BAD_KINDS = ["bogus", "", "EV", "ev ", None, "spec-001"]
+BAD_KINDS = ["bogus", "", "EV", "ev ", None, "spec-001", "ev", "qual"]
 FUNCS = [ids.format_artifact_id, ids.format_artifact_filename]
 
 
@@ -33,7 +33,7 @@ FUNCS = [ids.format_artifact_id, ids.format_artifact_filename]
 @pytest.mark.parametrize("seq", BAD_SEQS, ids=repr)
 def test_bad_seq_raises_value_error_with_valid_kind(fn, seq):
     with pytest.raises(ValueError):
-        fn("ev", seq)
+        fn("verification", seq)
 
 
 @pytest.mark.parametrize("fn", FUNCS, ids=lambda f: f.__name__)
@@ -62,7 +62,7 @@ def test_filename_suffixes():
     assert f("solution_key", 2) == "solution_key-002.patch"
     for k in ("oracle", "oracle-draft", "implementer"):
         assert f(k, 3) == f"{k}-003"
-    for k in ("qual", "contract", "closure", "ev", "escalation", "live-decision"):
+    for k in ("qualification", "contract", "closure", "verification", "escalation", "live-decision"):
         assert f(k, 4) == f"{k}-004.json"
 
 def test_ids_validation_guards():
