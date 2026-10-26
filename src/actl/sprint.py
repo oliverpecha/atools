@@ -36,13 +36,20 @@ def load_graph_defaults(config_path: Path | str | None = None) -> dict[str, Any]
 
 
 def load_sprint_toml(layout: Layout, tag: str) -> dict[str, Any]:
+    from actl.errors import StateIntegrityError
+
     p = layout.sprint_toml(tag)
     if not p.is_file():
         raise FileNotFoundError(str(p))
     try:
-        return tomllib.loads(p.read_text(encoding="utf-8"))
+        data = tomllib.loads(p.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"Invalid sprint.toml: {exc}") from exc
+    if "repo" in data and data["repo"] != layout.repo:
+        raise StateIntegrityError(
+            f"sprint.repo {data['repo']!r} != layout.repo {layout.repo!r}"
+        )
+    return data
 
 
 def _git_env() -> dict[str, str]:
@@ -149,6 +156,7 @@ def _format_sprint_toml(
     spec_source: str,
     defaults: dict[str, Any],
     live_run_line: str = "",
+    repo: str = "target-repo",
 ) -> str:
     ma = defaults["max_attempts"]
     hc = defaults.get("hard_cap", {}).get("implementer", {})
@@ -162,6 +170,7 @@ def _format_sprint_toml(
     return (
         f'sprint_tag = "{tag}"\n'
         f'base_sha = "{base_sha}"\n'
+        f'repo = "{repo}"\n'
         f'status = "{status}"\n'
         f'spec_source = "{spec_source}"\n'
         f"after = []\n"
@@ -248,6 +257,7 @@ def create_sprint(
         "epoch": 1,
         "grants": {"curator": 0, "implementer": 0, "live": 0, "oracle": 0},
         "hard_caps_tripped": 0,
+        "repo": layout.repo,
         "run_id": run_id,
         "seq": 0,
         "sprint_tag": tag,
@@ -287,7 +297,13 @@ def create_sprint(
         seq_num = 0
 
     toml_text = _format_sprint_toml(
-        tag, base_sha, "draft", spec_source, defaults, live_run_line=""
+        tag,
+        base_sha,
+        "draft",
+        spec_source,
+        defaults,
+        live_run_line="",
+        repo=layout.repo,
     )
     layout.sprint_toml(tag).write_text(toml_text, encoding="utf-8")
 
@@ -296,7 +312,7 @@ def create_sprint(
         "slug": slug,
         "base_sha": base_sha,
         "sprint_dir": str(layout.sprint_dir(tag)),
-        "handoff_dir": str(layout.handoff(tag)),
+        "mailboxes_dir": str(layout.mailboxes(tag)),
         "spec_source": spec_source,
         "active_spec": active_spec,
         "seq": seq_num,

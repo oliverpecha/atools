@@ -22,53 +22,148 @@
     "tmux_sessions"
   ],
   "properties": {
-    "run_id": { "type": "string" },
+    "run_id": {
+      "type": "string"
+    },
     "sprint_tag": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}_[a-z0-9][a-z0-9-]{1,40}\\Z"
     },
-    "seq": { "type": "integer", "minimum": 0 },
-    "epoch": { "type": "integer", "minimum": 1 },
+    "repo": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1
+    },
     "status": {
       "type": "string",
-      "enum": ["draft", "running", "hold", "done", "aborted"]
+      "enum": [
+        "draft",
+        "running",
+        "hold",
+        "done",
+        "aborted"
+      ]
     },
     "active_stage": {
-      "type": ["string", "null"],
-      "enum": ["intake", "oracle", "implementer", "live", "curator", "closeout", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "intake",
+        "oracle",
+        "implementer",
+        "live",
+        "curator",
+        "closeout",
+        null
+      ]
     },
-    "active_spec": { "type": ["string", "null"] },
-    "active_solution_key": { "type": ["string", "null"] },
-    "active_oracle_draft": { "type": ["string", "null"] },
-    "active_oracle": { "type": ["string", "null"] },
-    "active_contract": { "type": ["string", "null"] },
+    "active_spec": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_solution_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_oracle_draft": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_oracle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "attempts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["oracle", "implementer", "live", "curator"],
+      "required": [
+        "oracle",
+        "implementer",
+        "live",
+        "curator"
+      ],
       "properties": {
-        "oracle": { "type": "integer", "minimum": 0 },
-        "implementer": { "type": "integer", "minimum": 0 },
-        "live": { "type": "integer", "minimum": 0 },
-        "curator": { "type": "integer", "minimum": 0 }
+        "oracle": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "implementer": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "live": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "curator": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
-    "closures_submitted": { "type": "integer", "minimum": 0 },
-    "hard_caps_tripped": { "type": "integer", "minimum": 0 },
+    "closures_submitted": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "hard_caps_tripped": {
+      "type": "integer",
+      "minimum": 0
+    },
     "grants": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["oracle", "implementer", "live", "curator"],
+      "required": [
+        "oracle",
+        "implementer",
+        "live",
+        "curator"
+      ],
       "properties": {
-        "oracle": { "type": "integer", "minimum": 0 },
-        "implementer": { "type": "integer", "minimum": 0 },
-        "live": { "type": "integer", "minimum": 0 },
-        "curator": { "type": "integer", "minimum": 0 }
+        "oracle": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "implementer": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "live": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "curator": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "tmux_sessions": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     }
   }
 }

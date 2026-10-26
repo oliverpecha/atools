@@ -8,6 +8,23 @@ from actl.ids import validate_sprint_tag
 
 ROLES = ("architect", "challenger", "implementer", "curator")
 
+PROFILES_README = """# profiles/
+
+One folder per persona account: architect, challenger, implementer, curator.
+Each folder holds that persona's CLI state. The account's HOME points here.
+
+Lives here: login and config, session store and transcripts, installed copies of
+skills and rules, and the Architect's persistent thread.
+
+Does not live here: the persona's instructions. System prompts, skills and rules are
+versioned in the atools repo and delivered by actl on every turn, or installed into
+the profile when the account is created. Nothing in a profile is authoritative:
+deleting one loses memory, never policy.
+
+Durable results are copied into records/ by actl. A profile is working memory, not an archive.
+Empty until Stage 4, when real accounts exist.
+"""
+
 
 def _check_tag(tag: str) -> str:
     if not isinstance(tag, str) or not validate_sprint_tag(tag):
@@ -34,13 +51,23 @@ def _check_workspace_name(name: str) -> str:
     return name
 
 
+def _check_repo(repo: str) -> str:
+    # Repo names use the same rules as workspace names (memo L-10 / S0-R3).
+    try:
+        return _check_workspace_name(repo)
+    except ValueError as exc:
+        raise ValueError(f"Invalid repo name: {repo!r}") from exc
+
+
 def _mkdir(path: Path, mode: int) -> None:
     path.mkdir(parents=True, exist_ok=True)
     os.chmod(path, mode)
 
 
 class Layout:
-    def __init__(self, root: Path | str | None = None) -> None:
+    def __init__(
+        self, root: Path | str | None = None, repo: str = "target-repo"
+    ) -> None:
         if root is None:
             env = os.environ.get("ACTL_ROOT")
             if env:
@@ -50,6 +77,7 @@ class Layout:
         if "\x00" in str(root):
             raise ValueError("NUL byte in root path")
         self.root: Path = Path(root).resolve()
+        self.repo: str = _check_repo(repo)
 
     def _resolve_contained(self, target_path: Path) -> Path:
         resolved = target_path.resolve()
@@ -62,22 +90,24 @@ class Layout:
         return self._resolve_contained(path)
 
     @property
-    def actl_repo(self) -> Path:
-        return self._resolve_contained(self.root / "actl-repo")
+    def records(self) -> Path:
+        return self._resolve_contained(self.root / "records")
 
     @property
     def target_repo(self) -> Path:
-        return self._resolve_contained(self.root / "repos" / "target-repo")
+        return self._resolve_contained(self.root / "repos" / self.repo)
 
     @property
     def baseline_file(self) -> Path:
         return self._resolve_contained(self.root / "baseline.json")
 
     def sprint_dir(self, tag: str) -> Path:
-        return self._resolve_contained(self.actl_repo / "specs" / _check_tag(tag))
+        return self._resolve_contained(self.records / self.repo / _check_tag(tag))
 
     def runs_dir(self, tag: str) -> Path:
-        return self._resolve_contained(self.sprint_dir(tag) / "runs")
+        return self._resolve_contained(
+            self.root / "sprints" / self.repo / _check_tag(tag) / "runs"
+        )
 
     def logs_dir(self, tag: str) -> Path:
         return self._resolve_contained(self.runs_dir(tag) / "logs")
@@ -97,46 +127,62 @@ class Layout:
     def sprint_toml(self, tag: str) -> Path:
         return self._resolve_contained(self.sprint_dir(tag) / "sprint.toml")
 
-    def handoff(self, tag: str) -> Path:
-        return self._resolve_contained(self.root / "handoff" / _check_tag(tag))
+    def mailboxes(self, tag: str) -> Path:
+        return self._resolve_contained(
+            self.root / "sprints" / self.repo / _check_tag(tag) / "mailboxes"
+        )
 
     def inbox(self, tag: str, role: str) -> Path:
-        return self._resolve_contained(self.handoff(tag) / f"{_check_role(role)}-inputs")
+        return self._resolve_contained(
+            self.mailboxes(tag) / _check_role(role) / "inbox"
+        )
 
     def outbox(self, tag: str, role: str) -> Path:
-        return self._resolve_contained(self.handoff(tag) / f"{_check_role(role)}-outputs")
+        return self._resolve_contained(
+            self.mailboxes(tag) / _check_role(role) / "outbox"
+        )
 
     def workspace(self, name: str, tag: str | None = None) -> Path:
         _check_workspace_name(name)
         if tag is not None:
             _check_tag(tag)
-            return self._resolve_contained(self.root / "workspaces" / tag / name)
-        return self._resolve_contained(self.root / "workspaces" / name)
+            return self._resolve_contained(
+                self.root / "sprints" / self.repo / tag / "workspaces" / name
+            )
+        return self._resolve_contained(
+            self.root / "sprints" / self.repo / "workspaces" / name
+        )
 
-    def homes(self, role: str) -> Path:
-        return self._resolve_contained(self.root / "homes" / _check_role(role))
+    def profile(self, role: str) -> Path:
+        return self._resolve_contained(self.root / "profiles" / _check_role(role))
 
     def ensure_base_tree(self) -> None:
         self._resolve_contained(self.root)
         _mkdir(self.root, 0o755)
-        _mkdir(self.actl_repo, 0o700)
-        _mkdir(self._resolve_contained(self.actl_repo / "specs"), 0o755)
-        for d in ("handoff", "workspaces", "repos", "homes"):
+        _mkdir(self.records, 0o700)
+        for d in ("sprints", "repos", "profiles"):
             _mkdir(self._resolve_contained(self.root / d), 0o755)
         for role in ROLES:
-            _mkdir(self.homes(role), 0o755)
+            _mkdir(self.profile(role), 0o755)
 
     def ensure_sprint_tree(self, tag: str) -> None:
         _check_tag(tag)
         self.ensure_base_tree()
+        # chmod every intermediate segment (mkdir parents=True alone leaves umask modes)
         for p in (
+            self.records / self.repo,
             self.sprint_dir(tag),
+            self.root / "sprints" / self.repo,
+            self.root / "sprints" / self.repo / tag,
             self.runs_dir(tag),
             self.logs_dir(tag),
             self.turns_dir(tag),
-            self.handoff(tag),
+            self.mailboxes(tag),
+            self.root / "sprints" / self.repo / tag / "workspaces",
         ):
             _mkdir(self._resolve_contained(p), 0o755)
         for role in ROLES:
+            role_dir = self.mailboxes(tag) / role
+            _mkdir(self._resolve_contained(role_dir), 0o755)
             _mkdir(self.inbox(tag, role), 0o750)
             _mkdir(self.outbox(tag, role), 0o770)

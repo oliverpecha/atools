@@ -11,10 +11,10 @@ ARTIFACT_KINDS = (
     "solution_key",
     "oracle",
     "oracle-draft",
-    "qual",
+    "qualification",
     "contract",
     "closure",
-    "ev",
+    "verification",
     "escalation",
     "live-decision",
     "implementer",
@@ -27,7 +27,7 @@ _PARSE_RE = re.compile(
     r"^(?:(spec)-([0-9]{3,})\.md|"
     r"(solution_key)-([0-9]{3,})\.patch|"
     r"(oracle|oracle-draft|implementer)-([0-9]{3,})|"
-    r"(qual|contract|closure|ev|escalation|live-decision)-([0-9]{3,})\.json)\Z"
+    r"(qualification|contract|closure|verification|escalation|live-decision)-([0-9]{3,})\.json)\Z"
 )
 
 
@@ -116,7 +116,14 @@ def format_artifact_filename(kind: str, seq: int) -> str:
         return f"solution_key-{seq:03d}.patch"
     if kind in ("oracle", "oracle-draft", "implementer"):
         return f"{kind}-{seq:03d}"
-    if kind in ("qual", "contract", "closure", "ev", "escalation", "live-decision"):
+    if kind in (
+        "qualification",
+        "contract",
+        "closure",
+        "verification",
+        "escalation",
+        "live-decision",
+    ):
         return f"{kind}-{seq:03d}.json"
     raise ValueError(f"Invalid artifact kind: {kind!r}")
 
