@@ -1,0 +1,161 @@
+<<<FILE path="oracle-draft/scope.txt">>>
+FROZEN: test/**
+ALLOW: **
+ALLOW: api/users.py
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/coverage.md">>>
+# coverage.md - requirement -> proofs, mutant -> proofs expected to kill it
+R1 -> 01_public.sh, probe.sh
+R2 -> 02_no_email.sh
+R3 -> 03_private_404.sh
+mutants/contact_leak.patch -> 02_no_email.sh
+mutants/private_200.patch -> 03_private_404.sh
+mutants/photo_count_off.patch -> probe.sh
+mutants/avatar_drop.patch -> 01_public.sh
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/oracle-critique.md">>>
+# oracle-critique.md
+Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+
+Audit of spec-001 and solution_key.patch (golden fixture; hand-written, not a model output).
+
+## Findings
+- R1 lists "avatar" but `01_public.sh` deliberately does not assert the avatar value. `mutants/avatar_drop.patch`
+  (sets avatar to null) therefore SURVIVES. This is intentional: the fixture needs one known survivor so Stage 3 can
+  exercise `diagnostic_case = pure_oracle_failure` and the `waive_mutant` path. coverage.md maps it to `01_public.sh`
+  (where a strong oracle would kill it), so the mapping is well-formed while the kill does not happen.
+- `photo_count` exactness is checked only by `probe.sh` (recomputed from raw data); `photo_count_off.patch` is killed by the probe alone.
+- R2 uses a raw-payload sentinel scan, so renamed keys (`contact`) are caught.
+- R3 also asserts that no owner name or bio leaks in the 404 body.
+
+## Residual risk
+Avatar correctness is unverified by the oracle. Accepting this risk requires a `waive_mutant` resolution.
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/probe.sh" mode="exec">>>
+#!/usr/bin/env bash
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+# End-to-end recomputation: photo_count must equal len(photos) recomputed from RAW data (api.users.USERS).
+set -uo pipefail
+CMD="${ACTL_TARGET_CMD:-python3 -m api.cli}"
+for id in 1 2; do
+  raw="$(python3 -c "from api.users import USERS; print(len(USERS[$id]['photos']))" 2>/dev/null)" || { echo "FAIL: cannot read raw data"; exit 1; }
+  out="$($CMD profile "$id" 2>/dev/null)" || { echo "FAIL: profile $id did not exit 0"; exit 1; }
+  got="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["body"]["photo_count"])' 2>/dev/null)" || { echo "FAIL: no body.photo_count for $id"; exit 1; }
+  if [[ "$got" != "$raw" ]]; then echo "FAIL: photo_count $got != recomputed $raw for id $id"; exit 1; fi
+done
+echo "OK: probe"
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/proofs/01_public.sh" mode="exec">>>
+#!/usr/bin/env bash
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+# R1: guests see name, bio and a photo_count for public profiles (avatar value deliberately NOT asserted - see oracle-critique.md).
+set -uo pipefail
+CMD="${ACTL_TARGET_CMD:-python3 -m api.cli}"
+for id in 1 2; do
+  if ! out="$($CMD profile "$id" 2>/dev/null)"; then echo "FAIL: profile $id did not exit 0"; exit 1; fi
+  printf '%s' "$out" | python3 -c '
+import json, sys
+exp = {"1": ("Ada Lovelace", "Mathematician"), "2": ("Grace Hopper", "Compiler pioneer")}[sys.argv[1]]
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print("FAIL: output is not JSON: %s" % e); sys.exit(1)
+b = d.get("body") or {}
+if d.get("status") != 200: print("FAIL: public profile %s status %r != 200" % (sys.argv[1], d.get("status"))); sys.exit(1)
+if b.get("name") != exp[0]: print("FAIL: name mismatch for %s" % sys.argv[1]); sys.exit(1)
+if b.get("bio") != exp[1]: print("FAIL: bio mismatch for %s" % sys.argv[1]); sys.exit(1)
+pc = b.get("photo_count")
+if not isinstance(pc, int) or isinstance(pc, bool) or pc < 0: print("FAIL: photo_count missing or not a non-negative int"); sys.exit(1)
+' "$id" || exit 1
+done
+echo "OK: 01_public"
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/proofs/02_no_email.sh" mode="exec">>>
+#!/usr/bin/env bash
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+# R2: never expose email - sentinel scan of the RAW payload, any key name (catches 'contact' renames).
+set -uo pipefail
+CMD="${ACTL_TARGET_CMD:-python3 -m api.cli}"
+for id in 1 2 3; do
+  out="$($CMD profile "$id" 2>/dev/null)" || { echo "FAIL: profile $id did not exit 0"; exit 1; }
+  for needle in "ada@example.test" "grace@example.test" "linus@example.test" "@example.test" "@"; do
+    if printf '%s' "$out" | grep -qF -- "$needle"; then echo "FAIL: body contains seeded email material ($needle) for id $id"; exit 1; fi
+  done
+done
+echo "OK: 02_no_email"
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/proofs/03_private_404.sh" mode="exec">>>
+#!/usr/bin/env bash
+# Authored-by: Claude Sonnet 5.5 (Anthropic; accessed via the Perplexity web UI; Owner-attested 2026-10-20), model family: Claude
+# R3: private profiles return 404 and leak nothing about the owner.
+set -uo pipefail
+CMD="${ACTL_TARGET_CMD:-python3 -m api.cli}"
+out="$($CMD profile 3 2>/dev/null)" || { echo "FAIL: profile 3 did not exit 0"; exit 1; }
+printf '%s' "$out" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print("FAIL: output is not JSON: %s" % e); sys.exit(1)
+if d.get("status") != 404: print("FAIL: private profile status %r != 404" % d.get("status")); sys.exit(1)
+raw = json.dumps(d)
+for leak in ("Linus", "Keeps to himself", "linus"):
+    if leak in raw: print("FAIL: private profile leaks %r" % leak); sys.exit(1)
+' || exit 1
+echo "OK: 03_private_404"
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/mutants/avatar_drop.patch">>>
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..267ef3c 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -10,6 +10,6 @@ def render_profile(user_id):
+     return 200, {
+         "name": user["name"],
+         "bio": user["bio"],
+-        "avatar": user["avatar"],
++        "avatar": None,
+         "photo_count": len(user["photos"]),
+     }
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/mutants/contact_leak.patch">>>
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..a03771d 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -12,4 +12,5 @@ def render_profile(user_id):
+         "bio": user["bio"],
+         "avatar": user["avatar"],
+         "photo_count": len(user["photos"]),
++        "contact": user["email"],
+     }
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/mutants/photo_count_off.patch">>>
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..5ae3bf7 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -11,5 +11,5 @@ def render_profile(user_id):
+         "name": user["name"],
+         "bio": user["bio"],
+         "avatar": user["avatar"],
+-        "photo_count": len(user["photos"]),
++        "photo_count": len(user["photos"]) + 1,
+     }
+<<<END_FILE>>>
+<<<FILE path="oracle-draft/mutants/private_200.patch">>>
+diff --git a/api/profile.py b/api/profile.py
+index 456bec1..f8621dc 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -5,7 +5,7 @@ from api import users
+ def render_profile(user_id):
+     """Return (status, body) for a guest viewing user_id's profile."""
+     user = users.get_user(user_id)
+-    if user is None or not users.is_public(user_id):
++    if user is None:
+         return 404, {"error": "not_found"}
+     return 200, {
+         "name": user["name"],
+<<<END_FILE>>>
+<<<END_RESPONSE bundle="b7eb659a">>>

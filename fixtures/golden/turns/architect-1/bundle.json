@@ -1,0 +1,11 @@
+{
+  "turn_id": "architect-1",
+  "role": "architect",
+  "purpose": "architect-intake",
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "solution_key_sha256": null,
+  "files": [],
+  "bundle_sha256": "1f13e14121fe05e60b057c39f2df60ec1f4c049cd49b243b3a05fbef76a63d16",
+  "created": "2026-10-16T00:00:00+00:00",
+  "model_hint": "auto"
+}

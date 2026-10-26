@@ -1,0 +1,8 @@
+<<<PATCH path="api/users.py">>>
+<<<<<<< SEARCH
+NON_EXISTENT_FUNCTION_XYZ()
+=======
+REPLACEMENT
+>>>>>>> REPLACE
+<<<END_PATCH>>>
+<<<END_RESPONSE bundle="1f13e141">>>

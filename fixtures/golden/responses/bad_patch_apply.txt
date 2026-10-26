@@ -1,0 +1,5 @@
+<<<PATCH path="api/users.py">>>
+<<<<<<< SEARCH
+USERS = {}
+<<<END_PATCH>>>
+<<<END_RESPONSE bundle="1f13e141">>>

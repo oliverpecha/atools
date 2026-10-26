@@ -1,0 +1,8 @@
+<<<PATCH path="api/users.py">>>
+<<<<<<< SEARCH
+def 
+=======
+def replaced_
+>>>>>>> REPLACE
+<<<END_PATCH>>>
+<<<END_RESPONSE bundle="1f13e141">>>

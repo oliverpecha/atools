@@ -1,0 +1,4 @@
+<<<FILE path="oracle-decision.json">>>
+{"decision": "unknown_decision", "feedback": null}
+<<<END_FILE>>>
+<<<END_RESPONSE bundle="06784a4e">>>

@@ -1,0 +1,244 @@
+{
+  "responses": {
+    "good_architect_intake": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "sprint.toml": "f6d9ece377677c36d2276885228c6b92e1f25b9d530aaec606ddf9836664aa47",
+          "solution_key.patch": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2"
+        }
+      }
+    },
+    "good_challenger": {
+      "purpose": "challenger",
+      "turn": "challenger-1",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "oracle-draft/scope.txt": "1055898d888ed0a12ed7d98ae27e0c3c4f1fc5a13a4bb397f2563a2db15a7ca6",
+          "oracle-draft/coverage.md": "ae604423b4dd7cdaef227feb37505ce6bb24f73111bdd0cb39e246b07a5ee609",
+          "oracle-draft/oracle-critique.md": "9fdf4c60ec12133bf3d63500a125636a96924d2655bcd1c8cd4d7e359c354f6a",
+          "oracle-draft/probe.sh": "e2ce07c3a5ab5e744481d96f09420fee7a0d43851e3e0ec8cdc18df4214f279f",
+          "oracle-draft/proofs/01_public.sh": "2af23918fe7872729f952354c99d560826033e9e8ecc3684280eef874bddc53c",
+          "oracle-draft/proofs/02_no_email.sh": "ca363bdc44c7d4ca7102e3d9215c14b02c5efd94c0b2722a97a218659a59276e",
+          "oracle-draft/proofs/03_private_404.sh": "5b342e2c8bab51792cc156ab22aec54c130b1c25e9f0af20d0069f833577d7d8",
+          "oracle-draft/mutants/avatar_drop.patch": "97b32a435d1578d6ed58786017a7d8194b07db25306c350b0cf4e23c83ebe889",
+          "oracle-draft/mutants/contact_leak.patch": "a8e0898f0bad89767d8ac4eff0224b3c01d3d895c8a70be3e5ad6c75b69c6373",
+          "oracle-draft/mutants/photo_count_off.patch": "92cf9415612fcf2f46f2ddb156af5e476bad3f2c8325279a6f662cd4c3e653c9",
+          "oracle-draft/mutants/private_200.patch": "93fb8c9ddc47d318d6dde121950474b44b799b456cedc63158bf7788a18e86d8"
+        }
+      }
+    },
+    "good_architect_review_lock": {
+      "purpose": "architect-review",
+      "turn": "architect-2",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "oracle-decision.json": "e174fb20a719aa3387fa01acdb2143314a3742dfbda7ccb9b5972523bcd6a081"
+        }
+      }
+    },
+    "good_architect_review_revise": {
+      "purpose": "architect-review",
+      "turn": "architect-2",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "oracle-decision.json": "ec7162c599dc0749211ff3aadb9e93a8ccdfd5fee813b39d41f2fe288568ebab"
+        }
+      }
+    },
+    "variant_fenced": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "sprint.toml": "f6d9ece377677c36d2276885228c6b92e1f25b9d530aaec606ddf9836664aa47",
+          "solution_key.patch": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2"
+        }
+      }
+    },
+    "variant_crlf_bom": {
+      "purpose": "architect-review",
+      "turn": "architect-2",
+      "expect": {
+        "exit": 0,
+        "error_code": null,
+        "output_hashes": {
+          "oracle-decision.json": "e174fb20a719aa3387fa01acdb2143314a3742dfbda7ccb9b5972523bcd6a081"
+        }
+      }
+    },
+    "bad_truncated": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_TRUNCATED",
+        "output_hashes": {}
+      }
+    },
+    "bad_no_sentinel": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_TRUNCATED",
+        "output_hashes": {}
+      }
+    },
+    "bad_wrong_bundle": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_BUNDLE_MISMATCH",
+        "output_hashes": {}
+      }
+    },
+    "bad_syntax_marker": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SYNTAX_MARKER",
+        "output_hashes": {}
+      }
+    },
+    "bad_path_traversal": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_PATH",
+        "output_hashes": {}
+      }
+    },
+    "bad_dup_path": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_DUPLICATE",
+        "output_hashes": {}
+      }
+    },
+    "bad_search_nomatch": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SEARCH_NOMATCH",
+        "output_hashes": {}
+      }
+    },
+    "bad_search_multi": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SEARCH_MULTI",
+        "output_hashes": {}
+      }
+    },
+    "bad_patch_apply": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_PATCH_APPLY",
+        "output_hashes": {}
+      }
+    },
+    "bad_json": {
+      "purpose": "architect-review",
+      "turn": "architect-2",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_JSON",
+        "output_hashes": {}
+      }
+    },
+    "bad_toml": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_TOML",
+        "output_hashes": {}
+      }
+    },
+    "bad_schema": {
+      "purpose": "architect-review",
+      "turn": "architect-2",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SCHEMA",
+        "output_hashes": {}
+      }
+    },
+    "bad_shell_syntax": {
+      "purpose": "challenger",
+      "turn": "challenger-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SHELL_SYNTAX",
+        "output_hashes": {}
+      }
+    },
+    "bad_scope": {
+      "purpose": "challenger",
+      "turn": "challenger-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SCOPE",
+        "output_hashes": {}
+      }
+    },
+    "bad_coverage": {
+      "purpose": "challenger",
+      "turn": "challenger-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_COVERAGE",
+        "output_hashes": {}
+      }
+    },
+    "bad_missing_required": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_MISSING_REQUIRED",
+        "output_hashes": {}
+      }
+    },
+    "bad_size": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SIZE",
+        "output_hashes": {}
+      }
+    },
+    "bad_exists": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_EXISTS",
+        "output_hashes": {}
+      }
+    }
+  }
+}

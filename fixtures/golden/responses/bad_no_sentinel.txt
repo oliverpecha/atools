@@ -1,0 +1,53 @@
+<<<FILE path="sprint.toml">>>
+live_run = "none"
+approval_live_run = "architect"
+solution_key_exposure = "full"
+min_attempts_before_block = 2
+max_epochs = 3
+repo_test_cmd = "python3 -m pytest test -q -rf"
+
+[max_attempts]
+oracle = 3
+implementer = 2
+live = 2
+curator = 2
+
+[hard_cap.implementer]
+wall_clock = "45m"
+turns = 60
+<<<END_FILE>>>
+<<<FILE path="solution_key.patch">>>
+diff --git a/api/profile.py b/api/profile.py
+index 4efe645..456bec1 100644
+--- a/api/profile.py
++++ b/api/profile.py
+@@ -4,4 +4,12 @@ from api import users
+ 
+ def render_profile(user_id):
+     """Return (status, body) for a guest viewing user_id's profile."""
+-    raise NotImplementedError("public profiles not implemented")
++    user = users.get_user(user_id)
++    if user is None or not users.is_public(user_id):
++        return 404, {"error": "not_found"}
++    return 200, {
++        "name": user["name"],
++        "bio": user["bio"],
++        "avatar": user["avatar"],
++        "photo_count": len(user["photos"]),
++    }
+diff --git a/api/users.py b/api/users.py
+index 0c5e22f..3275efe 100644
+--- a/api/users.py
++++ b/api/users.py
+@@ -21,3 +21,10 @@ def get_user(user_id):
+ 
+ def list_user_ids():
+     return sorted(USERS)
++
++
++PUBLIC_USER_IDS = frozenset({1, 2})
++
++
++def is_public(user_id):
++    return user_id in PUBLIC_USER_IDS
+<<<END_FILE>>>
