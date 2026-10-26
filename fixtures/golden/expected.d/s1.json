@@ -1,0 +1,67 @@
+{
+  "cases": {
+    "closure_invalid_schema": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G2",
+        "exit": 1,
+        "failing_step": "G2",
+        "failing_line_contains": "Missing required property: reason"
+      }
+    },
+    "closure_blocked_early": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G2",
+        "exit": 1,
+        "failing_step": "G2",
+        "failing_line_contains": "min_attempts_before_block"
+      }
+    },
+    "closure_blocked_valid": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G2",
+        "exit": 1,
+        "failing_step": "O1:01_public.sh",
+        "failing_line_contains": "FAIL:"
+      }
+    },
+    "session_lost_g2": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G2",
+        "exit": 1,
+        "failing_step": "G2",
+        "failing_line_contains": "Session lost or terminated unexpectedly"
+      }
+    },
+    "session_hard_cap_g2": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G2",
+        "exit": 1,
+        "failing_step": "G2",
+        "failing_line_contains": "Session hit watchdog hard cap"
+      }
+    },
+    "oracle_tamper_g1": {
+      "applies_on": "base",
+      "expect": {
+        "step": "G1",
+        "exit": 3,
+        "failing_step": "G1",
+        "failing_line_contains": "Oracle manifest digest mismatch"
+      }
+    },
+    "tripwire_strict": {
+      "applies_on": "base",
+      "expect": {
+        "step": "O2",
+        "exit": 1,
+        "failing_step": "tripwire",
+        "failing_line_contains": "Tripwire pattern detected in transcript or log"
+      }
+    }
+  }
+}
