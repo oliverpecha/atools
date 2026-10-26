@@ -146,7 +146,7 @@ resp_rev_revise = (
 (responses_dir / "variant_fenced.txt").write_text(f"```markdown\n{resp_intake}```\n", encoding="utf-8")
 (responses_dir / "variant_crlf_bom.txt").write_bytes(b"\xef\xbb\xbf" + resp_rev_lock.replace("\n", "\r\n").encode("utf-8"))
 
-# 4. Bad Responses (Covering All 17 Error Codes)
+# 4. Bad Responses (Static)
 bad_cases = {
     "bad_truncated": (resp_intake[: len(resp_intake) // 2], "architect-intake", "architect-1", "E_TRUNCATED"),
     "bad_no_sentinel": (resp_intake.replace(f'<<<END_RESPONSE bundle="{sentinels["architect-1"]}">>>\n', ""), "architect-intake", "architect-1", "E_TRUNCATED"),
@@ -164,14 +164,17 @@ bad_cases = {
     "bad_scope": (resp_challenger.replace('ALLOW: api/profile.py', 'ALLOW: **'), "challenger", "challenger-1", "E_SCOPE"),
     "bad_coverage": (resp_challenger.replace('R3 -> 03_private_404.sh\n', ''), "challenger", "challenger-1", "E_COVERAGE"),
     "bad_missing_required": (f'<<<FILE path="solution_key.patch">>>\n{sol_key_content}<<<END_FILE>>>\n<<<END_RESPONSE bundle="{sentinels["architect-1"]}">>>\n', "architect-intake", "architect-1", "E_MISSING_REQUIRED"),
-    "bad_size": (f'<<<FILE path="sprint.toml">>>\n{"A" * 1050000}\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="{sentinels["architect-1"]}">>>\n', "architect-intake", "architect-1", "E_SIZE"),
     "bad_exists": (f'<<<PATCH path="api/users.py" new="true">>>\n<<<<<<< SEARCH\n=======\nnew_content\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n<<<END_RESPONSE bundle="{sentinels["architect-1"]}">>>\n', "architect-intake", "architect-1", "E_EXISTS"),
 }
 
 for name, (body, purpose, turn, err_code) in bad_cases.items():
     (responses_dir / f"{name}.txt").write_text(body, encoding="utf-8")
 
-# 5. Build expected.d/s2.json
+# 5. Dynamic generation of bad_size.txt (1.05 MB on disk, excluded from git & bundle)
+bad_size_content = f'<<<FILE path="sprint.toml">>>\n{"A" * 1050000}\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="{sentinels["architect-1"]}">>>\n'
+(responses_dir / "bad_size.txt").write_text(bad_size_content, encoding="utf-8")
+
+# 6. Build expected.d/s2.json
 intake_outputs = {
     "sprint.toml": sha256_bytes(sprint_toml_content.encode("utf-8")),
     "solution_key.patch": sha256_bytes(sol_key_content.encode("utf-8")),
@@ -194,6 +197,8 @@ expected_responses = {
 
 for name, (body, purpose, turn, err_code) in bad_cases.items():
     expected_responses[name] = {"purpose": purpose, "turn": turn, "expect": {"exit": 2, "error_code": err_code, "output_hashes": {}}}
+
+expected_responses["bad_size"] = {"purpose": "architect-intake", "turn": "architect-1", "expect": {"exit": 2, "error_code": "E_SIZE", "output_hashes": {}}}
 
 expected_doc = {"responses": expected_responses}
 (golden_dir / "expected.d" / "s2.json").write_text(json.dumps(expected_doc, indent=2) + "\n", encoding="utf-8")
