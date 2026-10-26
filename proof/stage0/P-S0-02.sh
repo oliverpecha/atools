@@ -238,9 +238,7 @@ if [[ "$WS" == "integration" ]]; then
   printf '%s\n' "${added[@]:-}" | grep -qx 'bin/actl' || bad "S0-R2.5: no workstream-0A work found (bin/actl not added)"
   printf '%s\n' "${added[@]:-}" | grep -qx 'src/actl/cli.py' || bad "S0-R2.5: no workstream-0A work found (src/actl/cli.py not added)"
   printf '%s\n' "${modified[@]:-}" | grep -qx 'src/router/process.py' || bad "S0-R2.2: no workstream-0B work found (src/router/process.py not modified)"
-  for a in "${added[@]:-}"; do [[ -z "$a" ]] && continue
-    is_allowed_addition "$a" || bad "S0-R2.1: unauthorized file change: $a"
-  done
+  # WI-S0-PROOF: ruling 2: additions against the Stage 0 fork are not gated here (P-S1-02 owns them)
   for m in "${modified[@]:-}"; do [[ -z "$m" ]] && continue
     is_allowed_modification "$m" || bad "S0-R2.1: unauthorized file change: $m"
   done
@@ -303,11 +301,16 @@ if [[ -z "${ACTL_P02_SELFTEST:-}" ]]; then
   trap cleanup_selftest EXIT INT TERM
   if git worktree add --detach "$ST_DIR" HEAD >/dev/null 2>&1; then
     # 1. Negative self-check: unauthorized file outside whitelist
-    touch "$ST_DIR/unauthorized.txt"
-    if ACTL_REPO="$ST_DIR" ACTL_FORK_POINT="$FORK" ACTL_WORKSTREAM="integration" ACTL_P02_SELFTEST=1 bash "$THIS_SCRIPT" >/dev/null 2>&1; then
-      bad "S0-R2.1: selftest failed: unauthorized file was not rejected"
-    fi
-    rm -f "$ST_DIR/unauthorized.txt"
+    # WI-S0-PROOF: selftest 1 probe (modify tracked bin/arouter; the exact diagnostic is required)
+    printf '# TAMPERED\n' >> "$ST_DIR/bin/arouter" || bad "S0-R2.1: selftest 1 probe write failed"
+    [[ -n "$(git -C "$ST_DIR" status --porcelain -- bin/arouter)" ]] || bad "S0-R2.1: selftest 1 probe did not modify bin/arouter"
+    ST1_OUT=$(ACTL_REPO="$ST_DIR" ACTL_FORK_POINT="$FORK" ACTL_WORKSTREAM="integration" ACTL_P02_SELFTEST=1 bash "$THIS_SCRIPT" 2>&1 </dev/null) && bad "S0-R2.1: selftest failed: unauthorized modification was not rejected"
+    case "$ST1_OUT" in
+      *"S0-R2.1: unauthorized file change: bin/arouter"*) ;;
+      *) bad "S0-R2.1: selftest 1 rejected for the wrong reason" ;;
+    esac
+    git -C "$ST_DIR" checkout -- bin/arouter >/dev/null 2>&1
+    [[ -z "$(git -C "$ST_DIR" status --porcelain -- bin/arouter)" ]] || bad "S0-R2.1: selftest 1 could not restore bin/arouter"
 
     # 4. Negative self-check: tampering with fixtures/golden/sprint/spec-001.md
     echo "# TAMPERED" > "$ST_DIR/fixtures/golden/sprint/spec-001.md"
