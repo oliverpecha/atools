@@ -1,6 +1,6 @@
 # Delta challenge verdict: layout transition part A
 
-* Reviewer: Perplexity chat (underlying model not disclosed; PB-9 family unconfirmed)
+* Reviewer: Claude Sonnet 5.5 High (family: Claude; model reported by the Owner [R]; the reviewer itself could not see its model name)
 * Subject: branch `wip/layout-amend-a`, diff `main..wip/layout-amend-a`
 * Commit reviewed: `738cd6b`
 * Date (UTC): 2026-10-25
