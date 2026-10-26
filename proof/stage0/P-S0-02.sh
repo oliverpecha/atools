@@ -309,8 +309,13 @@ if [[ -z "${ACTL_P02_SELFTEST:-}" ]]; then
       *"S0-R2.1: unauthorized file change: bin/arouter"*) ;;
       *) bad "S0-R2.1: selftest 1 rejected for the wrong reason" ;;
     esac
-    git -C "$ST_DIR" checkout -- bin/arouter >/dev/null 2>&1
-    [[ -z "$(git -C "$ST_DIR" status --porcelain -- bin/arouter)" ]] || bad "S0-R2.1: selftest 1 could not restore bin/arouter"
+    # WI-S0-PROOF: selftest 1 restore is fail-closed
+    git -C "$ST_DIR" checkout -- bin/arouter >/dev/null 2>&1 \
+      || bad "S0-R2.1: selftest 1 checkout failed"
+    ST1_STATUS=$(git -C "$ST_DIR" status --porcelain -- bin/arouter) \
+      || bad "S0-R2.1: selftest 1 restore verification failed"
+    [[ -z "$ST1_STATUS" ]] \
+      || bad "S0-R2.1: selftest 1 could not restore bin/arouter"
 
     # 4. Negative self-check: tampering with fixtures/golden/sprint/spec-001.md
     echo "# TAMPERED" > "$ST_DIR/fixtures/golden/sprint/spec-001.md"
