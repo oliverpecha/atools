@@ -65,6 +65,7 @@ def test_create_sprint_exact_initial_state(lay):
         "epoch": 1,
         "grants": dict(zero_roles),
         "hard_caps_tripped": 0,
+        "repo": lay.repo,
         "run_id": "run-" + hashlib.sha256(tag.encode("utf-8")).hexdigest()[:12],
         "seq": 0,
         "sprint_tag": tag,
