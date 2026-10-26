@@ -5,21 +5,21 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p29" "bad_regression_o2.patch")"
+
+python3 - "$SDIR" "$WT" <<'PY'
 import sys
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
+wt = Path(sys.argv[2])
 
 try:
     from actl.verify import run_o2
 except ImportError as exc:
     print(f"FAIL: S1-R6: cannot import actl.verify.run_o2: {exc}")
     sys.exit(1)
-
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p29_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-wt = root / "wt_regression"
-wt.mkdir(parents=True, exist_ok=True)
 
 try:
     results = run_o2(wt)

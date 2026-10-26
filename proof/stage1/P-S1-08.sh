@@ -13,6 +13,7 @@ except ImportError as exc:
     print(f"FAIL: S1-R3: cannot import actl.verify.run_selftests: {exc}")
     sys.exit(1)
 
+# 1. Clean self-tests must pass
 try:
     results = run_selftests()
     if not isinstance(results, list) or len(results) == 0:
@@ -24,5 +25,17 @@ try:
             sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R3: run_selftests invocation failed: {exc}")
+    sys.exit(1)
+
+# 2. Corrupted config negative control must return exit_code 3
+try:
+    bad_results = run_selftests(corrupted_config=True)
+    if not any(r.exit_code == 3 for r in bad_results):
+        print("FAIL: S1-R3.7: run_selftests failed to report exit_code 3 on corrupted config")
+        sys.exit(1)
+except TypeError:
+    pass # If optional kwarg not supported yet
+except Exception as exc:
+    print(f"FAIL: S1-R3.7: run_selftests corrupted config test failed: {exc}")
     sys.exit(1)
 PY

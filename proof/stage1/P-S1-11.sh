@@ -5,10 +5,30 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p11" "good.patch")"
+
+# Introduce hollow test into candidate worktree
+cat <<'EOF' >> "${WT}/test/test_public.py"
+
+def test_hollow_pass():
+    """Docstring only."""
+    pass
+
+def test_hollow_ellipsis():
+    ...
+
+def test_hollow_assert_true():
+    assert True
+EOF
+(cd "$WT" && git -c core.hooksPath=/dev/null commit -q -a -m "candidate: add hollow tests")
+
+python3 - "$SDIR" "$WT" <<'PY'
 import sys
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
+wt = Path(sys.argv[2])
 
 try:
     from actl.verify import check_guards
@@ -17,14 +37,11 @@ except ImportError as exc:
     print(f"FAIL: S1-R3: cannot import actl.verify.check_guards: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p11_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
-wt = root / "wt_hollow"
-wt.mkdir(parents=True, exist_ok=True)
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
 try:
-    results = check_guards(layout, "2026-10-16_public-profiles", wt)
+    results = check_guards(layout, tag, wt)
     g4 = next((r for r in results if r.id == "G4"), None)
     if not g4 or g4.exit_code != 1:
         print("FAIL: S1-R3: G4 did not fail as expected on hollow test body")

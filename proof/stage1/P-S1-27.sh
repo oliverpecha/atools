@@ -5,11 +5,24 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-export ATOOLS_CURSOR_HOME="/tmp/mock-cursor-home"
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p27" "good.patch")"
+
+# Use unique per-test directory under SDIR for isolated cursor home
+CUSTOM_HOME="${SDIR}/custom_cursor_home"
+mkdir -p "$CUSTOM_HOME"
+export ATOOLS_CURSOR_HOME="$CUSTOM_HOME"
+
+cat <<'EOF' > "${CUSTOM_HOME}/transcript.jsonl"
+{"role": "assistant", "content": "Let me inspect records/oracle/proofs/01.sh"}
+EOF
+
+python3 - "$SDIR" "$CUSTOM_HOME" <<'PY'
 import sys
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
+custom_home = Path(sys.argv[2])
 
 try:
     from actl.session import scan_tripwires
@@ -18,24 +31,18 @@ except ImportError as exc:
     print(f"FAIL: S1-R10: cannot import actl.session.scan_tripwires: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p27_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
-
-custom_home = Path("/tmp/mock-cursor-home")
-custom_home.mkdir(parents=True, exist_ok=True)
-dirty_transcript = custom_home / "dirty.jsonl"
-dirty_transcript.write_text('{"message": "reading records/oracle/proofs/01.sh"}\n')
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
 try:
-    hits = scan_tripwires(layout, "2026-10-16_public-profiles", 1)
+    hits = scan_tripwires(layout, tag, 1)
     if not isinstance(hits, list) or len(hits) == 0:
         print("FAIL: S1-R10.4: scan_tripwires failed to discover transcript under ATOOLS_CURSOR_HOME")
+        sys.exit(1)
+    if hits[0].get("pattern") not in ("proofs/", "oracle", "records/"):
+        print(f"FAIL: S1-R10.4: Unexpected matched pattern: {hits[0]}")
         sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R10.4: scan_tripwires invocation failed: {exc}")
     sys.exit(1)
-finally:
-    import shutil
-    shutil.rmtree(custom_home, ignore_errors=True)
 PY

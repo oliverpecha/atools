@@ -5,12 +5,15 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p17" "good.patch")"
+
+python3 - "$SDIR" "$REPO_DIR" <<'PY'
 import sys
 from pathlib import Path
 
-repo_dir = Path(os.environ.get("ACTL_REPO", "."))
+sdir = Path(sys.argv[1])
+repo_dir = Path(sys.argv[2])
 dirty_log = repo_dir / "fixtures" / "golden" / "logs" / "dirty_ansi.log"
 
 try:
@@ -20,16 +23,15 @@ except ImportError as exc:
     print(f"FAIL: S1-R10: cannot import actl.session.scan_tripwires: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p17_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
 try:
-    hits = scan_tripwires(layout, "2026-10-16_public-profiles", 1, log_path=dirty_log)
+    hits = scan_tripwires(layout, tag, 1, log_path=dirty_log)
     if not isinstance(hits, list) or len(hits) == 0:
         print("FAIL: S1-R10: scan_tripwires failed to detect oracle path in dirty log")
         sys.exit(1)
-    if hits[0].get("pattern") not in ("proofs/", "oracle", "records/"):
+    if hits[0].get("pattern") not in ("proofs/", "oracle", "records/", "solution_key"):
         print(f"FAIL: S1-R10: Unexpected matched pattern: {hits[0]}")
         sys.exit(1)
 except Exception as exc:

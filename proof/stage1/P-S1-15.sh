@@ -5,11 +5,16 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p15" "bad_scope.patch")"
+
+python3 - "$SDIR" "$WT" <<'PY'
 import sys
 import json
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
+wt = Path(sys.argv[2])
 
 try:
     from actl.verify import verify_impl
@@ -19,15 +24,17 @@ except ImportError as exc:
     print(f"FAIL: S1-R7: cannot import actl modules: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p15_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
 try:
-    res = verify_impl(layout, "2026-10-16_public-profiles")
-    prior_path = layout.inbox("2026-10-16_public-profiles", "implementer") / "prior_attempt.json"
+    res = verify_impl(layout, tag, worktree=wt)
+    if res.get("exit_code") != 1:
+        print(f"FAIL: S1-R7: Expected exit_code 1 for bad_scope, got {res.get('exit_code')}")
+        sys.exit(1)
+    prior_path = layout.inbox(tag, "implementer") / "prior_attempt.json"
     if not prior_path.exists():
-        print(f"FAIL: S1-R7: verify_impl failed to write prior_attempt.json on exit_code {res.get('exit_code')}")
+        print(f"FAIL: S1-R7: verify_impl failed to write prior_attempt.json on exit_code 1: {prior_path}")
         sys.exit(1)
     data = json.loads(prior_path.read_text())
     expected_keys = {"diff", "failing_step", "failing_line", "closures_submitted"}

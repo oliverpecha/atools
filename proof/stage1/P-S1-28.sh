@@ -5,11 +5,16 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p28" "good.patch")"
+
+python3 - "$SDIR" "$WT" <<'PY'
 import sys
 import argparse
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
+wt = Path(sys.argv[2])
 
 try:
     import actl.cmd_verify_impl as cmd_mod
@@ -18,11 +23,10 @@ except ImportError as exc:
     print(f"FAIL: S1-R11: cannot import actl.cmd_verify_impl: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p28_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
-# 1. Test UsageError gives exit 2
+# 1. Test missing required arguments gives exit 2 (UsageError)
 args_invalid = argparse.Namespace(sprint=None)
 try:
     rc_invalid = cmd_mod.handler(args_invalid, layout)
@@ -31,5 +35,16 @@ try:
         sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R11.1: cmd_verify_impl usage handler failed: {exc}")
+    sys.exit(1)
+
+# 2. Test valid good.patch gives exit 0
+args_valid = argparse.Namespace(sprint=tag, closure=None, worktree=str(wt), no_fail_fast=False, strict_tripwire=False, json=False)
+try:
+    rc_valid = cmd_mod.handler(args_valid, layout)
+    if rc_valid != 0:
+        print(f"FAIL: S1-R11.1: Valid good.patch verification must return exit 0, got {rc_valid}")
+        sys.exit(1)
+except Exception as exc:
+    print(f"FAIL: S1-R11.1: cmd_verify_impl valid handler failed: {exc}")
     sys.exit(1)
 PY

@@ -5,11 +5,15 @@ set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-python3 - <<'PY'
-import os
+source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
+IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p25" "")"
+
+python3 - "$SDIR" <<'PY'
 import sys
 import argparse
 from pathlib import Path
+
+sdir = Path(sys.argv[1])
 
 try:
     import actl.cmd_dispatch_impl as cmd_mod
@@ -19,22 +23,29 @@ except ImportError as exc:
     print(f"FAIL: S1-R9: cannot import actl modules: {exc}")
     sys.exit(1)
 
-root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p25_sandbox"
-root.mkdir(parents=True, exist_ok=True)
-layout = Layout(root)
-args = argparse.Namespace(sprint="2026-10-16_public-profiles", mode="detach", tier="cheap", engine=None, no_run=False, strict_tripwire=False, json=False)
+layout = Layout(sdir)
+tag = "2026-10-16_public-profiles"
 
-# Mock active collision detector
-def mock_check_active(name):
-    return True
-
+# First dispatch stages attempt 001
+args1 = argparse.Namespace(sprint=tag, mode="detach", tier="cheap", engine=None, no_run=True, strict_tripwire=False, json=False)
 try:
-    rc = cmd_mod.handler(args, layout, active_session_checker=mock_check_active)
-    if rc != 3:
-        print(f"FAIL: S1-R9.2: Expected exit code 3 on active session collision, got {rc}")
+    rc1 = cmd_mod.handler(args1, layout)
+    if rc1 != 0:
+        print(f"FAIL: S1-R9: Initial setup dispatch failed with code {rc1}")
+        sys.exit(1)
+except Exception as exc:
+    print(f"FAIL: S1-R9: dispatch_impl handler failed: {exc}")
+    sys.exit(1)
+
+# Second dispatch with identical session name collision must halt with exit 3 or StateIntegrityError
+args2 = argparse.Namespace(sprint=tag, mode="detach", tier="cheap", engine=None, no_run=False, strict_tripwire=False, json=False)
+try:
+    rc2 = cmd_mod.handler(args2, layout)
+    if rc2 != 3:
+        print(f"FAIL: S1-R9.2: Expected exit code 3 on active session collision, got {rc2}")
         sys.exit(1)
 except StateIntegrityError:
-    pass # Expected integrity halt
+    pass # Expected state integrity halt
 except Exception as exc:
     print(f"FAIL: S1-R9.2: Unexpected exception on collision check: {exc}")
     sys.exit(1)

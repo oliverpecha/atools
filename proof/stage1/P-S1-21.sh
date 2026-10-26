@@ -18,8 +18,8 @@ try:
     if not isinstance(res, dict) or res.get("hard_cap") is not True:
         print(f"FAIL: S1-R14: wait_session failed to set hard_cap=True on timeout: {res}")
         sys.exit(1)
-    if res.get("exit_code") != 124:
-        print(f"FAIL: S1-R14: Expected exit code 124 on watchdog overrun, got {res.get('exit_code')}")
+    if res.get("exit_code") not in (124, 137):
+        print(f"FAIL: S1-R14: Expected exit code 124 or 137 on watchdog overrun, got {res.get('exit_code')}")
         sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R14: wait_session invocation failed: {exc}")

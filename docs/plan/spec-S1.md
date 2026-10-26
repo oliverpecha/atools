@@ -21,8 +21,8 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R1.1 StepResult is re-exported by actl.verify from actl.schemas. Fields: id (str), cmd (str), exit_code (int), output_sha256 (64-hex str), output_tail (str, default empty), duration_ms (int >= 0, default 0), failing_line (str | null, default None).
 - S1-R1.2 StepResult.to_verification_step() produces exactly {"id": self.id, "cmd": self.cmd, "exit_code": self.exit_code, "output_sha256": self.output_sha256}.
 - S1-R1.3 verify_impl(layout, tag, closure_path=None, worktree=None, fail_fast=True, session_info=None, strict_tripwire=False) returns a dictionary strictly conforming to schemas/verification.json.
-- S1-R1.4 Verification Parent & Stamping: The evaluated closure is read from closure_path (or defaults to mailboxes/implementer/outbox/closure.json). On evaluation, the verifier stamps it to runs/closure-{seq:03d}.json (where seq matches verification seq). verification.parent is f"closure-{seq:03d}.json", or null if no closure was supplied or present.
-- S1-R1.5 Pipeline Fail-Fast & Finalization: When fail_fast=True, verification stops executing subsequent validation steps immediately on the first non-zero StepResult. However, artifact finalization (writing verification-{seq:03d}.json, updating state, writing prior_attempt.json on exit_code 1, and archiving session logs) always executes. When closure.reason == "blocked", fail_fast is forced to False across G3-G6 and O2 to collect all diagnostic data before evaluating the G2 blocked post-check.
+- S1-R1.4 Verification Parent & Stamping: When closure_path is provided (or defaults to mailboxes/implementer/outbox/closure.json when present), the verifier stamps it to runs/closure-{seq:03d}.json (where seq matches verification seq) and sets verification.parent to f"closure-{seq:03d}.json". When no closure is supplied or present, verification.parent is null, and G2 records a skipped/neutral StepResult(id="G2", cmd="check_closure", exit_code=0, output_tail="no closure provided").
+- S1-R1.5 Pipeline Fail-Fast & Diagnostic Collection: When fail_fast=True, verification stops executing subsequent validation steps immediately on the first non-zero StepResult. However, when closure.reason == "blocked", fail_fast is forced to False across ALL subsequent steps (G3-G6, O1, and O2) to collect full diagnostic data before evaluating the G2 blocked post-check. Artifact finalization (writing verification-{seq:03d}.json, updating state, writing prior_attempt.json on exit_code 1, and archiving session logs) always executes.
 - S1-R1.6 failing_step is null when all executed steps succeed (exit_code 0); otherwise it contains the identifier of the first failing step (e.g. "G3", "O1:02_no_email.sh", "O2:test_users::test_public", "tripwire").
 - S1-R1.7 failing_line is null on success; on failure it contains at most 300 Unicode code points, stripped of ANSI CSI and OSC escape sequences per O-8, with newlines and control characters (< 0x20) replaced by spaces.
 
@@ -38,8 +38,8 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R3.3 G3 (Scope): Executes git diff --raw -z --no-renames {base_sha}..HEAD in worktree. File modes outside {100644, 100755, 000000} fail G3. Every path is checked against actl.scope.match(rules, path). Any "denied" or "frozen" path fails G3.
 - S1-R3.4 G4 (Test Count and AST Guard): When any test/** path is thawed/allowed by scope, parses Python AST of base_sha and candidate HEAD. Counts FunctionDef and AsyncFunctionDef whose names start with "test_" (both top-level and inside test classes). Count in candidate must be >= base. Candidate test functions must not be hollow (cannot consist only of pass, ellipsis, docstring, or assert True). Syntax errors fail G4.
 - S1-R3.5 G5 (Secrets): Scans added diff lines (lines starting with '+' but not '+++') and closure notes/backlog against config/secrets.toml regex patterns. Exact matched line SHA-256 present in [[allow]] table is exempted. Matched secrets are redacted from failing_line and output tails.
-- S1-R3.6 G6 (Forbidden Calls): Normative dual AST and regex scanning. Scans added lines on non-FROZEN paths against config/forbidden.toml. Python files are parsed into AST to inspect Call nodes; non-Python or syntax-invalid additions are checked against regex patterns. Matching calls without [[allow]] exception fail G6.
-- S1-R3.7 run_selftests() executes synthetic in-memory positive and negative cases for G1-G6. Returns list[StepResult]. If any test fails, returns exit_code 3.
+- S1-R3.6 G6 (Forbidden Calls): Normative dual AST and regex scanning. Scans added lines on non-FROZEN paths against config/forbidden.toml. Python files are parsed into AST to inspect Call nodes intersecting added lines; non-Python or syntax-invalid additions are checked against regex patterns. Matching calls without [[allow]] exception fail G6.
+- S1-R3.7 run_selftests() executes synthetic in-memory positive and negative cases for G1-G6. Returns list[StepResult]. If any StepResult has exit_code != 0, verifier treats this as selftest_failed and halts with exit 3.
 
 ### S1-R4 Out-of-Tree Oracle Staging
 - S1-R4.1 Active oracle proofs/ directory and probe.sh are staged into a temporary directory sibling to worktree: <worktree>.oracle-stage/.
@@ -56,7 +56,7 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 ### S1-R6 O2 Execution
 - S1-R6.1 Reads repo_test_cmd from sprint.toml (default: "python3 -m pytest test -q -rf").
 - S1-R6.2 Parses repo_test_cmd using shlex.split(posix=True) with shell=False.
-- S1-R6.3 argv[0] MUST be in ("python3", "pytest"); any other executable raises ValueError / UsageError.
+- S1-R6.3 Executable MUST be "pytest" or "python3 -m pytest"; any other command structure raises ValueError / UsageError.
 - S1-R6.4 Appends --junitxml=<tmp_xml> to argv, executes in worktree, and parses JUnit XML to extract failing node. If classname matches test file stem, formats as O2:{file_stem}::{name}, else O2:{classname}::{name}. On timeout (default 120s), records exit code 124.
 
 ### S1-R7 Verification Emission and prior_attempt.json
@@ -90,17 +90,18 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 
 ### S1-R12 Phase 3 Decision Rules (actl next)
 - S1-R12.1 Implemented in src/actl/next_rules/phase3.py with PRIORITY = 30.
-- S1-R12.2 Strict Ordered Precedence Table (First matching condition wins):
+- S1-R12.2 Stage Applicability Entry Condition: If active_stage != "implementer", returns None immediately to fall through to lower priority rules.
+- S1-R12.3 Strict Ordered Precedence Table (First matching condition wins):
   1. Active tmux session running -> {"action": "wait", "command": "actl wait <session>", "reason": "Implementer session in progress"}
   2. Sprint status == "hold" -> {"action": "hold_owner", "command": "", "reason": "Sprint is on hold due to integrity violation or self-test failure"}
-  3. Finished session, closure present with reason == "blocked", preconditions met -> {"action": "hold_owner", "command": "", "reason": "Implementer blocked with valid rationale"}
-  4. Finished session with exit code, closure present in outbox -> {"action": "verify", "command": "actl verify-impl --sprint <tag> --closure <path>", "reason": "Closure submitted for verification"}
-  5. Finished session, no closure written -> {"action": "verify", "command": "actl verify-impl --sprint <tag>", "reason": "Verify workspace after session exit without closure"}
+  3. Finished session, unverified closure present in outbox (whether normal or blocked) -> {"action": "verify", "command": "actl verify-impl --sprint <tag> --closure <path>", "reason": "Closure submitted for verification"}
+  4. Finished session, no closure written -> {"action": "verify", "command": "actl verify-impl --sprint <tag>", "reason": "Verify workspace after session exit without closure"}
+  5. Last verification holds confirmed blocked closure (reason == "blocked", post-O2 checks passed) -> {"action": "hold_owner", "command": "", "reason": "Implementer blocked with verified rationale"}
   6. Last verification green (exit_code 0) -> {"action": "promote", "command": "actl promote implementer --sprint <tag>", "reason": "Verification passed"}
   7. Last verification red, attempts >= max_attempts, grants == 0 -> {"action": "escalate_attempts", "command": "", "reason": "Implementer attempt limit reached"}
   8. Last verification red, attempts >= max_attempts, grants > 0 -> {"action": "dispatch", "command": "actl dispatch-impl --sprint <tag>", "reason": "Dispatching granted implementer attempt"}
   9. Last verification red, attempts < max_attempts -> {"action": "dispatch", "command": "actl dispatch-impl --sprint <tag>", "reason": "Retry implementer attempt"}
-  10. Active stage is not implementer -> returns None (falls through to lower priority rules).
+  10. Default / Fallback -> {"action": "dispatch", "command": "actl dispatch-impl --sprint <tag>", "reason": "Initial implementer attempt dispatch"}
 
 ### S1-R13 Determinism and Offline Hermetic Purity
 - S1-R13.1 Gating verification executes zero network calls and invokes no live LLMs.
@@ -117,10 +118,19 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R15.2 Verifies copied file SHA-256 matches source before proceeding.
 - S1-R15.3 Original session log and .exit are unlinked ONLY after verification record has been fsynced to disk.
 
-### S1-R16 Additive-Change, PB-2 Immutability, and Target Scope Rules
+### S1-R16 Additive-Change, PB-2 Immutability, and Deliverables Allowlist
 - S1-R16.1 Baseline commit: 4e16cc3 (PB-2 immutability baseline).
-- S1-R16.2 Authoring Branch Policy (P-S1-02): Branch wip/author-s1 must have non-empty changes relative to 4e16cc3, but zero modifications to frozen paths: proof/stage0/, fixtures/golden/expected.d/base.json, src/actl/INTERFACES.md, tools/.
-- S1-R16.3 Implementer Target Modification Allowlist: During candidate verification in Stage 2, candidate patches are permitted to modify ONLY: src/core/config.py, src/sessions/storage.py, install.sh, README.md.
+- S1-R16.2 Authoring Branch Deliverables Policy: Branch wip/author-s1 changes relative to 4e16cc3 must strictly match the Stage 1 authoring deliverable set:
+  - docs/plan/spec-S1.md
+  - proof/run_suite_actl_s1.sh
+  - proof/stage1/*.sh
+  - test/actl/test_verify_s1.py
+  - test/actl/test_guards_s1.py
+  - test/actl/test_session_s1.py
+  - test/actl/test_next_phase3.py
+  - fixtures/golden/expected.d/s1.json
+  - fixtures/golden/transcripts/*.jsonl
+  Zero modifications or additions are permitted under frozen paths (proof/stage0/, fixtures/golden/expected.d/base.json, tools/, src/actl/INTERFACES.md). Zero implementation files are permitted under src/actl/*.py or skills/actl-implementer/.
 
 ## 2. Traceability and Vacuity Matrix
 
@@ -162,14 +172,14 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 |---|---|---|---|---|
 | S1A-1 | Golden cases mapping across base.json and s1.json. | (a) Overwrite base.json cases in s1.json.<br>(b) Define only new Stage 1 cases in s1.json and load merged expected dict. | (b) Define only Stage 1 cases in s1.json. | Preserves PB-2 immutability of base.json and complies with load_expected() uniqueness checks. |
 | S1A-2 | Outbox closure path. | (a) Use legacy path.<br>(b) Use layout.outbox(tag, "implementer") / "closure.json". | (b) Use layout.outbox(). | Complies with layout transition (L-3, D-30..D-40) and D-42. |
-| S1A-3 | Dynamic watchdog timeout parameter. | (a) Hardcode 2700.<br>(b) Default timeout_s to None in implementation, derive from hard_cap. | (b) timeout_s: int | None = None. | Fully aligns runtime watchdog with sprint.toml hard_cap configuration. |
+| S1A-3 | Dynamic watchdog timeout parameter. | (a) Hardcode 2700.<br>(b) Default timeout_s to None in implementation, derive from hard_cap. | (b) timeout_s: int or None = None. | Fully aligns runtime watchdog with sprint.toml hard_cap configuration. |
 | S1A-4 | Verification record on halt. | (a) Set exit_code = 3 in record.<br>(b) Set exit_code = null in record, exit process with code 3. | (b) exit_code = null in record. | Complies with normative schema schemas/verification.json and D-24. |
 | S1A-5 | O2 failing step formatting. | (a) O2:{classname}::{name}<br>(b) O2:{file_stem}::{name} | Normalize classname: if it matches test filename stem, format as O2:test_users::test_name. | Matches golden fixture expected.d/base.json assertions. |
-| S1A-6 | attempt.json location. | (a) Write to worktree root.<br>(b) Write to mailboxes/implementer/inbox/attempt.json and symlink/copy. | (b) Write to implementer inbox. | Preserves clean git status of candidate worktree at base_sha. |
+| S1A-6 | attempt.json location. | (a) Write to worktree root.<br>(b) Write to mailboxes/implementer/inbox/attempt.json. | (b) Write to implementer inbox. | Preserves clean git status of candidate worktree at base_sha. |
 | S1A-7 | Worktree argument resolution when None. | (a) Fail with ValueError.<br>(b) Resolve to latest implementer workspace layout.workspace(f"implementer-{attempt_seq:03d}", tag). | (b) Resolve to active attempt workspace. | Enables direct CLI invocation without redundant path flags. |
 | S1A-8 | Failing line sanitization. | (a) Drop line.<br>(b) Strip ANSI, replace control characters < 0x20 with space, truncate to 300 code points. | (b) O-8 sanitization algorithm. | Protects downstream JSON parsing and display terminals from corruption. |
 | S1A-9 | G4 test counting for parameterized tests. | (a) Count runtime expansions.<br>(b) Count static AST FunctionDef / AsyncFunctionDef. | (b) Count AST function definitions. | Offline static analysis cannot safely execute untrusted test decorators. |
-| S1A-10| G2 blocked reason verification timing. | (a) Verify preconditions before running tests.<br>(b) Verify notes/backlog before, verify blocking failure post-O2. | (b) Split pre-check and post-check. | Ensures candidate actually fails at the claimed blocking step. |
+| S1A-10| G2 blocked reason verification timing. | (a) Hold owner before verification.<br>(b) Verify closure and candidate first; hold owner only after confirmed failure. | (b) Post-verification hold. | Prevents unverified blocked claims from short-circuiting required replay. |
 | S1A-11| Behavior when closure.json contains extra unparsed fields. | (a) Ignore extra fields.<br>(b) Fail G2 schema validation. | (b) Fail G2 schema validation. | schemas/closure.json enforces additionalProperties: false. |
 | S1A-12| Handling SIGKILL or immediate container exit in wait_session. | (a) Hang indefinitely.<br>(b) Detect tmux session disappearance, wait 5s grace for .exit, then mark lost=True. | (b) 5s grace then lost=True. | Eliminates zombie waits in unattended CI/VPS environments. |
 | S1A-13| Tripwire false positive handling on governance files. | (a) Scan whole tree.<br>(b) Exclude designated governance inputs (SKILL.md, contract, prior_attempt). | (b) Allowlist designated inputs. | Prevents self-tripping on required instruction text. |

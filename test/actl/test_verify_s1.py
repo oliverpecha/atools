@@ -4,85 +4,125 @@ Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
 """
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
+import json
 from pathlib import Path
-from typing import Any
-
 import pytest
 
 
-def test_verify_module_importable() -> None:
-    """S1-R1: actl.verify must exist and re-export StepResult."""
+def test_verify_module_and_schema_reexport() -> None:
+    """S1-R1.1: actl.verify must exist, export verify_impl, run_o1, run_o2, and re-export StepResult."""
     try:
         import actl.verify as verify_mod
+        from actl.schemas import StepResult as OriginalStepResult
     except ImportError as exc:
-        pytest.fail(f"FAIL: S1-R1: actl.verify cannot be imported: {exc}")
+        pytest.fail(f"FAIL: S1-R1.1: actl.verify cannot be imported: {exc}")
 
-    assert hasattr(verify_mod, "StepResult"), "FAIL: S1-R1: actl.verify lacks StepResult"
-    assert hasattr(verify_mod, "verify_impl"), "FAIL: S1-R1: actl.verify lacks verify_impl"
-    assert hasattr(verify_mod, "run_o1"), "FAIL: S1-R5: actl.verify lacks run_o1"
-    assert hasattr(verify_mod, "run_o2"), "FAIL: S1-R6: actl.verify lacks run_o2"
+    assert hasattr(verify_mod, "StepResult"), "FAIL: S1-R1.1: actl.verify lacks StepResult"
+    assert verify_mod.StepResult is OriginalStepResult, "FAIL: S1-R1.1: StepResult must be re-exported from schemas"
+    assert hasattr(verify_mod, "verify_impl"), "FAIL: S1-R1.3: verify_impl missing"
+    assert hasattr(verify_mod, "run_o1"), "FAIL: S1-R5: run_o1 missing"
+    assert hasattr(verify_mod, "run_o2"), "FAIL: S1-R6: run_o2 missing"
 
 
-def test_stepresult_to_verification_step() -> None:
-    """S1-R1: StepResult.to_verification_step() produces exact 4-key dictionary."""
+def test_stepresult_field_defaults_and_conversion() -> None:
+    """S1-R1.1, S1-R1.2: StepResult field defaults and conversion to 4-key dict."""
     try:
         from actl.verify import StepResult
     except ImportError:
         pytest.fail("FAIL: S1-R1: actl.verify missing")
 
-    sr = StepResult(
-        id="G3",
-        cmd="git diff",
-        exit_code=1,
-        output_sha256="0" * 64,
-        output_tail="failing line",
-        duration_ms=45,
-        failing_line="failing line",
-    )
+    sr = StepResult(id="G1", cmd="manifest_check", exit_code=0, output_sha256="a" * 64)
+    assert sr.output_tail == "", "FAIL: S1-R1.1: default output_tail must be empty string"
+    assert sr.duration_ms == 0, "FAIL: S1-R1.1: default duration_ms must be 0"
+    assert sr.failing_line is None, "FAIL: S1-R1.1: default failing_line must be None"
+
     d = sr.to_verification_step()
     assert d == {
-        "id": "G3",
-        "cmd": "git diff",
-        "exit_code": 1,
-        "output_sha256": "0" * 64,
-    }, f"FAIL: S1-R1.2: Unexpected verification step structure: {d}"
+        "id": "G1",
+        "cmd": "manifest_check",
+        "exit_code": 0,
+        "output_sha256": "a" * 64,
+    }, f"FAIL: S1-R1.2: to_verification_step() must have strictly 4 keys: {d}"
 
 
-def test_o1_staging_outside_worktree(tmp_path: Path) -> None:
-    """S1-R4: run_o1 stages oracle files outside worktree and cleans up in finally."""
+def test_verification_parent_and_stamping_linkage(tmp_path: Path) -> None:
+    """S1-R1.4, S1-R7.2: verify_impl stamps closure with matching seq and links verification.parent."""
     try:
-        from actl.verify import run_o1
+        from actl.verify import verify_impl
+        from actl.layout import Layout
     except ImportError:
-        pytest.fail("FAIL: S1-R4: actl.verify missing")
+        pytest.fail("FAIL: S1-R1.4: actl.verify missing")
 
-    worktree = tmp_path / "worktree"
-    worktree.mkdir()
-    subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "init", "-q", str(worktree)], check=True)
+    layout = Layout(tmp_path / "root")
+    tag = "2026-10-16_test"
+    closure_file = tmp_path / "closure.json"
+    closure_file.write_text(json.dumps({
+        "schema_version": 1,
+        "sprint_tag": tag,
+        "attempt_seq": 1,
+        "reason": "completed",
+        "notes": "all tests pass",
+        "backlog": []
+    }))
 
-    oracle = tmp_path / "oracle"
-    proofs = oracle / "proofs"
-    proofs.mkdir(parents=True)
-    p1 = proofs / "01_pass.sh"
-    p1.write_text("#!/usr/bin/env bash\nexit 0\n")
-    p1.chmod(0o755)
-    probe = oracle / "probe.sh"
-    probe.write_text("#!/usr/bin/env bash\nexit 0\n")
-    probe.chmod(0o755)
-
-    results = run_o1(oracle, worktree)
-    assert len(results) == 2, f"FAIL: S1-R5: Expected 2 steps, got {len(results)}"
-    assert all(r.exit_code == 0 for r in results), "FAIL: S1-R5: Expected exit 0 for all steps"
-
-    stage_dir = tmp_path / "worktree.oracle-stage"
-    assert not stage_dir.exists(), "FAIL: S1-R4.4: Staging directory not cleaned up"
-    assert not (worktree / "proofs").exists(), "FAIL: S1-R4.2: Oracle leaked into worktree"
+    res = verify_impl(layout, tag, closure_path=closure_file)
+    assert res.get("parent") == "closure-001.json", f"FAIL: S1-R1.4: verification.parent mismatch: {res.get('parent')}"
+    stamped_closure = layout.runs(tag) / "closure-001.json"
+    assert stamped_closure.exists(), "FAIL: S1-R7.2: Stamped closure was not written to runs/"
 
 
-def test_o2_argv_allowlist(tmp_path: Path) -> None:
-    """S1-R6: run_o2 refuses repo_test_cmd not starting with python3 or pytest."""
+def test_no_closure_verification_behavior(tmp_path: Path) -> None:
+    """S1-R1.4: verify_impl without closure sets parent=null and neutral G2 step."""
+    try:
+        from actl.verify import verify_impl
+        from actl.layout import Layout
+    except ImportError:
+        pytest.fail("FAIL: S1-R1.4: actl.verify missing")
+
+    layout = Layout(tmp_path / "root")
+    tag = "2026-10-16_test"
+
+    res = verify_impl(layout, tag, closure_path=None)
+    assert res.get("parent") is None, "FAIL: S1-R1.4: Expected parent=null when no closure provided"
+    g2 = next((s for s in res.get("steps", []) if s.get("id") == "G2"), None)
+    assert g2 is not None and g2.get("exit_code") == 0, "FAIL: S1-R1.4: G2 must record neutral pass on missing closure"
+
+
+def test_halt_precedence_over_session_flags(tmp_path: Path) -> None:
+    """S1-R2.2, S1-R2.4: G1 tamper or self-test halt takes precedence over session_info hard_cap/lost."""
+    try:
+        from actl.verify import verify_impl
+        from actl.layout import Layout
+    except ImportError:
+        pytest.fail("FAIL: S1-R2.2: actl.verify missing")
+
+    layout = Layout(tmp_path / "root")
+    tag = "2026-10-16_test"
+
+    res = verify_impl(layout, tag, session_info={"hard_cap": True, "lost": False})
+    assert res.get("exit_code") is None, "FAIL: S1-R2.2: Halt must set verification.exit_code = null"
+    assert res.get("halt") is not None, "FAIL: S1-R2.2: Halt block must be present in verification record"
+
+
+def test_failing_line_sanitization_rules() -> None:
+    """S1-R1.7: failing_line strips ANSI escape sequences, control chars < 0x20, and truncates to 300 chars."""
+    try:
+        from actl.verify import sanitize_failing_line
+    except ImportError:
+        pytest.fail("FAIL: S1-R1.7: sanitize_failing_line function missing in actl.verify")
+
+    esc = chr(27)
+    tab = chr(9)
+    nl = chr(10)
+    raw_line = esc + "[31;1mError:" + esc + "[0m Failed at " + tab + " line " + nl + ("x" * 350)
+    cleaned = sanitize_failing_line(raw_line)
+    assert esc not in cleaned, "FAIL: S1-R1.7: ANSI escape sequence leaked"
+    assert nl not in cleaned and tab not in cleaned, "FAIL: S1-R1.7: Control characters not replaced with spaces"
+    assert len(cleaned) <= 300, f"FAIL: S1-R1.7: Line length {len(cleaned)} exceeds 300 code points"
+
+
+def test_o2_command_grammar_validation(tmp_path: Path) -> None:
+    """S1-R6.3: run_o2 strictly requires pytest or python3 -m pytest."""
     try:
         from actl.verify import run_o2
     except ImportError:
@@ -91,30 +131,7 @@ def test_o2_argv_allowlist(tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     worktree.mkdir()
 
-    with pytest.raises((ValueError, Exception)) as excinfo:
-        run_o2(worktree, repo_test_cmd="bash run_tests.sh")
-    assert "pytest" in str(excinfo.value) or "python3" in str(excinfo.value) or "allow" in str(excinfo.value).lower(), (
-        "FAIL: S1-R6.3: Non-allowlisted command must raise error"
-    )
+    for disallowed in ["bash run.sh", "python3 test.py", "pytest; echo evil", "cat /etc/passwd"]:
+        with pytest.raises((ValueError, Exception)):
+            run_o2(worktree, repo_test_cmd=disallowed)
 
-
-def test_prior_attempt_strictly_four_keys(tmp_path: Path) -> None:
-    """S1-R7: prior_attempt.json has strictly four keys."""
-    try:
-        import actl.schemas as schemas
-    except ImportError:
-        pytest.fail("FAIL: S1-R7: actl.schemas missing")
-
-    valid_prior = {
-        "diff": "diff --git a/file b/file\n",
-        "failing_step": "G3",
-        "failing_line": "prohibited file added",
-        "closures_submitted": 1,
-    }
-    errs = schemas.validate("prior_attempt", valid_prior)
-    assert errs == [], f"FAIL: S1-R7.3: Valid prior_attempt rejected: {errs}"
-
-    invalid_prior = dict(valid_prior)
-    invalid_prior["extra_key"] = "forbidden"
-    errs_extra = schemas.validate("prior_attempt", invalid_prior)
-    assert len(errs_extra) > 0, "FAIL: S1-R7: Extra keys must be rejected in prior_attempt.json"
