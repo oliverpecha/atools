@@ -1,6 +1,6 @@
 # actl Guide: Running Agent Loops with the atools Suite (and, as it lands, actl)
 
-**Revision:** Oct 25, 2026. **Baseline:** `atools` `main` at `6b61504` (`VERSION` v0.1.8; Stage 0 closed, tag `stage-0-verified`), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). Layout transition (memo L-1..L-11) is authored on `wip/layout-amend-a` and not yet implemented. Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
+**Revision:** Oct 26, 2026. **Baseline:** `atools` `main` at `6244430` (`VERSION` v0.1.8; Stage 0 closed, tag `stage-0-verified`; layout transition merged, tag `layout-transition-verified`), which adds the modular audit runner (`4da9394`), the installed-copy sync checks and the hardened worker protocol on top of persistent session supervision (`5cb7f30`), the interactive sessions explorer (`759a0ca`) and help/listing fixes (`a9b3a4e`). The owner verified `proof/run_suite_engines.sh` and `proof/run_suite_session_persistence.sh` (11/11). The layout transition (memo L-1..L-11) is implemented and merged; the Stage 1 and Stage 2 specifications are written against it. Marks: **[updated]**, **[new]**, **[planned]** (specified but not yet merged).
 
 **Where this guide fits.** It tells agents how to run loops that get the build Stages implemented. The plan lives in `actl_Build_Plan-Stages0to2.md` (core) and `actl_Build_Plan-Stages0to2_addendum.md` (Stage specifications, branch protocol in its §11, guide update schedule in its §12); the long-term design is `actl_Design.md`. This guide is updated on the schedule in §10 below.
 
@@ -96,7 +96,7 @@ Interactive Cursor runs are tmux-backed too, and `asessions` does show running s
 | Command | Purpose |
 |---|---|
 | `actl doctor [--refresh] [--json]` | Environment baseline. Runs the engines, persistence and exit-code suites and the audit (minutes), writes `$ACTL_ROOT/baseline.json` on the first run only, exits `4` if `tmux` or the audit script is missing |
-| `actl init --target <path-or-url> [--json]` | Create the tree under `$ACTL_ROOT` (default `~/actl-graph`) and clone the target repository into `repos/<name>` (for a local path the base is the source repo's checked-out branch). Writes `profiles/README.md`. |
+| `actl init --target <path-or-url> [--name <repo>] [--json]` | Create the tree under `$ACTL_ROOT` (default `~/actl-graph`) and clone the target repository into `repos/<name>` (for a local path the base is the source repo's checked-out branch). Writes `profiles/README.md`. Only `init` takes `--name`; the other commands use the default repo `target-repo` until the Stage 4 revisit (O-16). |
 | `actl sprint new <slug> [--spec FILE] [--json]` | Mint `YYYY-MM-DD_<slug>` (`$ACTL_TODAY` overrides the date), pin `base_sha`, create `sprints/<repo>/<tag>/runs/{state.json,sessions.tsv}` and a draft `records/<repo>/<tag>/sprint.toml` |
 | `actl next --sprint <TAG> [--json]` | Print the next action (a pure function of the sprint files) |
 
