@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
 # proof/run_suite_actl_s1.sh - Stage 1 gating verification suite.
-# Follows the run_check pattern of run_suite_actl_s0.sh:
-# Log per check in proof/out/<name>.log, PASS/FAIL counters, Suite Summary.
-# Exit: 0 all green | 1 at least one red (must be the case on base 4e16cc3) | 4 environment error.
 set -uo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_DIR" || exit 4
 mkdir -p proof/out
 PASS=0; FAIL=0; ENVERR=0
 
-for t in bash python3 git; do
+for t in bash python3 git pytest; do
   command -v "$t" >/dev/null 2>&1 || { echo "FAIL: $t not installed (environment error)"; exit 4; }
 done
 
@@ -44,10 +41,34 @@ run_check() {
   else
     echo "[FAIL] (see $log)"
     FAIL=$((FAIL+1))
-    grep -m2 '^FAIL:' "$log" | sed 's/^/    /'
+    grep -m2 '^FAIL:' "$log" | sed 's/^/    /' || head -n 2 "$log" | sed 's/^/    /'
   fi
 }
 
+# 1. Execute Stage 1 pytest suites (GD-02, GD-03)
+run_pytest() {
+  local name="$1"
+  local test_file="$2"
+  selected "$name" || return 0
+  local log="proof/out/${name}.log" rc
+  echo -n "Running ${name}... "
+  pytest "$test_file" -q -rf > "$log" 2>&1; rc=$?
+  if (( rc == 0 )); then
+    echo "[PASS]"
+    PASS=$((PASS+1))
+  else
+    echo "[FAIL] (see $log)"
+    FAIL=$((FAIL+1))
+    grep -m2 -E '(FAILED|ERROR|FAIL:)' "$log" | sed 's/^/    /' || head -n 2 "$log" | sed 's/^/    /'
+  fi
+}
+
+run_pytest "pytest_verify_s1"      "test/actl/test_verify_s1.py"
+run_pytest "pytest_guards_s1"      "test/actl/test_guards_s1.py"
+run_pytest "pytest_session_s1"     "test/actl/test_session_s1.py"
+run_pytest "pytest_next_phase3"    "test/actl/test_next_phase3.py"
+
+# 2. Execute Stage 1 behavioral proof scripts
 P=proof/stage1
 run_check "P-S1-01_good_patch"             bash $P/P-S1-01.sh
 run_check "P-S1-02_additive_change"        bash $P/P-S1-02.sh

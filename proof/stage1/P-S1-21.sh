@@ -12,4 +12,13 @@ try:
 except ImportError as exc:
     print(f"FAIL: S1-R14: cannot import actl.session.wait_session: {exc}")
     sys.exit(1)
+
+try:
+    res = wait_session("impl-mock-timeout-001", timeout_s=1)
+    if not isinstance(res, dict) or "hard_cap" not in res:
+        print("FAIL: S1-R14: wait_session return dict missing hard_cap field")
+        sys.exit(1)
+except Exception as exc:
+    print(f"FAIL: S1-R14: wait_session invocation failed: {exc}")
+    sys.exit(1)
 PY

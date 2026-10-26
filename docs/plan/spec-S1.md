@@ -23,14 +23,14 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R1.3 verify_impl(layout, tag, closure_path=None, worktree=None, fail_fast=True, session_info=None, strict_tripwire=False) returns a dictionary strictly conforming to schemas/verification.json.
 - S1-R1.4 verification.id is f"verification-{seq:03d}", kind is "verification", seq is monotonic integer >= 1 allocated via actl.seq.reserve, parent is the evaluated closure filename (f"closure-{seq:03d}.json") or null if closure_path is None.
 - S1-R1.5 When fail_fast=True, guard and proof execution halts on the first non-zero step, except when closure.reason == "blocked", where fail_fast is forced to False across G3-G6 and O2.
-- S1-R1.6 failing_step is null when all executed steps succeed (exit_code 0); otherwise it contains the identifier of the first failing step (e.g. "G3", "O1:02_no_email.sh", "O2:test_users::test_public").
+- S1-R1.6 failing_step is null when all executed steps succeed (exit_code 0); otherwise it contains the identifier of the first failing step (e.g. "G3", "O1:02_no_email.sh", "O2:test_users::test_public", "tripwire").
 - S1-R1.7 failing_line is null on success; on failure it contains at most 300 Unicode code points, stripped of ANSI CSI and OSC escape sequences per O-8, with newlines and tabs replaced by spaces.
 
-### S1-R2 Pipeline Order, Halt vs. Red, and Session State
-- S1-R2.1 Pipeline execution order is strictly: run_selftests() -> G1 (oracle tamper) -> G2 (closure schema pre-check) -> G3 (scope) -> G4 (test preservation) -> G5 (secrets) -> G6 (forbidden code) -> O1 (oracle proofs) -> O2 (repo tests) -> G2 (blocked precondition post-check, if reason == "blocked").
-- S1-R2.2 Halt (exit code 3): An integrity violation in G1 (oracle digest mismatch) or a self-test failure in run_selftests() halts verification immediately without executing subsequent steps, without incrementing attempts.implementer, and sets verification.exit_code to null, verification.halt to {"reason": "integrity_mismatch" | "selftest_failed"}, and updates sprint status to "hold".
-- S1-R2.3 Red (exit code 1): A failure in G2..G6, O1, or O2 records verification.exit_code = 1, verification.halt = null, increments state.attempts.implementer, and writes mailboxes/implementer/inbox/prior_attempt.json.
-- S1-R2.4 When session_info is provided with lost=True or hard_cap=True: G2 is forced red (exit_code 1), failing_step is set to "G2", and failing_line indicates session watchdog termination or process loss. If hard_cap=True, state.hard_caps_tripped is incremented by 1.
+### S1-R2 Pipeline Order, Halt Precedence, and Session State
+- S1-R2.1 Pipeline execution order is strictly: run_selftests() -> G1 (oracle tamper) -> G2 (closure schema pre-check) -> G3 (scope) -> G4 (test preservation) -> G5 (secrets) -> G6 (forbidden code) -> O1 (oracle proofs) -> O2 (repo tests) -> G2 (blocked precondition post-check, if reason == "blocked") -> tripwire scan.
+- S1-R2.2 Absolute Halt Precedence: An integrity mismatch in G1 or a self-test failure in run_selftests() halts verification immediately without executing subsequent steps, without incrementing attempts.implementer, sets verification.exit_code = null, verification.halt = {"reason": "integrity_mismatch" | "selftest_failed"}, and updates sprint status to "hold". This halt condition supersedes any session_info flags.
+- S1-R2.3 Red vs CLI Usage Error: Malformed CLI arguments (e.g. unparseable flags or missing required argument values) raise UsageError resulting in process exit code 2. In contrast, a submitted closure failing schema validation during verification fails guard G2 with StepResult(id="G2", exit_code=1), recording verification.exit_code = 1, incrementing state.attempts.implementer, and writing prior_attempt.json.
+- S1-R2.4 Session Handling: If session_info is provided with lost=True or hard_cap=True (and no earlier G1 halt occurred), G2 is forced red (exit_code 1), failing_step is set to "G2", and failing_line states the watchdog termination reason. If hard_cap=True, state.hard_caps_tripped is incremented by 1.
 
 ### S1-R3 Guards G1-G6 and run_selftests
 - S1-R3.1 G1 (Oracle Integrity): Compares manifest_sha256(oracle_dir) with active contract's oracle.manifest_sha256. Mismatch raises exit code 3 halt ("integrity_mismatch").
@@ -45,11 +45,11 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R4.1 Active oracle proofs/ directory and probe.sh are staged into a temporary directory sibling to worktree: <worktree>.oracle-stage/.
 - S1-R4.2 No oracle file or directory is copied into, modified in, or left inside candidate worktree.
 - S1-R4.3 Staged proof files and probe.sh are set to mode 0550.
-- S1-R4.4 The staging directory is unconditionally unlinked in a finally block upon completion of O1.
+- S1-R4.4 The staging directory is unconditionally unlinked in a finally block upon completion of O1, even if proofs fail or an exception is raised.
 
 ### S1-R5 O1 Execution
 - S1-R5.1 Staged proofs in <worktree>.oracle-stage/proofs/*.sh are executed in lexical filename order, followed by <worktree>.oracle-stage/probe.sh.
-- S1-R5.2 Execution environment is strictly allowlisted: PATH, LANG, LC_ALL, throwaway HOME, throwaway TMPDIR, and ACTL_TARGET_CMD. All other caller environment variables are purged.
+- S1-R5.2 Execution environment is strictly allowlisted: PATH, LANG, LC_ALL, throwaway HOME, throwaway TMPDIR, and ACTL_TARGET_CMD. All caller environment variables not in this allowlist are purged.
 - S1-R5.3 cwd is set to candidate worktree root.
 - S1-R5.4 Per-proof timeout is timeout_s (default 60s). Overrun terminates process group and records exit code 124.
 
@@ -57,7 +57,7 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 - S1-R6.1 Reads repo_test_cmd from sprint.toml (default: "python3 -m pytest test -q -rf").
 - S1-R6.2 Parses repo_test_cmd using shlex.split(posix=True) with shell=False.
 - S1-R6.3 argv[0] MUST be in ("python3", "pytest"); any other executable raises ValueError / UsageError.
-- S1-R6.4 Appends --junitxml=<tmp_xml> to argv, executes in worktree, and parses JUnit XML to extract failing node: O2:{classname}::{name} (or O2:{file_stem}::{name}). On timeout (default 120s), records exit code 124.
+- S1-R6.4 Appends --junitxml=<tmp_xml> to argv, executes in worktree, and parses JUnit XML to extract failing node. If classname matches test file stem, formats as O2:{file_stem}::{name}, else O2:{classname}::{name}. On timeout (default 120s), records exit code 124.
 
 ### S1-R7 Verification Emission and prior_attempt.json
 - S1-R7.1 Verification artifact is atomically written to runs/verification-{seq:03d}.json via temp file and os.replace, followed by directory fsync.
@@ -81,7 +81,7 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 ### S1-R10 Tripwire Scanner and Profile Sanitization
 - S1-R10.1 Scans candidate ANSI-stripped console logs and Cursor JSONL transcripts for references to proofs/, probe.sh, oracle, solution_key.
 - S1-R10.2 Excludes lines originating from skills/actl-implementer/SKILL.md, contract-*.json, and prior_attempt.json failing_step tokens.
-- S1-R10.3 When strict_tripwire=True, any tripped wire forces verification exit_code = 1.
+- S1-R10.3 When strict_tripwire=True and no earlier step failed, any tripped wire forces verification exit_code = 1 with failing_step = "tripwire".
 - S1-R10.4 Honors ATOOLS_CURSOR_HOME environment variable for profile and transcript discovery.
 
 ### S1-R11 CLI Contract (actl verify-impl and actl selftest)
@@ -90,11 +90,21 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 
 ### S1-R12 Phase 3 Decision Rules (actl next)
 - S1-R12.1 Implemented in src/actl/next_rules/phase3.py with PRIORITY = 30.
-- S1-R12.2 Evaluates implementer stage transitions across at least 10 discrete states (active running session -> wait, closure present -> verify, red with remaining attempts -> dispatch, red with zero attempts -> escalate, green -> promote/closeout, hold -> hold_owner).
+- S1-R12.2 Evaluates implementer stage transitions across exactly 10 discrete states:
+  1. Active tmux session running -> {"action": "wait", "command": "actl wait <session>", "reason": "Implementer session in progress"}
+  2. Finished session with exit code, closure present in outbox -> {"action": "verify", "command": "actl verify-impl --sprint <tag> --closure <path>", "reason": "Closure submitted for verification"}
+  3. Finished session, no closure written -> {"action": "verify", "command": "actl verify-impl --sprint <tag>", "reason": "Verify workspace after session exit without closure"}
+  4. Verification red, attempts < max_attempts -> {"action": "dispatch", "command": "actl dispatch-impl --sprint <tag>", "reason": "Retry implementer attempt"}
+  5. Verification red, attempts >= max_attempts, grants == 0 -> {"action": "escalate_attempts", "command": "", "reason": "Implementer attempt limit reached"}
+  6. Verification red, attempts >= max_attempts, grants > 0 -> {"action": "dispatch", "command": "actl dispatch-impl --sprint <tag>", "reason": "Dispatching granted implementer attempt"}
+  7. Verification green (exit_code 0) -> {"action": "promote", "command": "actl promote implementer --sprint <tag>", "reason": "Verification passed"}
+  8. Closure reason == "blocked", preconditions met -> {"action": "hold_owner", "command": "", "reason": "Implementer blocked with valid rationale"}
+  9. Sprint status == "hold" -> {"action": "hold_owner", "command": "", "reason": "Sprint is on hold"}
+  10. Active stage is not implementer -> returns None (falls through to lower priority rules).
 
 ### S1-R13 Determinism and Offline Hermetic Purity
 - S1-R13.1 Gating verification executes zero network calls and invokes no live LLMs.
-- S1-R13.2 Repeated verify_impl execution on identical worktree produces identical StepResult sequences and hashes.
+- S1-R13.2 Repeated verify_impl execution on identical worktree produces identical StepResult sequences, command exit codes, and output_sha256 digests. StepResult duration_ms is excluded from equality and determinism assertions.
 
 ### S1-R14 Session Monitoring (actl wait and wait_session)
 - S1-R14.1 wait_session(session_name, timeout_s=None, poll_interval_s=1.0) polls tmux list-sessions and router.process.read_exit_code.
@@ -109,8 +119,9 @@ Rulings applied: D-24, D-30..D-40 (Layout transition L-1..L-11), D-41, D-42, D-4
 
 ### S1-R16 Additive-Change and PB-2 Immutability Rule (P-S1-02)
 - S1-R16.1 Fork point tag: layout-transition-verified (commit 6244430).
-- S1-R16.2 Implementer modifications allowed ONLY on: src/core/config.py, src/sessions/storage.py, install.sh, README.md.
-- S1-R16.3 Zero diff allowed on frozen paths: proof/stage0/, fixtures/golden/expected.d/base.json, src/actl/INTERFACES.md, tools/.
+- S1-R16.2 In integration mode, P-S1-02 verifies that non-empty work was added on branch and that frozen paths are untouched.
+- S1-R16.3 Implementer modifications allowed ONLY on: src/core/config.py, src/sessions/storage.py, install.sh, README.md.
+- S1-R16.4 Zero diff allowed on frozen paths: proof/stage0/, fixtures/golden/expected.d/base.json, src/actl/INTERFACES.md, tools/.
 
 ## 2. Traceability and Vacuity Matrix
 
@@ -190,7 +201,7 @@ Applied by G5 to diff additions and closure notes:
 - S004: Slack Tokens (xox[baprs]-[A-Za-z0-9-]{10,}).
 - S005: Private Keys (-----BEGIN [A-Z ]*PRIVATE KEY-----).
 - S006: Google API Keys (AIza[0-9A-Za-z_-]{35}).
-- S007: Generic Secret Assignments ((?i)(password|secret|api_key|token)\s*[:=]\s*['"][^'"]{16,}['\"]).
+- S007: Generic Secret Assignments ((?i)(password|secret|api_key|token)\s*[:=]\s*['"][^'"]{16,}['"]).
 
 ### O-17: Process Exit Code 3 vs. verification.exit_code = null on Halt
 Confirmed and adopted: When a verification halt occurs (integrity violation or guard self-test failure), verification.exit_code is null in JSON. The CLI processes (actl verify-impl, actl selftest, actl dispatch-impl) exit with process status code 3.
@@ -240,8 +251,7 @@ id = "F008"
 pattern = "\\bsudo\\b|chmod +(-R +)?[0-7]*7[0-7]*7"
 description = "Privilege escalation and permission widening prohibited"
 
-
-## Appendix B: Proposed config/secrets.toml
+Appendix B: Proposed config/secrets.toml
 
 
 # Secret detection patterns for G5 guard

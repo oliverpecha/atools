@@ -7,9 +7,18 @@ export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
 import sys
+from pathlib import Path
 try:
     from actl.verify import verify_impl
+    from actl.layout import Layout
 except ImportError as exc:
     print(f"FAIL: S1-R15: cannot import actl.verify.verify_impl: {exc}")
+    sys.exit(1)
+
+layout = Layout(Path("/tmp/actl-test-s1"))
+try:
+    verify_impl(layout, "2026-10-16_public-profiles")
+except Exception as exc:
+    print(f"FAIL: S1-R15: verify_impl invocation failed: {exc}")
     sys.exit(1)
 PY

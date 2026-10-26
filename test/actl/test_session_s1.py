@@ -17,10 +17,8 @@ def test_session_module_importable() -> None:
     except ImportError as exc:
         pytest.fail(f"FAIL: S1-R9: actl.session cannot be imported: {exc}")
 
-    assert hasattr(sess_mod, "start_session"), "FAIL: S1-R9: actl.session lacks start_session"
-    assert hasattr(sess_mod, "wait_session"), "FAIL: S1-R14: actl.session lacks wait_session"
-    assert hasattr(sess_mod, "archive_session_log"), "FAIL: S1-R15: actl.session lacks archive_session_log"
-    assert hasattr(sess_mod, "scan_tripwires"), "FAIL: S1-R10: actl.session lacks scan_tripwires"
+    for fn in ("start_session", "wait_session", "archive_session_log", "scan_tripwires"):
+        assert hasattr(sess_mod, fn), f"FAIL: S1-R9: actl.session lacks {fn}"
 
 
 def test_tripwire_scanner_finds_oracle_access(tmp_path: Path) -> None:
@@ -32,4 +30,26 @@ def test_tripwire_scanner_finds_oracle_access(tmp_path: Path) -> None:
         pytest.fail("FAIL: S1-R10: actl modules missing")
 
     layout = Layout(tmp_path / "root")
-    # Tripwires must find violations in dirty fixture files while ignoring clean ones
+    dirty_log = tmp_path / "dirty.log"
+    dirty_log.write_text("Checking /records/oracle-003/proofs/01.sh for answers\n")
+
+    hits = scan_tripwires(layout, "2026-10-16_test", 1, log_path=dirty_log)
+    assert isinstance(hits, list), "FAIL: S1-R10: scan_tripwires must return a list"
+    assert len(hits) > 0, "FAIL: S1-R10: Expected tripwire match on proofs/ reference"
+    assert hits[0]["source"] == "log", "FAIL: S1-R10: Expected source='log'"
+
+
+def test_tripwire_scanner_ignores_governance_inputs(tmp_path: Path) -> None:
+    """S1-R10.2: scan_tripwires excludes SKILL.md, contract, and prior_attempt tokens."""
+    try:
+        from actl.session import scan_tripwires
+        from actl.layout import Layout
+    except ImportError:
+        pytest.fail("FAIL: S1-R10: actl modules missing")
+
+    layout = Layout(tmp_path / "root")
+    clean_log = tmp_path / "clean.log"
+    clean_log.write_text("Instruction from skills/actl-implementer/SKILL.md executed\nO1:01_public.sh in prior_attempt\n")
+
+    hits = scan_tripwires(layout, "2026-10-16_test", 1, log_path=clean_log)
+    assert hits == [], f"FAIL: S1-R10.2: Governance tokens must not trigger tripwire: {hits}"
