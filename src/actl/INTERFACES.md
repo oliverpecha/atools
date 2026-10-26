@@ -776,10 +776,13 @@ Introspection contract for `P-S0-26`:
 * **Scope:** L-1 through L-11 (layout, names, courier, profiles)
 * **Approval route:** PB-4 and D-28 approval as given by the Owner on 2026-10-25.
 * **Conditions:** Cross-family delta review before merge; PB-1 re-verified.
-* **Delta review verdict:** pending.
-* **Proposed decisions (awaiting Owner ratification):**
+* **Delta review verdict:** ACCEPT WITH FINDINGS (2026-10-25, Claude Sonnet 5.5 High, Owner-reported); findings resolved; see `docs/plan/signoffs/`.
+* **Decisions (ratified and approved by Owner (PB-4) on 2026-10-25):**
   1. Layout property names: `Layout.records`, `Layout.profile`, `Layout.mailboxes` (memo names the profile concept; records/mailboxes follow section 3).
   2. JSON key `handoff_dir` renamed to `mailboxes_dir`.
   3. Profile directory mode: Design aligned to spec/tests at `0755` (memo does not state a mode).
   4. `profiles/README.md` written by `actl init` only (L-8).
   5. `sprint-proposal` rejecting `repo` removed (memo does not support it).
+  6. Mutants that need implementation code are a part B gate (D-29).
+  7. The contract object's `qual` field keeps its name; only file names, kinds and schema names are renamed.
+* **Known limitation:** only `actl init` takes `--name`; other commands use the default repo until the Stage 4 revisit (L-11, O-16).
