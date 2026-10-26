@@ -8,8 +8,8 @@ Date: 2026-10-26. Ruling: kickoff v3 ruling 2 (D-41). Work item: WI-S0-PROOF.
 - All blob pins and the PB-2 frozen-path checks (modify, delete, rename, `expected.d/base.json`) are unchanged. The pin of `tools/mutate.py` was refreshed separately in 4fb7aed and ecf7266 (D-47).
 
 ## Independence (PB-9)
-- First patch: Argon 4. Narrowed (two small edits, byte-safe writer) by the Step 0 assistant thread (model family not recorded).
-- Reviewer: GPT 6.1 Sol thinking, three rounds, all on the supplied diff without execution.
+- First patch: Gemini Flash 3.8 High. Narrowed (two small edits, byte-safe writer) by the Step 0 assistant thread (model family not recorded).
+- Reviewer: GPT 6.1 Sol High, three rounds, all on the supplied diff without execution.
 - Implementer sessions: Cursor agent through `arouter` tier `auto` (asessions shows the model as `default`).
 
 ## Rounds
@@ -26,3 +26,6 @@ Before each commit: `proof/run_suite_actl_s0.sh` 19 passed, 0 failed, 0 environm
 
 ## Approval
 Owner approval of the merge is the push of the Step 0 branch; it is not separately recorded here.
+
+## Errata (added after 827abec)
+The Owner corrected the model names on 2026-10-26: the first patch was authored by Gemini Flash 3.8 High (the text above first said Argon 4) and the reviewer was GPT 6.1 Sol High (the text above and the commit messages of 3148198, d813ad0 and c0080ba say "GPT 6.1 Sol thinking"). History is not rewritten; this record and D-41 carry the corrected names.
