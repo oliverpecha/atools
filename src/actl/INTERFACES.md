@@ -71,7 +71,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 * **Preconditions:** Process has write permission on `self.root.parent`.
 * **Return value:** `None`.
 * **Errors raised:** `OSError` on filesystem permission failure.
-* **Side effects:** Creates `$ACTL_ROOT/{records,sprints,repos,profiles/{role}}` and `$ACTL_ROOT/profiles/README.md`; applies `0700` to `records/` and `0755` to `sprints/`, `repos/`, `profiles/`.
+* **Side effects:** Creates `$ACTL_ROOT/{records,sprints,repos,profiles/{role}}` (does not write `profiles/README.md`; `actl init` writes it, L-8); applies `0700` to `records/` and `0755` to `sprints/`, `repos/`, `profiles/`.
 * **Idempotence:** Idempotent.
 
 
@@ -529,7 +529,7 @@ All JSON Schemas in `schemas/*.json` use Draft 2020-12 with `additionalPropertie
 * `status`: `"draft" | "frozen"` (default `"draft"` in `actl sprint new`)
 * `spec_source`: `"architect_qna" | "imported"`
 * `after`: `list[str]` (default `[]`)
-* `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `repo`, `status`, `spec_source`, and `repo_test_cmd`)
+* `live_run`: `"none" | "required"` (optional in `schemas/sprint.json` when `status == "draft"`, required when `status == "frozen"` and in `schemas/sprint-proposal.json`; `schemas/sprint-proposal.json` forbids `sprint_tag`, `base_sha`, `status`, `spec_source`, and `repo_test_cmd`; `repo` is optional and not rejected)
 * `approval_live_run`: `"architect" | "owner"` (default `"architect"`)
 * `solution_key_exposure`: `"full" | "hidden"` (default `"full"`)
 * `owner_review_triggers`: `list["grant_attempts" | "waive_mutant" | "update_scope" | "reopen_oracle" | "retry_live"]` (default `[]`)

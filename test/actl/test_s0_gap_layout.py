@@ -8,11 +8,11 @@ def test_layout_rejects_symlink_traversal(tmp_path):
     outside.mkdir(parents=True)
     lay = layout.Layout(root)
     
-    # Create symlink escaping root
-    ws_dir = lay.root / 'workspaces'
+    # Create symlink escaping root under sprints/<repo>/workspaces (no-tag form)
+    ws_dir = lay.root / "sprints" / lay.repo / "workspaces"
     ws_dir.mkdir(parents=True)
     escape_link = ws_dir / "escape"
     escape_link.symlink_to(outside, target_is_directory=True)
-    
+
     with pytest.raises(ValueError, match="Path escapes boundary|outside"):
         lay.workspace("escape")

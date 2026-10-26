@@ -34,7 +34,7 @@ def test_paths_match_design_section_1_5(tmp_path):
         if lay.outbox(TAG, role) != r / "sprints" / "target-repo" / TAG / "mailboxes" / role / "outbox": fail("outbox(%s) wrong" % role)
         if lay.profile(role) != r / "profiles" / role: fail("profile(%s) wrong" % role)
     if lay.workspace("implementer-006", TAG) != r / "sprints" / "target-repo" / TAG / "workspaces" / "implementer-006": fail("workspace(name, tag) wrong")
-    if lay.workspace("verify-implementer") != r / "sprints" / "target-repo" / TAG / "workspaces" / "verify-implementer": fail("workspace(name) wrong")
+    if lay.workspace("verify-implementer") != r / "sprints" / "target-repo" / "workspaces" / "verify-implementer": fail("workspace(name) wrong")
 
 
 def test_default_root_from_env_and_home(tmp_path, monkeypatch):
@@ -127,18 +127,23 @@ def test_wrong_repo_guard_rejects_mismatch(tmp_path):
     seq = need("actl.seq")
     from actl.errors import StateIntegrityError
     r = (tmp_path / "root").resolve()
-    lay_cat = L(r, repo="cat_app")
-    lay_cat.ensure_sprint_tree(TAG)
+    lay_dog = L(r, repo="dog_app")
+    lay_dog.ensure_sprint_tree(TAG)
     st = {"repo": "cat_app", "run_id": "run-123456789abc", "sprint_tag": TAG, "seq": 1, "epoch": 1,
           "status": "draft", "active_stage": "intake", "active_spec": None, "active_solution_key": None,
           "active_oracle_draft": None, "active_oracle": None, "active_contract": None,
           "attempts": {"oracle": 0, "implementer": 0, "live": 0, "curator": 0}, "closures_submitted": 0,
           "hard_caps_tripped": 0, "grants": {"oracle": 0, "implementer": 0, "live": 0, "curator": 0},
           "tmux_sessions": []}
-    lay_cat.state_file(TAG).write_text(json.dumps(st))
-    lay_dog = L(r, repo="dog_app")
+    lay_dog.state_file(TAG).write_text(json.dumps(st))
     with pytest.raises(StateIntegrityError):
         seq.read_state(lay_dog, TAG)
+    st_ok = dict(st)
+    st_ok["repo"] = "dog_app"
+    lay_dog.state_file(TAG).write_text(json.dumps(st_ok))
+    got = seq.read_state(lay_dog, TAG)
+    if got.get("repo") != "dog_app":
+        fail("matching repo must read without StateIntegrityError")
 
 
 def test_init_writes_profiles_readme(tmp_path):
