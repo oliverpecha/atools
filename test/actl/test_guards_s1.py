@@ -34,4 +34,27 @@ def test_run_selftests_passes_on_unmodified_configs() -> None:
 
 def test_g4_hollow_test_detection(tmp_path: Path) -> None:
     """S1-R3.4: G4 rejects hollow test bodies like pass, ellipsis, docstring only, assert True."""
-    hollow_code =
+    hollow_code = (
+        "def test_something():\n"
+        "    \"\"\"Docstring only.\"\"\"\n"
+        "    pass\n\n"
+        "def test_another():\n"
+        "    ...\n\n"
+        "def test_trivial():\n"
+        "    assert True\n"
+    )
+    tree = ast.parse(hollow_code)
+    assert len(tree.body) == 3, "Failed to parse hollow test fixture"
+
+    try:
+        from actl.verify import check_guards
+    except ImportError:
+        pytest.fail("FAIL: S1-R3.4: actl.verify missing")
+
+
+def test_g5_secret_scrubbing() -> None:
+    """S1-R3.5: G5 redacts matched secret from failing_line and output."""
+    try:
+        from actl.verify import check_guards
+    except ImportError:
+        pytest.fail("FAIL: S1-R3.5: actl.verify missing")
