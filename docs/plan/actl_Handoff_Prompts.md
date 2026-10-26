@@ -37,7 +37,7 @@
 | A1 | `actl_Design.md`, core, addendum | repo dump (below) |
 | A2 | same three | `INTERFACES.md` (accepted A1 output), repo dump, `atools_code_facts.txt`, `actl_Guide.md` |
 | B | same three | `INTERFACES.md`, repo dump, `atools_code_facts.txt`, `actl_Guide.md`, `spec-S0.md` (template), `fixtures/golden/expected.d/base.json` |
-| C | same three | `INTERFACES.md`, repo dump, `spec-S0.md` (template), `fixtures/golden/expected.d/base.json` |
+| C | same three | `src/actl/INTERFACES.md`, repo dump, `docs/plan/spec-S0.md` (template), `fixtures/golden/expected.d/base.json` |
 | D | same three | every author output (specs, proofs, tests, fixtures), `INTERFACES.md`, `actl_Guide.md`, repo dump, `atools_code_facts.txt` |
 
 If the agent works inside the worktree, the first three files are already under `docs/`.
@@ -78,7 +78,7 @@ Regenerate it at the commit the authors work from; it replaces the old paste.txt
 
 ```bash
 { printf '# atools_code_facts.txt HEAD=%s VERSION=%s generated=%s\n' "$(git rev-parse --short HEAD)" "$(cat VERSION)" "$(date -u +%FT%TZ)"
-  git ls-files -- bin/arouter bin/asessions bin/actl 'src/router/*.py' 'src/core/*.py' 'engines/*.sh' hooks/pre-commit hooks/commit-msg rules/git-safety.md install.sh 'proof/run_suite_*.sh' .cursor/skills/atools-repair/SKILL.md audit/README.md | LC_ALL=C sort | while IFS= read -r f; do printf '==> %s <==\n' "$f"; git show "HEAD:$f"; printf '\n'; done; } > "${T:-/tmp}/atools_code_facts.txt"
+  git ls-files -- bin/arouter bin/asessions bin/actl 'src/router/*.py' 'src/core/*.py' 'src/actl/*.py' 'schemas/*.json' 'src/sessions/*.py' 'config/*.toml' 'engines/*.sh' hooks/pre-commit hooks/commit-msg rules/git-safety.md install.sh 'proof/run_suite_*.sh' .cursor/skills/atools-repair/SKILL.md audit/README.md | LC_ALL=C sort | while IFS= read -r f; do printf '==> %s <==\n' "$f"; git show "HEAD:$f"; printf '\n'; done; } > "${T:-/tmp}/atools_code_facts.txt"
 ```
 
 ## 1. COMMON BLOCK (paste at the top of every author prompt)
@@ -170,7 +170,7 @@ Attach: see matrix (B). Paste COMMON BLOCK, then:
 TASK B: author Stage 1 (verifier and Implementer loop) against the accepted INTERFACES.md. The golden fixture exists (fixtures/golden/, final and read-only under PB-2): read it; do not recreate or edit it, and add only new files. Define your expectations only in the new file fixtures/golden/expected.d/s1.json (PB-3). Use spec-S0.md as the structural template (clause ids S1-Rk.n, proof map, ambiguity register with ids S1A-n). Do not create implementations/*.patch or the golden sprint.
 
 Deliverables
-1. spec-S1.md: S1-R1..R15 expanded; traceability table with vacuity columns; Ambiguity register; Proposed decisions (O-4 G4 for non-Python, O-5 initial config/forbidden.toml rule list, O-6 initial config/secrets.toml patterns, the relation of ev.exit_code (0..255 or null, D-24) to the verifier exit codes 0/1/3 of S1-R2; O-8 is closed, see INTERFACES.md section 6). The argument-size ceiling is already measured (addendum F3: 131071 bytes accepted, 131072 refused); use it. Include the proposed contents of config/forbidden.toml and config/secrets.toml as spec appendices (the implementer will create the files).
+1. spec-S1.md: S1-R1..R15 expanded; traceability table with vacuity columns; Ambiguity register; Proposed decisions (O-4 G4 for non-Python, O-5 initial config/forbidden.toml rule list, O-6 initial config/secrets.toml patterns, the relation of verification.exit_code (verification-NNN, 0..255 or null, D-24) to the verifier exit codes 0/1/3 of S1-R2; O-8 is closed, see INTERFACES.md section 6). The argument-size ceiling is already measured (addendum F3: 131071 bytes accepted, 131072 refused); use it. Include the proposed contents of config/forbidden.toml and config/secrets.toml as spec appendices (the implementer will create the files).
 2. Proofs and tests: proof/stage1/*.sh, proof/run_suite_actl_s1.sh, test/actl/test_verify_*.py, test_guards_*.py, test_next_phase3.py, covering P-S1-01..28 of the addendum (add more if you find gaps). Detached proofs use the private-environment recipe of addendum §6.6 (private TMUX_TMPDIR, private ATOOLS_LOG_DIR and ATOOLS_SESSION_DIR, stub agent and loginctl first in PATH, behaviour chosen by words in the prompt); without tmux they exit 4 and say so.
 3. Synthetic inputs for the tripwire proofs: fixtures/golden/transcripts/ (Cursor-style JSONL transcripts, one clean, one mentioning proofs/ and probe.sh) and fixtures/golden/logs/ (ANSI-laden console logs, one clean, one with an oracle path).
 4. A proof that skills/actl-implementer/SKILL.md (to be written by the implementer) satisfies S1-R8: required instructions present, forbidden instructions (running proof suites, reading oracle paths) absent; grep-based, with the checklist stated in the spec.
@@ -220,7 +220,7 @@ CHECKS (do all; report evidence for each)
 6. Security and robustness: path handling, command execution from model output, secret leakage, environment allowlists, race conditions in seq allocation and in the exit-code file, signal handling in the runner, hook independence of scratch repos.
 7. Design alignment: places where a Stage spec departs from the Design without a recorded reason.
 8. Over-engineering and omissions: things the specs demand that no Stage 0-2 goal needs; and goals with no requirement.
-9. Interface check: INTERFACES.md versus what the Stage 1 and Stage 2 specs assume; missing or unusable signatures.
+9. Interface check: INTERFACES.md versus what the Stage 1 and Stage 2 specs assume; missing or unusable signatures; artifact naming uses verification (verification-NNN), not ev.
 
 OUTPUT
 A table of findings: id, severity (blocker/major/minor), location (file and line or requirement id), evidence (command and output, or counter-example), suggested fix. Then one verdict per Stage: ready / ready after fixes / not ready, with the blockers listed. Then a log of every command you ran. Do not edit the authors' files.
