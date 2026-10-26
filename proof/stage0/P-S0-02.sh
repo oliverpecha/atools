@@ -55,7 +55,7 @@ is_authorized_pb2_modification() {
     "docs/plan/layout-transition-memo.md:a813524440dfdd2f9809f6730a3de85595d4808f") return 0 ;;
     "docs/plan/runbooks/layout-transition-a-authoring.md:b0a9aa964f8ab8811a472fc92d36acea4465d341") return 0 ;;
     "fixtures/golden/artifacts/README.md:7e42b1641e858ed82d860170eb9d0321dd9d69c8") return 0 ;;
-    "tools/mutate.py:a2e4042a9e0c1c05c9dafff2e21948626ab68c19") return 0 ;;
+    "tools/mutate.py:6254f9d387cea89162a4069bc46433c5221ca8a9") return 0 ;;
     "tools/unfiles.py:3faa8220b2afb6f359bd04e51b6235205b0375e6") return 0 ;;
     "fixtures/golden/artifacts/invalid/contract/budgets_forbidden.json:15f8a01683aa1db230cbfc91eaf371ce7ddde436") return 0 ;;
     "fixtures/golden/artifacts/invalid/contract/epoch_zero.json:a94eb76e65171e92d5062f84a33be0561b9fb778") return 0 ;;

@@ -20,6 +20,18 @@ PY_TARGETS = {
     "src/actl/sprint.py": [T + "test_p04_sprint.py", T + "test_p09_defaults.py", T + "test_s0_gap_sprint_initial_state.py"],
     "src/actl/cli.py": [T + "test_p11_cli.py", T + "test_p14_registries.py", T + "test_s0_gap_cli_json_errors.py"],
     "src/actl/next.py": [T + "test_p13_next_rules.py", T + "test_p14_registries.py", T + "test_s0_gap_next_rule_signatures.py"],
+    # WI-TOOLS-4
+    "src/actl/cmd_init.py": [T + "test_p03_layout.py", T + "test_p11_cli.py", T + "test_p14_registries.py", T + "test_p26_interfaces.py"],
+    "src/actl/cmd_sprint.py": [T + "test_p04_sprint.py", T + "test_p09_defaults.py", T + "test_p11_cli.py", T + "test_p14_registries.py", T + "test_p26_interfaces.py"],
+    "src/actl/cmd_doctor.py": [T + "test_p01_doctor.py", T + "test_p11_cli.py", T + "test_p14_registries.py", T + "test_p26_interfaces.py"],
+    "src/actl/cmd_next.py": [T + "test_p11_cli.py", T + "test_p13_next_rules.py", T + "test_p14_registries.py", T + "test_p26_interfaces.py"],
+    "src/actl/doctor.py": [T + "test_p01_doctor.py", T + "test_p11_cli.py", T + "test_p26_interfaces.py"],
+    "src/actl/errors.py": [T + "test_p08_schemas.py", T + "test_p11_cli.py", T + "test_p12_scope.py", T + "test_p26_interfaces.py"],
+    "src/sessions/__init__.py": [T + "test_s0_gap3_process.py", T + "test_s0_gap2_router.py"],
+    "src/sessions/cli.py": [T + "test_s0_gap3_process.py", T + "test_s0_gap2_router.py"],
+    "src/sessions/reader.py": [T + "test_s0_gap3_process.py", T + "test_s0_gap2_router.py"],
+    "src/sessions/renderers.py": [T + "test_s0_gap3_process.py", T + "test_s0_gap2_router.py"],
+    "src/sessions/storage.py": [T + "test_s0_gap3_process.py", T + "test_s0_gap2_router.py"],
 }
 JSON_TESTS = [T + "test_p08_schemas.py", T + "test_s0_gap_schemas_oneof.py"]
 GAP = sorted(str(q) for q in Path("test/actl").glob("test_s0_gap*.py"))
