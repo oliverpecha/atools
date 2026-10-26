@@ -73,7 +73,7 @@ allow_rules = [
     "Shell(git log)", "Shell(git log *)", "Shell(git show)", "Shell(git show *)",
     "Shell(git rev-parse *)", "Shell(git branch)", "Shell(git branch *)",
     "Shell(git checkout *)", "Shell(git checkout -b *)", "Shell(git switch *)", "Shell(git switch -c *)",
-    "Shell(git add *)", "Shell(git commit -m *)",
+    "Shell(git add *)", "Shell(git commit -m *)", "Shell(git commit -F *)",
     "Shell(mkdir -p *)", "Shell(chmod +x proof/*.sh)",
     "Shell(python3 -m compileall *)", "Shell(python3 -m py_compile *)", "Shell(python3 -c *)",
     "Shell(pytest)", "Shell(pytest *)",
@@ -85,7 +85,8 @@ deny_rules = [
     "Shell(reboot)", "Shell(shutdown*)", "Shell(init 0)",
     "Shell(mkfs*)", "Shell(dd if=*)", "Shell(iptables*)", "Shell(ufw*)",
     "Shell(passwd*)", "Shell(visudo*)",
-    "Shell(git commit *--no-verify*)", "Shell(git commit *-n *)", "Shell(git commit *-n)"
+    "Shell(git commit *--no-verify*)", "Shell(git commit *-n *)", "Shell(git commit *-n)",
+    "Shell(git -c *hooksPath*)", "Shell(git *-c *commit*)"
 ]
 
 perms["allow"] = sorted(list(set(perms.get("allow", []) + allow_rules)))
