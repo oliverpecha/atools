@@ -718,6 +718,14 @@ From Stage 4, personas run under separate Linux accounts. tmux's default socket 
 - D-38 (L-9) `ACTL_ROOT` is the only root name; `/srv/agent-graph` is an example value. Sprint tags keep Design format `YYYY-MM-DD-slug` (hyphen).
 - D-39 (L-10) `Layout(root, repo="target-repo")`: one Layout per repository, so existing method signatures stay unchanged and the golden fixture works through the default. A `repo` field is recorded in `sprint.toml` and `state.json`. Every function that loads state checks it equals `layout.repo` and raises the existing integrity error (exit 3). One proof: "wrong-repo Layout rejected". The earlier narrower `Layout.target_repo(name)` amendment is superseded.
 - D-40 (L-11) Revisit `Layout(root, repo)` against an explicit `repo` argument at Stage 4 (O-16), with the learnings gathered by then.
+- D-41 (kickoff v3 ruling 2) P-S0-02 keeps enforcing PB-2 immutability of frozen paths against the Stage 0 fork; in integration mode it no longer gates added files. The allowed-additions rule moves to a per-stage proof (P-S1-02, fork at tag `layout-transition-verified`) and no allowlist is widened. Until P-S1-02 exists, no check gates additions in integration mode. Cross-family delta review (D-28) by GPT 6.1 Sol thinking; commits 3148198 and d813ad0.
+- D-42 (kickoff v3 ruling 3) The golden stub writes `closure-draft.json` in its working directory. Proof-side fix: P-S1-20 builds its own stub wrapper in `$T/bin/agent` that writes the outbox closure. `verify_impl` and `dispatch-impl` must not read `closure-draft.json` from the worktree.
+- D-43 (kickoff v3 ruling 4) `actl promote` for the challenger: `staged_to` is the records path of the promoted oracle draft (a `str`); there is no inbox staging and no `actl` role; `promote_role` returns all 7 keys.
+- D-44 (kickoff v3 ruling 6) Sentinel quoting: double quotes are mandatory in emitters and parsers. The frozen INTERFACES.md does not change.
+- D-45 (kickoff v3 ruling 7) `wait_session` takes `timeout_s: int | None = None` and gains no new parameters; `dispatch-impl` / `cmd_wait` computes wall_clock + kill_grace + 30 s.
+- D-46 (kickoff v3 ruling 8) Outbox atomic swap: the staging directory `mailboxes/.{role}-staging-{pid}` gets `chmod 0o770` before it replaces `mailboxes/<role>/outbox`.
+- D-47 (kickoff v3 Fact A) `tools/mutate.py` is PB-2 pinned by blob hash in `proof/stage0/P-S0-02.sh` (line 58 at 6796b09; locate it by content, not by line number). Any change to the file and the pin refresh go in the SAME commit, or S0-R2.3 fails. Applied in 4fb7aed (WI-TOOLS-4) and ecf7266 (WI-TOOLS-5).
+- D-48 (kickoff v3 Fact B) The audit-pinned denies `Shell(git commit *-n *)` and `Shell(git commit *-n)` (ADP-PERM-07/08) are kept. Agent commit messages are written to a file and committed with `git commit -F`. Replacing the denies needs an audit change as a separate work item, only after a scratch test.
 
 ### 9.2 OPEN (spec agents propose an answer; the Owner decides where noted)
 
@@ -734,6 +742,7 @@ From Stage 4, personas run under separate Linux accounts. tmux's default socket 
 - **O-14** Whether `.git/hooks/pre-commit.local` is found when committing from a worktree (unverified; do not rely on it).
 - **O-15** Whether tmux propagates non-`PATH` environment variables to a pane on an already-running server (not measured; do not rely on it, F13).
 - **O-16** Revisit `Layout(root, repo)` against an explicit `repo` argument at Stage 4, with the learnings gathered by then (memo L-11).
+- **O-17** (kickoff v3 ruling 5) Whether `verification.exit_code` may hold the halt process code 3. Proposed: keep D-24. `null` means interrupted or halted before a verdict; a halt exits 3 as the process code of the command with `verification.halt` set, and that process code does not become `verification.exit_code`. If S1-R2 needs the record field to contain 3 on a halt, it is a proposed override of D-24 and the Owner decides.
 
 ### 9.3 CLOSED
 
