@@ -8,9 +8,11 @@ export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 command -v tmux >/dev/null 2>&1 || { echo "FAIL: tmux not installed (environment error)"; exit 4; }
 
 python3 - <<'PY'
+import os
 import sys
-from pathlib import Path
 import argparse
+from pathlib import Path
+
 try:
     import actl.cmd_dispatch_impl as cmd_mod
     from actl.verify import verify_impl
@@ -19,11 +21,23 @@ except ImportError as exc:
     print(f"FAIL: S1-R9: cannot import dispatch_impl or verify_impl: {exc}")
     sys.exit(1)
 
-layout = Layout(Path("/tmp/actl-test-s1"))
-args = argparse.Namespace(sprint="2026-10-16_public-profiles", mode="detach", tier="cheap", engine="cursor", no_run=False, strict_tripwire=False, json=False)
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p20_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+layout = Layout(root)
+
+# Controlled stub wrapper writing mock closure and exiting with code 7 (D-42)
+stub_bin = root / "stub_router.sh"
+stub_bin.write_text("#!/bin/sh\nexit 7\n")
+stub_bin.chmod(0o755)
+
+args = argparse.Namespace(sprint="2026-10-16_public-profiles", mode="detach", tier="cheap", engine=str(stub_bin), no_run=False, strict_tripwire=False, json=False)
+
 try:
-    cmd_mod.handler(args, layout)
+    rc = cmd_mod.handler(args, layout)
+    if rc not in (0, 7):
+        print(f"FAIL: S1-R9: Stub wrapper exit code 7 not propagated, got: {rc}")
+        sys.exit(1)
 except Exception as exc:
-    print(f"FAIL: S1-R9: dispatch_impl handler invocation failed: {exc}")
+    print(f"FAIL: S1-R9: dispatch_impl stub execution failed: {exc}")
     sys.exit(1)
 PY

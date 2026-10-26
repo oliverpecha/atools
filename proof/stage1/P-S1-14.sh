@@ -7,17 +7,32 @@ export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 export FORBIDDEN_VAR_TEST="must_not_leak"
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
+
+repo_dir = Path(os.environ.get("ACTL_REPO", "."))
+oracle = repo_dir / "fixtures" / "golden" / "sprint" / "oracle"
+
 try:
     from actl.verify import run_o1
 except ImportError as exc:
     print(f"FAIL: S1-R5: cannot import actl.verify.run_o1: {exc}")
     sys.exit(1)
 
-oracle = Path(f"{REPO_DIR}/fixtures/golden/sprint/oracle")
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p14_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+wt = root / "wt_env"
+wt.mkdir(parents=True, exist_ok=True)
+
 try:
-    res = run_o1(oracle, Path("/tmp/wt-env"))
+    steps = run_o1(oracle, wt)
+    if not isinstance(steps, list) or len(steps) == 0:
+        print("FAIL: S1-R5: run_o1 must return executed StepResults")
+        sys.exit(1)
+    if any(s.exit_code != 0 for s in steps):
+        print("FAIL: S1-R5: O1 steps failed unexpectedly under isolated env")
+        sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R5: run_o1 invocation failed: {exc}")
     sys.exit(1)

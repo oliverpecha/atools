@@ -15,6 +15,9 @@ except ImportError as exc:
 
 try:
     results = run_selftests()
+    if not isinstance(results, list) or len(results) == 0:
+        print("FAIL: S1-R3.7: run_selftests returned empty or invalid results")
+        sys.exit(1)
     for r in results:
         if r.exit_code != 0:
             print(f"FAIL: S1-R3: run_selftests check failed: {r.id}")

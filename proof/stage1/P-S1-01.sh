@@ -6,8 +6,12 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
+
+repo_dir = Path(os.environ.get("ACTL_REPO", "."))
+
 try:
     from actl.verify import verify_impl
     from actl.layout import Layout
@@ -16,7 +20,9 @@ except ImportError as exc:
     print(f"FAIL: S1-R1: cannot import actl.verify: {exc}")
     sys.exit(1)
 
-layout = Layout(Path("/tmp/actl-test-s1"))
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p01_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+layout = Layout(root)
 try:
     res = verify_impl(layout, "2026-10-16_public-profiles")
     errs = schemas.validate("verification", res)

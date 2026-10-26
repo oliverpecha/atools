@@ -34,27 +34,32 @@ def test_run_selftests_passes_on_unmodified_configs() -> None:
 
 def test_g4_hollow_test_detection(tmp_path: Path) -> None:
     """S1-R3.4: G4 rejects hollow test bodies like pass, ellipsis, docstring only, assert True."""
-    hollow_code = (
-        "def test_something():\n"
-        "    \"\"\"Docstring only.\"\"\"\n"
-        "    pass\n\n"
-        "def test_another():\n"
-        "    ...\n\n"
-        "def test_trivial():\n"
-        "    assert True\n"
-    )
-    tree = ast.parse(hollow_code)
-    assert len(tree.body) == 3, "Failed to parse hollow test fixture"
-
     try:
         from actl.verify import check_guards
+        from actl.layout import Layout
     except ImportError:
         pytest.fail("FAIL: S1-R3.4: actl.verify missing")
 
+    layout = Layout(tmp_path / "root")
+    wt = tmp_path / "wt_hollow"
+    wt.mkdir(parents=True, exist_ok=True)
+    results = check_guards(layout, "2026-10-16_test", wt)
+    g4 = next((r for r in results if r.id == "G4"), None)
+    assert g4 is not None and g4.exit_code == 1, "FAIL: S1-R3.4: G4 must fail on hollow test bodies"
 
-def test_g5_secret_scrubbing() -> None:
+
+def test_g5_secret_scrubbing(tmp_path: Path) -> None:
     """S1-R3.5: G5 redacts matched secret from failing_line and output."""
     try:
         from actl.verify import check_guards
+        from actl.layout import Layout
     except ImportError:
         pytest.fail("FAIL: S1-R3.5: actl.verify missing")
+
+    layout = Layout(tmp_path / "root")
+    wt = tmp_path / "wt_secret"
+    wt.mkdir(parents=True, exist_ok=True)
+    results = check_guards(layout, "2026-10-16_test", wt)
+    g5 = next((r for r in results if r.id == "G5"), None)
+    assert g5 is not None and g5.exit_code == 1, "FAIL: S1-R3.5: G5 must fail on secret pattern"
+    assert "AKIA" not in (g5.failing_line or ""), "FAIL: S1-R3.5: Secret unredacted in failing_line"

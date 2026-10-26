@@ -25,9 +25,9 @@ if [[ -n "$FROZEN_DIFF" ]]; then
   exit 1
 fi
 
-# 3. Check modification allowlist for implementer files
+# 3. Check modification allowlist for authoring branch
 MOD_FILES=$(git diff --name-only --diff-filter=M "$BASE_SHA"..HEAD)
-ALLOWED_MODS="src/core/config.py src/sessions/storage.py install.sh README.md docs/plan/spec-S1.md proof/run_suite_actl_s1.sh test/actl/test_guards_s1.py test/actl/test_session_s1.py test/actl/test_next_phase3.py"
+ALLOWED_MODS="docs/plan/spec-S1.md proof/run_suite_actl_s1.sh test/actl/test_guards_s1.py test/actl/test_session_s1.py test/actl/test_next_phase3.py"
 for mf in $MOD_FILES; do
   if [[ ! " $ALLOWED_MODS " =~ " $mf " ]]; then
     echo "FAIL: S1-R16: Disallowed file modified: $mf"

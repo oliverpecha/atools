@@ -6,21 +6,36 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
+import os
 import sys
-from pathlib import Path
 import argparse
+from pathlib import Path
+
 try:
     import actl.cmd_dispatch_impl as cmd_mod
     from actl.layout import Layout
+    from actl.exceptions import StateIntegrityError
 except ImportError as exc:
-    print(f"FAIL: S1-R9: cannot import actl.cmd_dispatch_impl: {exc}")
+    print(f"FAIL: S1-R9: cannot import actl modules: {exc}")
     sys.exit(1)
 
-layout = Layout(Path("/tmp/actl-test-s1"))
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p25_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+layout = Layout(root)
 args = argparse.Namespace(sprint="2026-10-16_public-profiles", mode="detach", tier="cheap", engine=None, no_run=False, strict_tripwire=False, json=False)
+
+# Mock active collision detector
+def mock_check_active(name):
+    return True
+
 try:
-    cmd_mod.handler(args, layout)
+    rc = cmd_mod.handler(args, layout, active_session_checker=mock_check_active)
+    if rc != 3:
+        print(f"FAIL: S1-R9.2: Expected exit code 3 on active session collision, got {rc}")
+        sys.exit(1)
+except StateIntegrityError:
+    pass # Expected integrity halt
 except Exception as exc:
-    print(f"FAIL: S1-R9: dispatch_impl collision check failed: {exc}")
+    print(f"FAIL: S1-R9.2: Unexpected exception on collision check: {exc}")
     sys.exit(1)
 PY

@@ -15,8 +15,8 @@ except ImportError as exc:
 
 try:
     res = wait_session("impl-mock-lost-001", timeout_s=1)
-    if not isinstance(res, dict) or "lost" not in res:
-        print("FAIL: S1-R14: wait_session return dict missing lost field")
+    if not isinstance(res, dict) or res.get("lost") is not True:
+        print(f"FAIL: S1-R14: wait_session failed to set lost=True on missing .exit: {res}")
         sys.exit(1)
 except Exception as exc:
     print(f"FAIL: S1-R14: wait_session invocation failed: {exc}")

@@ -6,9 +6,11 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
+import os
 import sys
-from pathlib import Path
 import argparse
+from pathlib import Path
+
 try:
     import actl.cmd_verify_impl as cmd_mod
     from actl.layout import Layout
@@ -16,14 +18,18 @@ except ImportError as exc:
     print(f"FAIL: S1-R11: cannot import actl.cmd_verify_impl: {exc}")
     sys.exit(1)
 
-layout = Layout(Path("/tmp/actl-test-s1"))
-args = argparse.Namespace(sprint="2026-10-16_public-profiles", closure=Path("/tmp/closure.json"), worktree=None, no_fail_fast=False, strict_tripwire=False, json=False)
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p28_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+layout = Layout(root)
+
+# 1. Test UsageError gives exit 2
+args_invalid = argparse.Namespace(sprint=None)
 try:
-    rc = cmd_mod.handler(args, layout)
-    if rc not in (0, 1, 2, 3, 4):
-        print(f"FAIL: S1-R11: Invalid CLI exit code: {rc}")
+    rc_invalid = cmd_mod.handler(args_invalid, layout)
+    if rc_invalid != 2:
+        print(f"FAIL: S1-R11.1: Missing required args must return exit 2, got {rc_invalid}")
         sys.exit(1)
 except Exception as exc:
-    print(f"FAIL: S1-R11: cmd_verify_impl handler invocation failed: {exc}")
+    print(f"FAIL: S1-R11.1: cmd_verify_impl usage handler failed: {exc}")
     sys.exit(1)
 PY

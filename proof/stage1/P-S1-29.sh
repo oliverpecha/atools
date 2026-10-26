@@ -6,16 +6,23 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
+
 try:
     from actl.verify import run_o2
 except ImportError as exc:
     print(f"FAIL: S1-R6: cannot import actl.verify.run_o2: {exc}")
     sys.exit(1)
 
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p29_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+wt = root / "wt_regression"
+wt.mkdir(parents=True, exist_ok=True)
+
 try:
-    results = run_o2(Path("/tmp/wt-regression"))
+    results = run_o2(wt)
     o2 = results[0] if results else None
     if not o2 or o2.exit_code == 0:
         print("FAIL: S1-R6: O2 did not fail on regression as expected")

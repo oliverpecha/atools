@@ -6,8 +6,10 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
+
 try:
     from actl.verify import check_guards
     from actl.layout import Layout
@@ -15,9 +17,14 @@ except ImportError as exc:
     print(f"FAIL: S1-R3: cannot import actl.verify.check_guards: {exc}")
     sys.exit(1)
 
-layout = Layout(Path("/tmp/actl-test-s1"))
+root = Path(os.environ.get("ACTL_ROOT", "/tmp")) / "p06_sandbox"
+root.mkdir(parents=True, exist_ok=True)
+layout = Layout(root)
+wt = root / "wt_forbidden"
+wt.mkdir(parents=True, exist_ok=True)
+
 try:
-    results = check_guards(layout, "2026-10-16_public-profiles", Path("/tmp/wt-forbidden"))
+    results = check_guards(layout, "2026-10-16_public-profiles", wt)
     g6 = next((r for r in results if r.id == "G6"), None)
     if not g6 or g6.exit_code != 1:
         print("FAIL: S1-R3: G6 did not fail as expected on forbidden call")
