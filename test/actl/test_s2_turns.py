@@ -72,3 +72,25 @@ def test_turns_ledger_allocation_and_resolution(tmp_path: Path):
 
     with pytest.raises(FileNotFoundError):
         resolve_turn(layout, TAG, "architect-99")
+
+
+def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves R4-07 & S2-R1.5: ACTL_COURIER_DIR creates outgoing drawer with bundle.txt."""
+    try:
+        from actl import cli
+        import actl.bundle  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R1.5: actl.bundle missing: {e}")
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    courier_dir = tmp_path / "courier_out"
+    courier_dir.mkdir()
+    monkeypatch.setenv("ACTL_COURIER_DIR", str(courier_dir))
+
+    rc = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--json"])
+    assert rc == 0
+    drawers = list(courier_dir.iterdir())
+    assert len(drawers) == 1
+    assert "__target-repo__2026-10-16_public-profiles__architect-1__architect-intake" in drawers[0].name
+    assert (drawers[0] / "bundle.txt").is_file()

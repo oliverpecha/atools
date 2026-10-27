@@ -135,3 +135,12 @@ def test_next_rules_phase12_ten_states(tmp_path: Path, monkeypatch: pytest.Monke
     r10b = decide_next(layout, tag)
     assert r10b["action"] == "qualify_lock"
     assert r10b["command"] == ""
+
+def test_next_rules_active_contract_bypass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves R4-07 & S2-R10.1: when active_contract is set, phase12.evaluate returns None."""
+    import actl.next_rules.phase12 as p12
+    from actl.seq import update_state
+    monkeypatch.setenv("ACTL_TODAY", "2026-10-16")
+    layout, tag = _create_draft_sprint(tmp_path)
+    update_state(layout, tag, {"active_contract": "contract-005.json"})
+    assert p12.evaluate(layout, tag) is None, "phase12 must return None when active_contract is set"

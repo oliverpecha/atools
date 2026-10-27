@@ -493,7 +493,7 @@ new_content()
 * Requires git repository context and valid `ACTL_FORK_POINT` commit.
 * Verifies Stage 2 implementation files exist (`src/actl/{turns,bundle,envelope,unpack,patchsynth,repair,replay,promote,cmd_bundle,cmd_unpack,cmd_replay,cmd_promote}.py`, `src/actl/next_rules/phase12.py`, `prompts/*.md`).
 * Verifies zero diff on PB-2 frozen Stage 0/interface paths (`src/actl/INTERFACES.md`, `src/actl/cli.py`, `src/actl/next.py`, `proof/stage0/`, `fixtures/golden/expected.d/base.json`, `tools/`).
-* Rejects any deleted or renamed pre-existing files outside Stage 2 scope.
+* Rejects any deleted or renamed pre-existing files outside Stage 2 scope (deletions/renames within Stage 2 scope are permitted).
 
 
 
@@ -505,7 +505,7 @@ Every requirement `S2-R1`..`S2-R13` maps to executable proofs, and every proof `
 
 | Req ID | Proof ID | Delivered Script & Pytest File | Empty Module (a) | Always-Succeed Stub (b) | Always-Fail Stub (c) | Mutation Classes Killed |
 | --- | --- | --- | --- | --- | --- | --- |
-| S2-R1, S2-R4, S2-R5 | P-S2-01 | `proof/stage2/P-S2-01.sh` -> `test/actl/test_s2_unpack.py` (`test_p01_good_architect_intake_and_turns`) & `test/actl/test_s2_turns.py` | FAIL (`ImportError`) | FAIL (no turn dir created; `solution_key.patch` missing or fails `git apply --check`) | FAIL (`RuntimeError` / exit != 0) | seq off-by-one, missing `state_lock`, corrupt patch synthesis, missing courier drawer |
+| S2-R1, S2-R4, S2-R5 | P-S2-01 | `proof/stage2/P-S2-01.sh` -> `test/actl/test_s2_unpack.py` (`test_p01_good_architect_intake_unpack_and_proof_preview`) & `test/actl/test_s2_turns.py` | FAIL (`ImportError`) | FAIL (no turn dir created; `solution_key.patch` missing or fails `git apply --check`) | FAIL (`RuntimeError` / exit != 0) | seq off-by-one, missing `state_lock`, corrupt patch synthesis, missing courier drawer |
 | S2-R3, S2-R4, S2-R6 | P-S2-02 | `proof/stage2/P-S2-02.sh` -> `test/actl/test_s2_unpack.py` (`test_p02_good_challenger_unpack`) | FAIL (`ImportError`) | FAIL (`oracle-draft/` files missing; exec bit != `0o755`; mutants fail apply) | FAIL (`RuntimeError` / exit != 0) | `mode="exec"` ignored, mutant baseline wrong, missing file in outbox |
 | S2-R3, S2-R4, S2-R6 | P-S2-03 | `proof/stage2/P-S2-03.sh` -> `test/actl/test_s2_envelope.py` (`test_p03_all_bad_responses_and_worked_examples`) | FAIL (`ImportError`) | FAIL (stub returns `0` / `ok=True` instead of exit `2` and exact `E_*` code) | FAIL (raises unhandled exception or wrong `error_code`) | quote check removed, error precedence flipped, `E_SIZE` boundary `1048576` off-by-one |
 | S2-R3, S2-R4 | P-S2-04 | `proof/stage2/P-S2-04.sh` -> `test/actl/test_s2_truncation.py` | FAIL (`ImportError`) | FAIL (stub accepts truncated slices at 20 seeded offsets) | FAIL (stub rejects intact control response) | sentinel check inverted, open-block EOF check removed, seed 79 offset failure |

@@ -110,3 +110,23 @@ def test_promote_role_seven_keys_dedup_and_staging_modes(
     draft_meta = json.loads((sdir / "oracle-draft-005.meta.json").read_text(encoding="utf-8"))
     assert schemas.validate("meta", draft_meta) == []
     assert draft_meta["parent"] == "spec-003.md"
+
+def test_promote_policy_merge_preserves_frozen_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves R4-07 & S2-R9.3: promotion merges policy fields but preserves frozen sprint_tag, base_sha, repo, repo_test_cmd."""
+    from actl.promote import promote_role
+    from actl.sprint import load_sprint_toml
+    monkeypatch.setenv("ACTL_TODAY", "2026-10-16")
+    layout, tag = _create_fresh_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+
+    arch_out = layout.outbox(tag, "architect")
+    (arch_out / "spec-draft.md").write_text("# Spec\nR1: ok\n", encoding="utf-8")
+    (arch_out / "solution_key.patch").write_text("diff\n", encoding="utf-8")
+    # Propose new policy values while trying to tamper with frozen base_sha
+    (arch_out / "sprint-proposal.toml").write_text('live_run="none"\nmax_epochs=99\nbase_sha="0000000000000000000000000000000000000000"\n', encoding="utf-8")
+
+    promote_role(layout, tag, "architect")
+    merged = load_sprint_toml(layout, tag)
+    assert merged["max_epochs"] == 99, "Proposable policy field max_epochs was not merged"
+    assert merged["base_sha"] != "0000000000000000000000000000000000000000", "Frozen base_sha must never be overwritten by promotion"
+    assert merged["sprint_tag"] == tag

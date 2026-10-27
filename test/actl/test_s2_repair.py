@@ -33,10 +33,41 @@ def _setup_sprint(tmp_path: Path):
     return layout
 
 
+def test_repair_confidentiality_and_candidate_details(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves R4-04 & S2-R7.3: planted secret in oracle records NEVER leaks into repair.txt; candidate details verified."""
+    try:
+        from actl import cli
+        import actl.repair  # noqa: F401
+        import actl.unpack  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R7: actl.repair or actl.unpack missing: {e}")
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+
+    # Plant unique secret exclusively inside oracle records
+    secret_canary = "SUPER_SECRET_ORACLE_TOKEN_998877"
+    (layout.sprint_dir(TAG) / "oracle-003" / "secret_oracle_data.txt").write_text(secret_canary, encoding="utf-8")
+
+    # Run bad_search_nomatch and verify repair.txt structure and zero leakage
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+    rc = cli.main([
+        "unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1",
+        "-f", str(GOLDEN_DIR / "responses" / "bad_search_nomatch.txt"), "--json"
+    ])
+    assert rc == 2
+    repair_file = turn_dir / "repair.txt"
+    assert repair_file.is_file()
+    repair_text = repair_file.read_text(encoding="utf-8")
+
+    assert "E_SEARCH_NOMATCH" in repair_text
+    assert "def get_user(user_id):" in repair_text, "Nearest candidate window missing"
+    assert secret_canary not in repair_text, "SECURITY LEAK: secret oracle token leaked into repair.txt!"
+
+
 def test_p13_non_execution_canary_across_unpack_replay_promote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Proves F-04 & S2-R12.1: non-execution canary passes through unpack, replay, and promote without executing."""
     try:
         from actl import cli
         import actl.unpack  # noqa: F401
@@ -58,17 +89,14 @@ def test_p13_non_execution_canary_across_unpack_replay_promote(
     inj_file = tmp_path / "inj.txt"
     inj_file.write_text(injected, encoding="utf-8")
 
-    # 1. Unpack
     rc1 = cli.main(["unpack", "challenger", "--sprint", TAG, "--turn", "challenger-1", "-f", str(inj_file), "--json"])
     assert rc1 == 0
-    assert not pwn_unpack.exists(), "SECURITY VIOLATION: unpack executed shell code!"
+    assert not pwn_unpack.exists()
 
-    # 2. Replay
     rc2 = cli.main(["replay", "challenger-1", "--sprint", TAG, "--json"])
     assert rc2 == 0
-    assert not pwn_replay.exists(), "SECURITY VIOLATION: replay executed shell code!"
+    assert not pwn_replay.exists()
 
-    # 3. Promote
     rc3 = cli.main(["promote", "challenger", "--sprint", TAG, "--json"])
     assert rc3 == 0
-    assert not pwn_promote.exists(), "SECURITY VIOLATION: promote executed shell code!"
+    assert not pwn_promote.exists()

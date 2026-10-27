@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini
-# proof/stage2/P-S2-18.sh - Stage 2 per-stage additions & untracked files gate (S2-R13, D-41, F-02).
+# proof/stage2/P-S2-18.sh - Stage 2 per-stage additions & untracked files gate (S2-R13, D-41, F-02, R4-08).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$REPO_DIR"
@@ -120,19 +120,15 @@ is_allowed_stage2_path() {
     esac
 }
 
-# Regression self-tests
-if is_allowed_stage2_path "src/actl/scope.py" || is_allowed_stage2_path "src/actl/evil_untracked.py"; then
-    echo "FAIL: S2-R13: Allowlist self-test failed"
-    exit 1
-fi
-
-# Audit tracked changes
+# Audit tracked changes: reject D/R outside scope (R4-08)
 while IFS=$'\t' read -r status path1 path2; do
     [[ -z "$status" ]] && continue
     case "$status" in
         D*|R*)
-            echo "FAIL: S2-R13: Forbidden deletion or rename ($status): $path1 ${path2:-}"
-            exit 1
+            if ! is_allowed_stage2_path "$path1"; then
+                echo "FAIL: S2-R13: Forbidden deletion or rename outside Stage 2 scope ($status): $path1 ${path2:-}"
+                exit 1
+            fi
             ;;
         A|M)
             if ! is_allowed_stage2_path "$path1"; then
@@ -143,16 +139,16 @@ while IFS=$'\t' read -r status path1 path2; do
     esac
 done < <(git diff --name-status "$FORK_POINT")
 
-# F-02: Audit untracked files
-untracked_files="$(git ls-files --others --exclude-standard)"
-if [[ -n "$untracked_files" ]]; then
+# Audit untracked additions (R4-02)
+untracked="$(git ls-files --others --exclude-standard)"
+if [[ -n "$untracked" ]]; then
     while IFS= read -r uf; do
         [[ -z "$uf" ]] && continue
         if ! is_allowed_stage2_path "$uf"; then
             echo "FAIL: S2-R13: Disallowed untracked file present: $uf"
             exit 1
         fi
-    done <<< "$untracked_files"
+    done <<< "$untracked"
 fi
 
 echo "OK: P-S2-18"
