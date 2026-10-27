@@ -208,3 +208,30 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
             '<<<END_RESPONSE bundle="b7eb659a">>>\n'
         )
         assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"File {bad_file!r} must fail with E_PATH"
+
+def test_p03_all_six_adjacent_precedence_pairs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves normative linear pipeline precedence across all 6 adjacent stage pairs (S2-R4.6)."""
+    from actl import cli
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    td = layout.turns_dir(TAG) / "architect-1"
+
+    def _eval(payload: str) -> str:
+        for f in ("response.txt", "unpack.json", "repair.txt"):
+            if (td / f).exists(): (td / f).unlink()
+        (tmp_path / "in.txt").write_text(payload, encoding="utf-8")
+        cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(tmp_path / "in.txt"), "--json"])
+        return json.loads((td / "unpack.json").read_text(encoding="utf-8"))["errors"][0]["code"]
+
+    # Pair 1 (Stage 1 Framing > Stage 2 Bundle Mismatch)
+    assert _eval('<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n<<<END_RESPONSE bundle=badprefix>>>\n') == "E_SYNTAX_MARKER"
+    # Pair 2 (Stage 2 Bundle Mismatch > Stage 3 Path Bounds)
+    assert _eval('<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="00000000">>>\n') == "E_BUNDLE_MISMATCH"
+    # Pair 3 (Stage 3 Path Bounds > Stage 4 Duplicate Paths)
+    assert _eval('<<<FILE path="../escape.txt">>>\na\n<<<END_FILE>>>\n<<<FILE path="../escape.txt">>>\nb\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n') == "E_PATH"
+    # Pair 4 (Stage 4 Duplicate Paths > Stage 5 Size Limits)
+    assert _eval('<<<FILE path="sprint.toml">>>\n' + ("A"*1050000) + '\n<<<END_FILE>>>\n<<<FILE path="sprint.toml">>>\nshort\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n') == "E_DUPLICATE"
+    # Pair 5 (Stage 5 Size Limits > Stage 6 Patch Synthesis)
+    assert _eval('<<<FILE path="sprint.toml">>>\n' + ("A"*1050000) + '\n<<<END_FILE>>>\n<<<PATCH out="solution_key.patch" file="api/users.py">>>\n<<<<<<< SEARCH\nNONEXISTENT\n=======\nR\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n') == "E_SIZE"
+    # Pair 6 (Stage 6 Patch Synthesis > Stage 7 Post-Parse Schema)
+    assert _eval('<<<FILE path="sprint-proposal.toml">>>\nbad_key=123\n<<<END_FILE>>>\n<<<PATCH out="solution_key.patch" file="api/users.py">>>\n<<<<<<< SEARCH\nNONEXISTENT\n=======\nR\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n') == "E_SEARCH_NOMATCH"
