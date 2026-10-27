@@ -165,10 +165,19 @@ prepare_overlay() {
 }
 
 classify_log() {
-  # IMPORT only when the proof's own FAIL: line reports cannot import /
-  # No module named — not a later traceback under a non-import FAIL.
+  # Classify by rc first (NEW-01): rc==0 -> PASS; rc==4 -> ENV.
+  # A log with ^FAIL: and rc 0 is PASS; rc 4 is ENV.
+  # Else classify FAIL: lines: SETUP / IMPORT / ASSERT; else OTHER.
   local log="$1" rc="$2"
   local fail_line
+  if [[ "$rc" -eq 0 ]]; then
+    echo PASS
+    return
+  fi
+  if [[ "$rc" -eq 4 ]] || grep -q 'ENVFAIL:' "$log" 2>/dev/null; then
+    echo ENV
+    return
+  fi
   fail_line="$(grep -m1 -E '^FAIL:' "$log" 2>/dev/null || true)"
   if grep -q 'FAIL: fixture_s1:' "$log" 2>/dev/null; then
     echo SETUP
@@ -176,10 +185,6 @@ classify_log() {
     echo IMPORT
   elif [[ -n "$fail_line" ]]; then
     echo ASSERT
-  elif [[ "$rc" -eq 4 ]] || grep -q 'ENVFAIL:' "$log" 2>/dev/null; then
-    echo ENV
-  elif [[ "$rc" -eq 0 ]]; then
-    echo PASS
   else
     echo OTHER
   fi
