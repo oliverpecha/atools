@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
-# P-S1-26: start_session instruction validation:
-# - Positive control: valid session name and <100,000-byte ASCII instruction succeeds (returns 0)
-# - Negative controls: >=100,000 JSON-escaped bytes, non-ASCII, 'help', and invalid
-#   session name each raise ValueError BEFORE invoking arouter (GD-01 fix).
+# Gate-D-remediation: Cursor-S1 (Grok 4.6)
+# P-S1-26: start_session instruction validation. Non-ASCII uses U+00E9 and
+# asserts not instr.isascii() before expecting ValueError (S1-R9.4).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -27,7 +26,6 @@ export PATH="$T/bin:$PATH"
 python3 - "$T/wt" "$ATOOLS_LOG_DIR/agent_invocations.txt" <<'PY'
 import json
 import sys
-import time
 from pathlib import Path
 
 wt = Path(sys.argv[1])
@@ -39,10 +37,14 @@ except ImportError as exc:
     print(f"FAIL: S1-R9.4: cannot import actl.session.start_session: {exc}")
     sys.exit(1)
 
-# 1. Negative controls MUST raise ValueError and NEVER invoke agent/arouter
+non_ascii = "Implement caf\u00e9 feature"
+if non_ascii.isascii():
+    print("FAIL: S1-R9.4: non_ascii fixture is ASCII; use an unambiguous non-ASCII code point")
+    sys.exit(1)
+
 bad_cases = [
-    ("overflow_100k", "impl-valid-001", "A" * 99999),  # json.dumps adds 2 quote bytes -> 100001 >= 100000
-    ("non_ascii", "impl-valid-001", "Implement caf? feature"),
+    ("overflow_100k", "impl-valid-001", "A" * 99999),
+    ("non_ascii", "impl-valid-001", non_ascii),
     ("exact_help", "impl-valid-001", "help"),
     ("bad_sess_name", "Invalid_Session_Name!", "Valid ASCII prompt"),
 ]
@@ -59,10 +61,9 @@ for label, sname, instr in bad_cases:
         sys.exit(1)
 
 if inv_file.exists():
-    print("FAIL: S1-R9.4: arouter/agent was invoked despite invalid start_session arguments!")
+    print("FAIL: S1-R9.4: arouter/agent was invoked despite invalid start_session arguments")
     sys.exit(1)
 
-# 2. Positive control: valid below-limit instruction (99,990 JSON-escaped bytes) returns 0 and runs agent
 valid_instr = "B" * 99988
 assert len(json.dumps(valid_instr)) < 100000
 rc = start_session("impl-valid-001", wt, valid_instr, mode="foreground", tier="cheap")

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
+# Gate-D-remediation: Cursor-S1 (Grok 4.6)
 # proof/stage1/fixture_s1.sh - Isolated testbed builder for Stage 1 proofs.
 # Builds hermetic ACTL_ROOT, installs golden sprint, clones target worktree at
 # exact contract base_sha, and fails closed if a requested patch is missing or fails.
@@ -65,4 +66,31 @@ create_stage1_sandbox() {
   ) || return 2
 
   echo "$sdir|$wt"
+}
+
+# Retarget contract["scope"]["path"] to sprint_dir/scope_overrides/<name>
+# without mutating the locked oracle directory (G1 must stay green).
+apply_scope_override() {
+  local sdir="$1"
+  local override_name="${2:-bad_testcount.txt}"
+  local tag="2026-10-16_public-profiles"
+  local repo_dir="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+  local sprint="${sdir}/records/target-repo/${tag}"
+  local src="${repo_dir}/fixtures/golden/sprint/scope_overrides/${override_name}"
+  if [[ ! -f "$src" ]]; then
+    echo "FAIL: fixture_s1: missing golden scope override $src" >&2
+    return 4
+  fi
+  mkdir -p "${sprint}/scope_overrides"
+  cp "$src" "${sprint}/scope_overrides/${override_name}"
+  python3 - "$sprint/contract-005.json" "scope_overrides/${override_name}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+doc = json.loads(p.read_text(encoding="utf-8"))
+doc.setdefault("scope", {})["path"] = sys.argv[2]
+p.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+PY
 }

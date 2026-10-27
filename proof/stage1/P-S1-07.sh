@@ -46,8 +46,8 @@ step2 = next((s for s in steps_bad if s.id == exp["failing_step"]), None)
 if step1 is None or step1.exit_code != 0:
     print(f"FAIL: S1-R5.1: Expected O1:01_public.sh to pass (exit 0) on bad_proof_o1.patch, got {step1}")
     sys.exit(1)
-if step2 is None or step2.exit_code == 0:
-    print(f"FAIL: S1-R5.1: Expected {exp['failing_step']} to fail on bad_proof_o1.patch, got {step2}")
+if step2 is None or step2.exit_code != 1:
+    print(f"FAIL: S1-R5.1: Expected {exp['failing_step']} exit_code 1 on bad_proof_o1.patch, got {step2}")
     sys.exit(1)
 if exp["failing_line_contains"] not in (step2.failing_line or ""):
     print(f"FAIL: S1-R5.3: failing_line missing {exp['failing_line_contains']!r}: {step2.failing_line!r}")

@@ -45,8 +45,8 @@ if not isinstance(res_bad, list) or len(res_bad) != 1:
     print(f"FAIL: S1-R6.4: Expected single-element list from run_o2 on failure, got {res_bad!r}")
     sys.exit(1)
 o2_bad = res_bad[0]
-if o2_bad.exit_code == 0 or o2_bad.id != exp["failing_step"]:
-    print(f"FAIL: S1-R6.4: Expected id={exp['failing_step']!r} and non-zero exit, got id={o2_bad.id!r} exit={o2_bad.exit_code}")
+if o2_bad.exit_code != 1 or o2_bad.id != exp["failing_step"]:
+    print(f"FAIL: S1-R6.4: Expected id={exp['failing_step']!r} and exit_code 1, got id={o2_bad.id!r} exit={o2_bad.exit_code}")
     sys.exit(1)
 if exp["failing_line_contains"] not in (o2_bad.failing_line or ""):
     print(f"FAIL: S1-R6.4: failing_line missing {exp['failing_line_contains']!r}: {o2_bad.failing_line!r}")

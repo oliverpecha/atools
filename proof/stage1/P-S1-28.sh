@@ -94,4 +94,44 @@ with patch("shutil.which", return_value=None):
 if rc_4 != 4:
     print(f"FAIL: S1-R11.1: Expected exit 4 when tmux is missing, got {rc_4}")
     sys.exit(1)
+
+# 7. Broken selftest CLI exit 3
+import ast
+import actl.verify as verify_mod
+tree = ast.parse(Path(verify_mod.__file__).read_text(encoding="utf-8"))
+forbidden_mods = {"urllib.request", "http.client", "socket", "requests", "httpx", "aiohttp"}
+imported = set()
+for node in ast.walk(tree):
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            imported.add(alias.name.split(".")[0] if alias.name != "urllib.request" else alias.name)
+            imported.add(alias.name)
+    elif isinstance(node, ast.ImportFrom) and node.module:
+        imported.add(node.module)
+if imported & forbidden_mods:
+    print(f"FAIL: S1-R13.1: actl.verify imports network client library {imported & forbidden_mods}")
+    sys.exit(1)
+
+import shutil
+import subprocess
+repo_root = Path(verify_mod.__file__).resolve().parents[2]
+scratch = sdir_ok / "broken_selftest_repo"
+if scratch.exists():
+    shutil.rmtree(scratch)
+shutil.copytree(repo_root / "src", scratch / "src")
+if (repo_root / "schemas").is_dir():
+    shutil.copytree(repo_root / "schemas", scratch / "schemas")
+(scratch / "config").mkdir(parents=True, exist_ok=True)
+if (repo_root / "config").is_dir():
+    shutil.copytree(repo_root / "config", scratch / "config", dirs_exist_ok=True)
+(scratch / "config" / "secrets.toml").write_text("[[rules\nbroken\n", encoding="utf-8")
+(scratch / "config" / "forbidden.toml").write_text("[[rules]]\n", encoding="utf-8")
+st = subprocess.run(
+    [sys.executable, "-c", "from actl.cli import main; raise SystemExit(main(['selftest']))"],
+    env={**os.environ, "PYTHONPATH": str(scratch / "src")},
+    capture_output=True, text=True,
+)
+if st.returncode != 3:
+    print(f"FAIL: S1-R11.3: Expected actl selftest exit 3 on corrupt config, got {st.returncode}: {st.stdout}{st.stderr}")
+    sys.exit(1)
 PY

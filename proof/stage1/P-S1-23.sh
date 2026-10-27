@@ -72,4 +72,34 @@ if hashlib.sha256(dst_exit.read_bytes()).hexdigest() != expected_exit_sha:
 if not src_log.is_file() or not src_exit.is_file():
     print("FAIL: S1-R15.3: archive_session_log prematurely unlinked source .log or .exit")
     sys.exit(1)
+
+# Observe archive fsync of destination log and exit files
+from unittest.mock import patch
+fsync_paths = []
+fd_map = {}
+real_open, real_fsync, real_close = os.open, os.fsync, os.close
+
+def spy_open(path, flags, mode=0o777, *a, **k):
+    fd = real_open(path, flags, mode, *a, **k)
+    fd_map[fd] = str(path)
+    return fd
+
+def spy_fsync(fd):
+    fsync_paths.append(fd_map.get(fd, f"fd:{fd}"))
+    return real_fsync(fd)
+
+def spy_close(fd):
+    fd_map.pop(fd, None)
+    return real_close(fd)
+
+src_log.write_bytes(log_bytes)
+src_exit.write_bytes(exit_bytes)
+with patch("os.open", side_effect=spy_open), patch("os.fsync", side_effect=spy_fsync), patch("os.close", side_effect=spy_close):
+    archive_session_log(layout, tag, 7, sess_name)
+abs_fsync = [os.path.abspath(p) if not str(p).startswith("fd:") else p for p in fsync_paths]
+dst_log_7 = os.path.abspath(str(layout.logs_dir(tag) / "impl-007.log"))
+dst_exit_7 = os.path.abspath(str(layout.logs_dir(tag) / "impl-007.exit"))
+if dst_log_7 not in abs_fsync or dst_exit_7 not in abs_fsync:
+    print(f"FAIL: S1-R15.1: archive_session_log did not fsync dest log/exit; observed {abs_fsync}")
+    sys.exit(1)
 PY

@@ -75,10 +75,17 @@ if not hits_mixed:
     print("FAIL: S1-R10.3: Provenance bypass! Line combining SKILL.md mention with oracle path access was erroneously excluded")
     sys.exit(1)
 
-# 5. strict_tripwire=True on verify_impl forces exit_code=1 and failing_step='tripwire'
+# 5. strict_tripwire=True on a green tree forces exit_code=1 and failing_step='tripwire'
 os.environ["ATOOLS_CURSOR_HOME"] = str(cursor_home_dirty)
 ver_strict = verify_impl(layout, tag, worktree=wt, strict_tripwire=True)
 if ver_strict.get("exit_code") != 1 or ver_strict.get("failing_step") != "tripwire":
     print(f"FAIL: S1-R10.3: Expected strict_tripwire=True to force exit_code=1 and failing_step='tripwire', got {ver_strict}")
+    sys.exit(1)
+
+# 6. After an earlier fail-fast failure, tripwires are still populated
+from actl.verify import check_guards  # noqa: F401
+ver_ff = verify_impl(layout, tag, worktree=wt, fail_fast=True, strict_tripwire=True)
+if not ver_ff.get("tripwires"):
+    print("FAIL: S1-R1.5: scan_tripwires must still run after fail-fast; tripwires empty")
     sys.exit(1)
 PY

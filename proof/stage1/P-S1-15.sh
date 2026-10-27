@@ -70,7 +70,16 @@ if set(data.keys()) != {"diff", "failing_step", "failing_line", "closures_submit
 if schemas.validate("prior_attempt", data) != []:
     print(f"FAIL: S1-R7.3: prior_attempt schema validation failed: {schemas.validate('prior_attempt', data)}")
     sys.exit(1)
-if "api/cli.py" not in data["diff"] or data["failing_step"] != "G3" or data["closures_submitted"] != 1:
+import subprocess
+contract_sha = json.loads((layout.sprint_dir(tag) / "contract-005.json").read_text(encoding="utf-8"))["base_sha"]
+real_diff = subprocess.check_output(
+    ["git", "-C", str(wt_bad), "diff", f"{contract_sha}..HEAD"],
+    text=True,
+)
+if data["diff"] != real_diff:
+    print("FAIL: S1-R7.3: prior_attempt.diff is not equal to git diff {base_sha}..HEAD")
+    sys.exit(1)
+if data["failing_step"] != "G3" or data["closures_submitted"] != 1:
     print(f"FAIL: S1-R7.3: prior_attempt content inaccurate: {data}")
     sys.exit(1)
 

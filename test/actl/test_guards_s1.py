@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from test_verify_s1 import REPO_ROOT, TAG, _setup_golden_sandbox
+from test_verify_s1 import REPO_ROOT, TAG, _setup_golden_sandbox, thaw_tests_via_scope_override
 
 
 def test_run_selftests_positive_and_negative() -> None:
@@ -22,9 +22,10 @@ def test_run_selftests_positive_and_negative() -> None:
         pytest.fail(f"FAIL: S1-R3.7: actl.verify missing: {exc}")
 
     results = run_selftests()
-    assert isinstance(results, list) and len(results) >= 6
-    for g in ("G1", "G2", "G3", "G4", "G5", "G6"):
-        assert any(g in r.id and r.exit_code == 0 for r in results), f"Missing passing self-test for {g}"
+    want = [f"selftest:G{i}" for i in range(1, 7)]
+    got = [r.id for r in results]
+    assert sorted(got) == sorted(want) and len(set(got)) == 6
+    assert all(r.exit_code == 0 for r in results)
 
 
 def test_g2_rejects_extra_fields_and_invalid_schema(tmp_path: Path) -> None:
@@ -78,11 +79,7 @@ def test_g4_hollow_test_and_valid_test_detection(tmp_path: Path) -> None:
 
     sdir, wt = _setup_golden_sandbox(tmp_path, "good.patch")
     layout = Layout(sdir)
-    # Thaw test/test_users.py using golden scope override
-    scope_override = REPO_ROOT / "fixtures" / "golden" / "sprint" / "scope_overrides" / "bad_testcount.txt"
-    (layout.sprint_dir(TAG) / "oracle-003" / "scope.txt").write_text(
-        scope_override.read_text(encoding="utf-8"), encoding="utf-8"
-    )
+    thaw_tests_via_scope_override(layout, TAG)
 
     test_file = wt / "test" / "test_users.py"
     base_text = test_file.read_text(encoding="utf-8")
@@ -96,8 +93,10 @@ def test_g4_hollow_test_and_valid_test_detection(tmp_path: Path) -> None:
         "GIT_COMMITTER_EMAIL": "t@example.test",
     }
 
-    # 1. Positive control: valid test passes G4
+    # 1. G1 green, then valid tests pass G4
     res_ok = check_guards(layout, TAG, wt)
+    g1_ok = next((r for r in res_ok if r.id == "G1"), None)
+    assert g1_ok is not None and g1_ok.exit_code == 0
     g4_ok = next((r for r in res_ok if r.id == "G4"), None)
     assert g4_ok is not None and g4_ok.exit_code == 0
 

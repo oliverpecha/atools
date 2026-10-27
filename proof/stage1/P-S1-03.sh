@@ -57,10 +57,21 @@ if exp["failing_line_contains"] not in (g3_bad.failing_line or ""):
     print(f"FAIL: S1-R3.3: G3 failing_line missing {exp['failing_line_contains']!r}: {g3_bad.failing_line!r}")
     sys.exit(1)
 
-# 3. Symlink mode 120000 fails G3
+# 3. Symlink mode 120000 fails G3 on a path that is otherwise allowed (api/ is green on good.patch)
+import subprocess
+ls = subprocess.run(
+    ["git", "-C", str(wt_sym), "ls-files", "-s", "api/link_profile.py"],
+    capture_output=True, text=True, check=True,
+)
+if "120000" not in ls.stdout:
+    print(f"FAIL: S1-R3.3: expected git mode 120000 for api/link_profile.py, got {ls.stdout!r}")
+    sys.exit(1)
 res_sym = check_guards(Layout(sdir_sym), tag, wt_sym)
 g3_sym = next((r for r in res_sym if r.id == "G3"), None)
 if g3_sym is None or g3_sym.exit_code != 1:
     print(f"FAIL: S1-R3.3: Expected G3 to reject symlink mode 120000, got {g3_sym}")
+    sys.exit(1)
+if "api/link_profile.py" not in (g3_sym.failing_line or ""):
+    print(f"FAIL: S1-R3.3: symlink failing_line must name the otherwise-allowed path, got {g3_sym.failing_line!r}")
     sys.exit(1)
 PY

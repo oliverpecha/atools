@@ -65,10 +65,15 @@ if res.get("failing_step") is not None or res.get("failing_line") is not None:
     sys.exit(1)
 
 step_ids = [s.get("id") for s in res.get("steps", [])]
-for req_id in ("G1", "G2", "G3", "G4", "G5", "G6", "O1:01_public.sh", "O1:02_no_email.sh", "O1:03_private_404.sh", "O1:probe.sh", "O2"):
+required_order = ["G1", "G2", "G3", "G4", "G5", "G6", "O1:01_public.sh", "O1:02_no_email.sh", "O1:03_private_404.sh", "O1:probe.sh", "O2"]
+for req_id in required_order:
     if req_id not in step_ids:
         print(f"FAIL: S1-R2.1: expected executed step {req_id} in steps, got {step_ids}")
         sys.exit(1)
+order_pos = [step_ids.index(x) for x in required_order]
+if order_pos != sorted(order_pos):
+    print(f"FAIL: S1-R2.1: pipeline order is not G1..G6, O1*, O2: {step_ids}")
+    sys.exit(1)
 
 runs_dir = layout_good.runs_dir(tag)
 stamped_closure = runs_dir / "closure-006.json"
@@ -88,9 +93,11 @@ if state_after.get("closures_submitted") != 1 or state_after.get("attempts", {})
     print(f"FAIL: S1-R1.4: state counters not updated properly: {state_after}")
     sys.exit(1)
 
-# 2. Negative control: bad_scope.patch must fail at G3 (kills always-pass stand-ins)
+# 2. Negative control: valid closure so G2 is green; bad_scope.patch fails at G3
 layout_bad = Layout(sdir_bad)
-res_bad = verify_impl(layout_bad, tag, closure_path=None, worktree=wt_bad)
+closure_bad = sdir_bad / "bad_closure.json"
+closure_bad.write_text(closure_good.read_text(encoding="utf-8"), encoding="utf-8")
+res_bad = verify_impl(layout_bad, tag, closure_path=closure_bad, worktree=wt_bad)
 if res_bad.get("exit_code") != bad_exp["exit"] or res_bad.get("failing_step") != bad_exp["failing_step"]:
     print(f"FAIL: S1-R1.5: negative control bad_scope did not fail at G3: {res_bad}")
     sys.exit(1)

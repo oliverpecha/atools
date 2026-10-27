@@ -54,8 +54,29 @@ elapsed = time.monotonic() - t0
 if res.get("lost") is not True or res.get("exit_code") is not None or res.get("hard_cap") is not False:
     print(f"FAIL: S1-R14.4: Expected lost=True, exit_code=None, hard_cap=False, got {res}")
     sys.exit(1)
-if elapsed < 0.2:
-    print(f"FAIL: S1-R14.4: wait_session did not poll disappearance grace window (elapsed={elapsed:.3f}s)")
+if elapsed < 1.0:
+    print(f"FAIL: S1-R14.4: wait_session did not poll disappearance grace window (elapsed={elapsed:.3f}s, expected >= 1.0s for timeout_s=2)")
+    sys.exit(1)
+
+# Delayed .exit recovery: session already gone; .exit appears during the grace window
+import os
+import threading
+recover_name = "impl-p22-recover-006"
+exit_path = Path(os.environ["ATOOLS_SESSION_DIR"]) / f"{recover_name}.exit"
+
+def _write_exit_later():
+    time.sleep(0.4)
+    exit_path.write_text("0\n", encoding="utf-8")
+
+threading.Thread(target=_write_exit_later, daemon=True).start()
+t1 = time.monotonic()
+res_rec = wait_session(recover_name, timeout_s=3, poll_interval_s=0.1)
+elapsed_rec = time.monotonic() - t1
+if res_rec.get("lost") is not False or res_rec.get("exit_code") != 0:
+    print(f"FAIL: S1-R14.4: delayed .exit must recover lost=False exit_code=0, got {res_rec}")
+    sys.exit(1)
+if elapsed_rec < 0.4:
+    print(f"FAIL: S1-R14.4: delayed .exit recovery returned too fast ({elapsed_rec:.3f}s)")
     sys.exit(1)
 
 # Even if a valid closure exists on disk, session.lost=True MUST force G2 red (S1-R2.4)

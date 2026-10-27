@@ -31,11 +31,11 @@ if not isinstance(results, list) or len(results) < 6:
     print(f"FAIL: S1-R3.7: Expected at least 6 StepResults (G1..G6) from run_selftests(), got {results!r}")
     sys.exit(1)
 
-ids_text = " ".join(r.id for r in results)
-for g in ("G1", "G2", "G3", "G4", "G5", "G6"):
-    if g not in ids_text:
-        print(f"FAIL: S1-R3.7: Guard {g} missing from run_selftests() results: {[r.id for r in results]}")
-        sys.exit(1)
+want_ids = [f"selftest:G{i}" for i in range(1, 7)]
+got_ids = [r.id for r in results]
+if sorted(got_ids) != sorted(want_ids) or len(set(got_ids)) != 6:
+    print(f"FAIL: S1-R3.7: Expected six distinct IDs {want_ids}, got {got_ids}")
+    sys.exit(1)
 
 for r in results:
     if r.exit_code != 0:

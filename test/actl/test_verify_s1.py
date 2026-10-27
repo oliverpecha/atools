@@ -1,6 +1,7 @@
 """Pytest suite for Stage 1 verifier engine (S1-R1, S1-R2, S1-R4..S1-R7, S1-R11, S1-R13).
 
 Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
+Gate-D-remediation: Cursor-S1 (Grok 4.6)
 """
 from __future__ import annotations
 
@@ -15,14 +16,21 @@ TAG = "2026-10-16_public-profiles"
 
 
 def _setup_golden_sandbox(tmp_path: Path, patch_name: str | None = "good.patch") -> tuple[Path, Path]:
-    """Install a real hermetic golden sprint and candidate worktree in tmp_path."""
+    """Install a real hermetic golden sprint and candidate worktree at contract base_sha."""
     sdir = tmp_path / "actl_root"
     sdir.mkdir(parents=True, exist_ok=True)
+    builder = REPO_ROOT / "fixtures" / "golden" / "build_golden.sh"
+    if not builder.is_file():
+        pytest.fail("ENVFAIL: fixtures/golden/build_golden.sh missing (baseline Stage 0 builder)")
     subprocess.run(
-        ["bash", str(REPO_ROOT / "fixtures" / "golden" / "build_golden.sh"), "--install-sprint", str(sdir), "--tag", TAG],
+        ["bash", str(builder), "--install-sprint", str(sdir), "--tag", TAG],
         check=True,
         capture_output=True,
     )
+    contract_path = sdir / "records" / "target-repo" / TAG / "contract-005.json"
+    if not contract_path.is_file():
+        pytest.fail("ENVFAIL: contract-005.json missing after golden install")
+    base_sha = json.loads(contract_path.read_text(encoding="utf-8"))["base_sha"]
     wt = sdir / "sprints" / "target-repo" / TAG / "workspaces" / "implementer-006"
     wt.parent.mkdir(parents=True, exist_ok=True)
     env = {
@@ -41,7 +49,14 @@ def _setup_golden_sandbox(tmp_path: Path, patch_name: str | None = "good.patch")
         env=env,
         check=True,
     )
-    subprocess.run(["git", "-C", str(wt), "-c", "core.hooksPath=/dev/null", "checkout", "-q", "-b", "wip/006"], env=env, check=True)
+    subprocess.run(
+        ["git", "-C", str(wt), "-c", "core.hooksPath=/dev/null", "checkout", "-q", "-B", "wip/006", base_sha],
+        env=env,
+        check=True,
+    )
+    head = subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"], env=env, text=True).strip()
+    if head != base_sha:
+        pytest.fail(f"ENVFAIL: worktree HEAD {head} != contract base_sha {base_sha}")
     if patch_name:
         patch_path = REPO_ROOT / "fixtures" / "golden" / "implementations" / patch_name
         subprocess.run(["git", "-C", str(wt), "-c", "core.hooksPath=/dev/null", "apply", str(patch_path)], env=env, check=True)
@@ -52,6 +67,22 @@ def _setup_golden_sandbox(tmp_path: Path, patch_name: str | None = "good.patch")
             check=True,
         )
     return sdir, wt
+
+
+def thaw_tests_via_scope_override(layout, tag: str = TAG) -> None:
+    """Retarget contract scope.path outside the locked oracle so G1 stays green."""
+    sprint = layout.sprint_dir(tag)
+    src = REPO_ROOT / "fixtures" / "golden" / "sprint" / "scope_overrides" / "bad_testcount.txt"
+    dest_dir = sprint / "scope_overrides"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "bad_testcount.txt"
+    if not src.is_file():
+        pytest.fail("ENVFAIL: missing golden scope override fixtures/golden/sprint/scope_overrides/bad_testcount.txt")
+    dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    contract_path = sprint / "contract-005.json"
+    doc = json.loads(contract_path.read_text(encoding="utf-8"))
+    doc.setdefault("scope", {})["path"] = "scope_overrides/bad_testcount.txt"
+    contract_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
 
 
 def test_verify_module_and_schema_reexport() -> None:
@@ -130,10 +161,13 @@ def test_no_closure_and_blocked_closure_verification(tmp_path: Path) -> None:
     layout = Layout(sdir)
     exp_cases = schemas.load_expected()["cases"]
 
-    # 1. closure_path=None -> parent is None, closures_submitted stays 0
+    # 1. closure_path=None -> parent is None, closures_submitted stays 0, G2 red missing closure
     res_none = verify_impl(layout, TAG, closure_path=None, worktree=wt_null)
     assert res_none.get("parent") is None
     assert read_state(layout, TAG)["closures_submitted"] == 0
+    assert res_none.get("failing_step") == "G2"
+    assert res_none.get("exit_code") == 1
+    assert "Missing implementer closure" in (res_none.get("failing_line") or "")
 
     # 2. Blocked closure submitted too early (closures_submitted == 1 < min_attempts_before_block == 2) -> fails G2
     blocked_closure = tmp_path / "blocked.json"

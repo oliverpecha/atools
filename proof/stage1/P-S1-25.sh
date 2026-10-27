@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
-# P-S1-25: Active tmux session collision in dispatch-impl refuses with exit 2
-# (UsageError) without advancing seq; after session terminates, dispatch succeeds (GD-03 fix).
+# Gate-D-remediation: Cursor-S1 (Grok 4.6)
+# P-S1-25: Live tmux session collision refuses with UsageError exit 2 only
+# (not 3); live session is independently asserted; --no-run succeeds after (S1-R9.2).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -25,7 +26,6 @@ EOF
 chmod +x "$T/bin/loginctl" "$T/bin/agent"
 export PATH="$T/bin:$PATH"
 
-# Start a real live tmux session for this sprint
 LIVE_SESS="impl-public-profiles-005"
 "$REPO_DIR/bin/arouter" cheap -d -n "$LIVE_SESS" -t 60s SLEEP < /dev/null
 
@@ -50,14 +50,20 @@ os.environ["ACTL_ROOT"] = str(sdir)
 layout = Layout(sdir)
 tag = "2026-10-16_public-profiles"
 
-# Record the live session in state["tmux_sessions"]
+listed = subprocess.run(
+    ["tmux", "list-sessions", "-F", "#{session_name}"],
+    capture_output=True, text=True,
+)
+if listed.returncode != 0 or live_sess not in listed.stdout.splitlines():
+    print(f"FAIL: S1-R9.2: live tmux session {live_sess} was not independently observed: {listed.stdout!r}")
+    sys.exit(1)
+
 update_state(layout, tag, {"tmux_sessions": [live_sess]})
 seq_before = read_state(layout, tag)["seq"]
 
-# 1. Dispatch while live session is active MUST refuse with exit 2 (or 3) and NOT advance seq
 rc_collision = cli_main(["dispatch-impl", "--sprint", tag, "--no-run"])
-if rc_collision not in (2, 3):
-    print(f"FAIL: S1-R9.2: Expected exit code 2 (or 3) on active tmux session collision, got {rc_collision}")
+if rc_collision != 2:
+    print(f"FAIL: S1-R9.2: Expected exit code 2 on active tmux session collision, got {rc_collision}")
     sys.exit(1)
 
 seq_after = read_state(layout, tag)["seq"]
@@ -65,7 +71,6 @@ if seq_after != seq_before:
     print(f"FAIL: S1-R9.2: Active session collision must not advance seq ({seq_before} -> {seq_after})")
     sys.exit(1)
 
-# 2. Kill the live session and clear tmux_sessions -> dispatch-impl --no-run now succeeds (exit 0)
 subprocess.run(["tmux", "kill-session", "-t", live_sess], check=False)
 update_state(layout, tag, {"tmux_sessions": []})
 

@@ -31,6 +31,7 @@ export PATH="$T/bin:$PATH"
 # 1. Spawn a fast-finishing session (positive control) and a sleeping session (watchdog timeout 2s)
 "$REPO_DIR/bin/arouter" cheap -d -n impl-p21-ok-006 -t 20s OK < /dev/null
 "$REPO_DIR/bin/arouter" cheap -d -n impl-p21-to-006 -t 2s SLEEP < /dev/null
+"$REPO_DIR/bin/arouter" cheap -d -n impl-p21-ws-006 -t 60s SLEEP < /dev/null
 
 python3 - "$SDIR" "$WT" <<'PY'
 import sys
@@ -73,5 +74,14 @@ if ver.get("exit_code") != 1 or ver.get("failing_step") != "G2":
 st = read_state(layout, tag)
 if st.get("hard_caps_tripped") != 1:
     print(f"FAIL: S1-R2.4: Expected state.hard_caps_tripped == 1, got {st.get('hard_caps_tripped')}")
+    sys.exit(1)
+
+# 4. wait_session's own timeout-and-kill path (session still running, timeout_s=2)
+res_ws = wait_session("impl-p21-ws-006", timeout_s=2, poll_interval_s=0.2)
+if res_ws.get("hard_cap") is not True or res_ws.get("lost") is not False:
+    print(f"FAIL: S1-R14.2: wait_session own timeout must set hard_cap=True, got {res_ws}")
+    sys.exit(1)
+if res_ws.get("exit_code") not in (124, 137):
+    print(f"FAIL: S1-R14.2: wait_session own kill expected 124 or 137, got {res_ws.get('exit_code')}")
     sys.exit(1)
 PY

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
-# P-S1-02: Additive-change rule, PB-2 immutability, NUL-safe parser, required
-# deliverable inventory, and adversarial self-tests (S1-R16, D-41).
+# Gate-D-remediation: Cursor-S1 (Grok 4.6)
+# P-S1-02: Additive-change rule, PB-2 immutability, NUL-safe porcelain parser,
+# bounded proof/out/ exemption, explicit mode selection, authoring pin (S1-R16, D-41).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$REPO_DIR"
 
 BASE_SHA="${ACTL_S1_BASE_SHA:-4e16cc3}"
-if ! git rev-parse -q --verify "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
-  echo "FAIL: S1-R16: Base commit $BASE_SHA missing (environment error)"
-  exit 4
-fi
 
 python3 - "$REPO_DIR" "$BASE_SHA" <<'PY'
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +25,7 @@ REQUIRED_AUTHORING_FILES = frozenset({
     "fixtures/golden/transcripts/dirty_oracle.jsonl",
     "proof/run_suite_actl_s1.sh",
     "proof/stage1/fixture_s1.sh",
+    "proof/stage1/run_standins.sh",
     *[f"proof/stage1/P-S1-{i:02d}.sh" for i in range(1, 30)],
     "test/actl/test_guards_s1.py",
     "test/actl/test_next_phase3.py",
@@ -61,8 +60,22 @@ ALLOWED_IMPL_FILES = frozenset({
 })
 
 
+def is_proof_out(path: str) -> bool:
+    return path == "proof/out" or path.startswith("proof/out/")
+
+
+def is_frozen(path: str) -> bool:
+    for fp in FROZEN_STAGE0_PREFIXES:
+        if fp.endswith("/"):
+            if path.startswith(fp):
+                return True
+        elif path == fp:
+            return True
+    return False
+
+
 def parse_name_status_z(raw: bytes) -> list[tuple[str, str, str | None]]:
-    """Parse `git diff --name-status -z` output into (status, path, new_path)."""
+    """Parse `git diff --name-status -z` into (status, path, new_path)."""
     if not raw:
         return []
     tokens = [t.decode("utf-8", errors="surrogateescape") for t in raw.split(b"\x00") if t]
@@ -83,6 +96,55 @@ def parse_name_status_z(raw: bytes) -> list[tuple[str, str, str | None]]:
     return records
 
 
+def parse_porcelain_z(raw: bytes) -> list[tuple[str, str, str | None]]:
+    """Parse `git status --porcelain -z` consuming rename/copy companion paths."""
+    records: list[tuple[str, str, str | None]] = []
+    parts = raw.split(b"\x00")
+    i = 0
+    while i < len(parts) and parts[i]:
+        entry = parts[i].decode("utf-8", errors="surrogateescape")
+        if len(entry) < 3:
+            i += 1
+            continue
+        xy = entry[:2]
+        path = entry[3:]
+        if ("R" in xy) or ("C" in xy):
+            new_path = parts[i + 1].decode("utf-8", errors="surrogateescape")
+            records.append((xy, path, new_path))
+            i += 2
+        else:
+            records.append((xy, path, None))
+            i += 1
+    return records
+
+
+def select_mode(branch: str, env_mode: str) -> str:
+    env_mode = env_mode.strip()
+    if env_mode:
+        if env_mode not in ("authoring", "implementation"):
+            raise ValueError(
+                f"ACTL_S1_VALIDATE_MODE must be authoring or implementation, got {env_mode!r}"
+            )
+        return env_mode
+    if branch == "wip/author-s1":
+        return "authoring"
+    if branch == "wip/s1-verifier":
+        return "implementation"
+    raise ValueError(
+        f"Unknown branch {branch!r}; set ACTL_S1_VALIDATE_MODE=authoring|implementation"
+    )
+
+
+def pin_drift_errors(changed_authoring: set[str]) -> list[str]:
+    errors: list[str] = []
+    drifted = sorted(changed_authoring & REQUIRED_AUTHORING_FILES)
+    if drifted:
+        errors.append(
+            "Implementation mode authoring pin drift: " + ", ".join(drifted[:8])
+        )
+    return errors
+
+
 def validate_diff_records(
     records: list[tuple[str, str, str | None]], mode: str = "authoring"
 ) -> list[str]:
@@ -96,7 +158,7 @@ def validate_diff_records(
         code = st[0]
         paths_to_check = [p for p in (path, new_path) if p is not None]
         for p in paths_to_check:
-            if any(p == fp or p.startswith(fp) for fp in FROZEN_STAGE0_PREFIXES):
+            if is_frozen(p):
                 errors.append(f"PB-2 frozen path touched: {p} ({st})")
 
         if code in ("D", "R", "C"):
@@ -110,7 +172,6 @@ def validate_diff_records(
                 errors.append(f"Path not in exact Stage 1 authoring allowlist: {path}")
             seen_paths.add(path)
         else:
-            # Implementation mode: allow authoring deliverables + Stage 1 implementation paths
             is_guard_mod = (
                 path.startswith("src/actl/guards/")
                 and path.endswith(".py")
@@ -124,13 +185,14 @@ def validate_diff_records(
                 errors.append(f"Unauthorized path in Stage 1 branch: {path} ({st})")
             seen_paths.add(path)
 
-    missing = REQUIRED_AUTHORING_FILES - seen_paths
-    if missing:
-        errors.append(f"Missing required Stage 1 authoring deliverables: {sorted(missing)[:5]}")
+    if mode == "authoring":
+        missing = REQUIRED_AUTHORING_FILES - seen_paths
+        if missing:
+            errors.append(f"Missing required Stage 1 authoring deliverables: {sorted(missing)[:5]}")
     return errors
 
 
-# 1. Self-test the validator against adversarial cases (GD-01 / PB-2 review requirement)
+# 1. Self-tests (no git baseline required)
 base_valid = [("A", p, None) for p in sorted(REQUIRED_AUTHORING_FILES)]
 assert validate_diff_records(base_valid, "authoring") == [], "Self-test failed on valid set"
 assert validate_diff_records([], "authoring"), "Self-test failed to reject empty diff"
@@ -157,23 +219,54 @@ assert validate_diff_records(
     base_valid + [("A", "src/actl/verify.py", None)], "authoring"
 ), "Self-test failed to reject implementation smuggling on authoring branch"
 
-# 2. Check clean working tree (ignoring proof/out/)
+# Porcelain rename companion consumption
+porc = parse_porcelain_z(b"R  old-name\x00new-name\x00?? proof/out/foo.log\x00?? proof/outside\x00")
+assert porc[0] == ("R ", "old-name", "new-name"), porc[0]
+assert porc[1] == ("??", "proof/out/foo.log", None), porc[1]
+assert porc[2] == ("??", "proof/outside", None), porc[2]
+assert is_proof_out("proof/out/foo.log") and is_proof_out("proof/out")
+assert not is_proof_out("proof/outside")
+assert not is_proof_out("proof/out_extra")
+
+assert select_mode("wip/author-s1", "") == "authoring"
+assert select_mode("wip/s1-verifier", "") == "implementation"
+assert select_mode("main", "authoring") == "authoring"
+try:
+    select_mode("main", "")
+    print("FAIL: S1-R16.2: Unknown branch must fail closed without ACTL_S1_VALIDATE_MODE")
+    sys.exit(1)
+except ValueError:
+    pass
+
+assert pin_drift_errors({"docs/plan/spec-S1.md", "src/actl/verify.py"})
+assert not pin_drift_errors({"src/actl/verify.py"})
+
+print("OK: P-S1-02 validator self-tests passed.")
+
+# 2. Baseline commit must exist for the live inventory check
+probe = subprocess.run(
+    ["git", "rev-parse", "-q", "--verify", f"{base_sha}^{{commit}}"],
+    cwd=repo_dir,
+    capture_output=True,
+)
+if probe.returncode != 0:
+    print(f"FAIL: S1-R16: Base commit {base_sha} missing (environment error)")
+    sys.exit(4)
+
+# 3. Clean working tree, ignoring only proof/out/
 st_proc = subprocess.run(
     ["git", "status", "--porcelain", "-z"],
     cwd=repo_dir,
     capture_output=True,
     check=True,
 )
-for entry in st_proc.stdout.split(b"\x00"):
-    if not entry:
-        continue
-    line = entry.decode("utf-8", errors="replace")
-    rel_path = line[3:]
-    if not rel_path.startswith("proof/out"):
-        print(f"FAIL: S1-R16.2: Working tree has uncommitted/untracked changes: {line}")
-        sys.exit(1)
+for xy, path, new_path in parse_porcelain_z(st_proc.stdout):
+    for p in (path, new_path):
+        if p and not is_proof_out(p):
+            print(f"FAIL: S1-R16.2: Working tree has uncommitted/untracked changes: {xy} {path} -> {new_path}")
+            sys.exit(1)
 
-# 3. Inspect real git diff against BASE_SHA
+# 4. Inspect real git diff against BASE_SHA
 diff_proc = subprocess.run(
     ["git", "diff", "--name-status", "-z", f"{base_sha}..HEAD"],
     cwd=repo_dir,
@@ -190,9 +283,39 @@ branch_proc = subprocess.run(
     check=True,
 )
 branch = branch_proc.stdout.strip()
-mode = "authoring" if branch == "wip/author-s1" else "implementation"
+try:
+    mode = select_mode(branch, os.environ.get("ACTL_S1_VALIDATE_MODE", ""))
+except ValueError as exc:
+    print(f"FAIL: S1-R16.2: {exc}")
+    sys.exit(1)
 
 errs = validate_diff_records(records, mode=mode)
+if mode == "implementation":
+    pin = os.environ.get("ACTL_S1_AUTHORING_PIN", "").strip()
+    if not pin:
+        print("FAIL: S1-R16.2: implementation mode requires ACTL_S1_AUTHORING_PIN")
+        sys.exit(1)
+    pin_probe = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", f"{pin}^{{commit}}"],
+        cwd=repo_dir,
+        capture_output=True,
+    )
+    if pin_probe.returncode != 0:
+        print(f"FAIL: S1-R16.2: ACTL_S1_AUTHORING_PIN {pin} is not a commit")
+        sys.exit(1)
+    changed_authoring: set[str] = set()
+    for req in REQUIRED_AUTHORING_FILES:
+        drift = subprocess.run(
+            ["git", "diff", "--name-only", pin, "HEAD", "--", req],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if drift.stdout.strip():
+            changed_authoring.add(req)
+    errs.extend(pin_drift_errors(changed_authoring))
+
 if errs:
     for e in errs:
         print(f"FAIL: S1-R16.2: {e}")
@@ -203,5 +326,5 @@ for req_file in sorted(REQUIRED_AUTHORING_FILES):
         print(f"FAIL: S1-R16.2: Deliverable missing on disk: {req_file}")
         sys.exit(1)
 
-print(f"OK: S1-R16.2 verified ({len(records)} records, mode={mode}).")
+print(f"OK: S1-R16.2 verified ({len(records)} records, mode={mode}, files={len(REQUIRED_AUTHORING_FILES)}).")
 PY

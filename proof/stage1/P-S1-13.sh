@@ -49,6 +49,9 @@ steps = run_o1(oracle, wt)
 if not isinstance(steps, list) or len(steps) < 5:
     print(f"FAIL: S1-R4.1: Expected 5 executed O1 steps, got {steps!r}")
     sys.exit(1)
+if any(s.exit_code != 0 for s in steps):
+    print(f"FAIL: S1-R4.1: Expected every O1 step green on first run, got {[(s.id, s.exit_code) for s in steps]}")
+    sys.exit(1)
 if not witness_file.is_file():
     print("FAIL: S1-R4.1: Injected staging inspector proof was never executed (no witness file)")
     sys.exit(1)

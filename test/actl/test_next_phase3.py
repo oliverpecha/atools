@@ -68,6 +68,15 @@ def test_phase3_unverified_vs_verified_blocked_closure(tmp_path: Path) -> None:
     res_unverified = decide_next(layout, TAG)
     assert res_unverified["action"] == "verify"
     assert "--closure" in res_unverified["command"]
+    from actl.cli import main as cli_main
+    import os
+    import shlex
+    os.environ["ACTL_ROOT"] = str(sdir)
+    argv = shlex.split(res_unverified["command"])
+    if argv[0] == "actl":
+        argv = argv[1:]
+    rc = cli_main(argv)
+    assert rc != 2, "generated verify-impl --closure <outbox> must not be usage exit 2"
 
     # 2. After verification confirms blocked_check (stage == 'blocked_check', failing_step != 'G2') -> hold_owner
     closure_path.unlink()
@@ -103,6 +112,35 @@ def test_phase3_unverified_vs_verified_blocked_closure(tmp_path: Path) -> None:
     res_verified = decide_next(layout, TAG)
     assert res_verified["action"] == "hold_owner"
     assert res_verified["command"] == ""
+
+
+def test_phase3_missing_closure_omits_closure_flag(tmp_path: Path) -> None:
+    """S1A-16: finished workspace without outbox closure emits verify-impl without --closure."""
+    try:
+        from actl.layout import Layout
+        from actl.next import decide_next
+        from actl.seq import update_state
+        from actl.cli import main as cli_main
+    except ImportError as exc:
+        pytest.fail(f"FAIL: S1-R12: phase3 module missing: {exc}")
+
+    sdir, _wt = _setup_golden_sandbox(tmp_path, None)
+    layout = Layout(sdir)
+    update_state(layout, TAG, {"active_stage": "implementer", "status": "running", "tmux_sessions": []})
+    ws = sdir / "sprints" / "target-repo" / TAG / "workspaces" / "implementer-006"
+    ws.mkdir(parents=True, exist_ok=True)
+    res = decide_next(layout, TAG)
+    assert res["action"] == "verify"
+    assert "verify-impl" in res["command"]
+    assert "--closure" not in res["command"]
+    import os
+    import shlex
+    os.environ["ACTL_ROOT"] = str(sdir)
+    argv = shlex.split(res["command"])
+    if argv[0] == "actl":
+        argv = argv[1:]
+    rc = cli_main(argv)
+    assert rc != 2, "missing-closure verify-impl must not be usage exit 2"
 
 
 def test_phase3_attempt_exhaustion_and_grants(tmp_path: Path) -> None:

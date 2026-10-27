@@ -28,9 +28,9 @@ def test_session_module_importable_and_dynamic_timeout(tmp_path: Path) -> None:
     sdir, _wt = _setup_golden_sandbox(tmp_path, None)
     layout = Layout(sdir)
     sprint_cfg = load_sprint_toml(layout, TAG)
-    # Verify dynamic timeout helper or wait_session(timeout_s=None) uses 45m (2700s) + 3s + 30s = 2733s
-    if hasattr(sess_mod, "compute_wait_timeout"):
-        assert sess_mod.compute_wait_timeout(sprint_cfg) == 2733
+    helper = getattr(sess_mod, "compute_wait_timeout", None)
+    assert callable(helper), "FAIL: S1A-3: actl.session.compute_wait_timeout is required"
+    assert helper(sprint_cfg) == 2733
 
 
 def test_wait_session_deterministic_polling_and_grace(tmp_path: Path) -> None:
@@ -55,9 +55,16 @@ def test_wait_session_deterministic_polling_and_grace(tmp_path: Path) -> None:
     def fake_active():
         return active_seq.pop(0) if active_seq else {}
 
-    (sess_dir / "impl-unit-001.exit").write_text("0\n", encoding="utf-8")
     with patch("router.process.list_active_tmux_sessions", side_effect=fake_active), patch("shutil.which", return_value="/usr/bin/tmux"):
-        res = wait_session("impl-unit-001", timeout_s=5, poll_interval_s=0.05)
+        # .exit is absent on the first polls and appears after the session disappears
+        def fake_read(_name):
+            if (sess_dir / "impl-unit-001.exit").is_file():
+                return 0
+            (sess_dir / "impl-unit-001.exit").write_text("0\n", encoding="utf-8")
+            return 0
+
+        with patch("router.process.read_exit_code", side_effect=fake_read):
+            res = wait_session("impl-unit-001", timeout_s=5, poll_interval_s=0.05)
 
     assert res["name"] == "impl-unit-001"
     assert res["exit_code"] == 0
