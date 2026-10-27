@@ -4,7 +4,6 @@ approval_live_run = "architect"
 solution_key_exposure = "full"
 min_attempts_before_block = 2
 max_epochs = 3
-repo_test_cmd = "python3 -m pytest test -q -rf"
 
 [max_attempts]
 oracle = 3
@@ -25,4 +24,5 @@ index 4efe645..456bec1 100644
  
  def render_profile(user_id):
      """Return (status, body) for a guest viewing user_id's profile."""
--    raise NotImplementedError("public profiles
+-    raise NotImplementedError("public profiles not implemented")
++    

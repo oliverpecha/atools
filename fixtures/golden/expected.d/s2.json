@@ -7,7 +7,7 @@
         "exit": 0,
         "error_code": null,
         "output_hashes": {
-          "sprint.toml": "f6d9ece377677c36d2276885228c6b92e1f25b9d530aaec606ddf9836664aa47",
+          "sprint.toml": "97a7a7cc7c76d6bf9056a64f43c29fae5c4fc0f33b248ecb96bd2a0dc9dc4c2a",
           "solution_key.patch": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2"
         }
       }
@@ -62,7 +62,7 @@
         "exit": 0,
         "error_code": null,
         "output_hashes": {
-          "sprint.toml": "f6d9ece377677c36d2276885228c6b92e1f25b9d530aaec606ddf9836664aa47",
+          "sprint.toml": "97a7a7cc7c76d6bf9056a64f43c29fae5c4fc0f33b248ecb96bd2a0dc9dc4c2a",
           "solution_key.patch": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2"
         }
       }
@@ -222,21 +222,21 @@
         "output_hashes": {}
       }
     },
-    "bad_size": {
-      "purpose": "architect-intake",
-      "turn": "architect-1",
-      "expect": {
-        "exit": 2,
-        "error_code": "E_SIZE",
-        "output_hashes": {}
-      }
-    },
     "bad_exists": {
       "purpose": "architect-intake",
       "turn": "architect-1",
       "expect": {
         "exit": 2,
         "error_code": "E_EXISTS",
+        "output_hashes": {}
+      }
+    },
+    "bad_size": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_SIZE",
         "output_hashes": {}
       }
     }

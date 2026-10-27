@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
+
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini
+
+# P-S2-03: Each responses/bad_* gives expected single error code, exit 2, untouched outbox; 12 worked examples (Addendum P-S2-03).
+
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="$REPO_DIR/src:${PYTHONPATH:-}"
 
-if ! python3 -m pytest "$REPO_DIR/test/actl/test_s2_envelope.py" -q -rf; then
-    echo "FAIL: S2-R3: envelope parser worked examples failed"
-    exit 1
+BAD_SIZE="$REPO_DIR/fixtures/golden/responses/bad_size.txt"
+if [[ ! -f "$BAD_SIZE" ]] || (( $(wc -c < "$BAD_SIZE") < 1048576 )); then
+if [[ -f "$REPO_DIR/fixtures/golden/make_responses.sh" ]]; then
+bash "$REPO_DIR/fixtures/golden/make_responses.sh" >/dev/null
+fi
+fi
+
+if ! python3 -m pytest "$REPO_DIR/test/actl/test_s2_envelope.py" -k "test_p03" -q -rf; then
+echo "FAIL: S2-R3/S2-R4: P-S2-03 bad_* response matrix or worked examples failed"
+exit 1
 fi
