@@ -28,4 +28,4 @@ Before each commit: `proof/run_suite_actl_s0.sh` 19 passed, 0 failed, 0 environm
 Owner approval of the merge is the push of the Step 0 branch; it is not separately recorded here.
 
 ## Errata (added after 827abec)
-The Owner corrected the model names on 2026-10-26: the first patch was authored by Gemini Flash 3.8 High (the text above first said Argon 4) and the reviewer was GPT 6.1 Sol High (the text above and the commit messages of 3148198, d813ad0 and c0080ba say "GPT 6.1 Sol thinking"). History is not rewritten; this record and D-41 carry the corrected names.
+The Owner corrected the model names on 2026-10-26: the first patch was authored by Gemini Flash 3.8 High (the text above first said Argon 4) and the reviewer was GPT 6.1 Sol High (the text above and the commit messages of 3148198, d813ad0 and c0080ba say "GPT 6.1 Sol thinking"). History is not rewritten; this record and D-41 carry the corrected names. High and Thinking cannot be told apart in the Perplexity wrapper and the top variant is meant, so the two names denote the same model.
