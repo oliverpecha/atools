@@ -47,6 +47,23 @@ Run under lock:
 3. Work items follow `WI-S2-R<k>` tags per requirement group.
 4. Working branch only; no push to remote.
 
+### Commit Message Format
+Every commit must use a message file (`git commit -F <file>`) following this structure:
+
+<type>(<scope>): <summary> (WI-S2-R<k>)
+
+Why: <rationale referencing bare commit SHAs, e.g. 49ebef9>
+
+What changed:
+- <file>: <description of changes>
+
+Result: <test and proof outcome metrics>
+Scope Stop Rule
+If an implementation change OUTSIDE the 13 files listed in Section 3 appears needed, work MUST STOP immediately and be reported to the Owner.
+
+Model Tracking
+The implementer's model identifier and family are recorded per session in the session ledger.
+
 ## 7. Test Defect Stop Rule
 If an implementer identifies an apparent contradiction between
 `docs/plan/spec-S2.md` and the test suite, work MUST STOP immediately.
