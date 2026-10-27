@@ -564,7 +564,7 @@ patch_block  := '<<<PATCH out="' OUTPATH '" file="' REPOPATH '"' [' new="true"']
                 ( hunk(N)+ | body-if-new )
                 '<'*N 'END_PATCH' '>'*N NL
 hunk(N)      := '<'*(N+4) ' SEARCH' NL text '='*(N+4) NL text '>'*(N+4) ' REPLACE' NL
-sentinel     := '<<<END_RESPONSE bundle=' ['"'] HEX8 ['"'] '>>>' NL
+sentinel     := '<<<END_RESPONSE bundle="' HEX8 '">>>' NL
 ```
 
 - `body` and hunk texts are verbatim; the parser interprets only the exact closing marker line for the active `fence="N"`.
@@ -726,12 +726,15 @@ From Stage 4, personas run under separate Linux accounts. tmux's default socket 
 - D-46 (kickoff v3 ruling 8) Outbox atomic swap: the staging directory `mailboxes/.{role}-staging-{pid}` gets `chmod 0o770` before it replaces `mailboxes/<role>/outbox`.
 - D-47 (kickoff v3 Fact A) `tools/mutate.py` is PB-2 pinned by blob hash in `proof/stage0/P-S0-02.sh` (line 58 at 6796b09; locate it by content, not by line number). Any change to the file and the pin refresh go in the SAME commit, or S0-R2.3 fails. Applied in 4fb7aed (WI-TOOLS-4) and ecf7266 (WI-TOOLS-5).
 - D-48 (kickoff v3 Fact B) The audit-pinned denies `Shell(git commit *-n *)` and `Shell(git commit *-n)` (ADP-PERM-07/08) are kept. Agent commit messages are written to a file and committed with `git commit -F`. Replacing the denies needs an audit change as a separate work item, only after a scratch test.
+- D-49 (S2-M5, closes O-3) Envelope and hunk escape: the opening and closing block markers use N characters (`fence="N"`, N in 3..9, default 3) and the inner PATCH hunk delimiters use N+4 characters (`<<<<<<< SEARCH`, `=======`, `>>>>>>> REPLACE` at N=3), so a body that contains marker lines can be wrapped with a larger N.
+- D-50 (S2-M5, proposed as O-18) Step 3 normalization of a pasted response: strip a UTF-8 BOM, normalize CRLF and CR to LF, strip one enclosing Markdown fence that lies outside the top-level markers, and preserve trailing horizontal whitespace inside body lines.
+- D-51 (S2-M5) Intake alias: `sprint.toml` is accepted as an alias of `sprint-proposal.toml` among the outputs of an Architect response and is validated against `schemas/sprint-proposal.json`. `unpack` writes the emitted file name under `mailboxes/<role>/outbox` through the atomic swap (no rename), nothing writes it into `records/` directly, and promotion merges only proposable keys while preserving the frozen identity fields (S2-R9.3). The frozen `records/<repo>/<tag>/sprint.toml` is never overwritten.
 
 ### 9.2 OPEN (spec agents propose an answer; the Owner decides where noted)
 
 - **O-1** `jsonschema` as a dependency, or a minimal vendored validator (the repo ships no dependencies). **Closed (D-25).**
 - **O-2** Name and storage of `solution_key` between Architect promotion and oracle freeze (proposal: `solution_key-{seq}.patch`). **Closed (D-26).**
-- **O-3** Envelope escape for bodies containing marker lines.
+- **O-3** Envelope escape for bodies containing marker lines. **Closed (D-49).**
 - **O-4** `G4` for non-Python test suites.
 - **O-5** Initial `forbidden.toml` rules.
 - **O-6** Initial `secrets.toml` patterns and false-positive handling.
