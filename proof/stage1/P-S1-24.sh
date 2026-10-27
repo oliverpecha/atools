@@ -136,9 +136,9 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         if str(p).startswith("fd:"):
             raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
         if os.path.realpath(p) != replace_src_abs:
-            raise AssertionError(
-                f"unrelated pre-replace fsync of {p}; only {replace_src_abs} is allowed"
-            )
+            # GD-04b: ignore non-verification pre-fsync (state.json, state.json.tmp, dest_dir).
+            # deg_unrelated still REJECTS: replace_src itself was never fsynced.
+            continue
         saw_temp_fsync = True
         size, blob = e[2], e[3]
         # Final content must already be present at temp fsync (reject fsync-before-write).
@@ -239,6 +239,33 @@ with tempfile.TemporaryDirectory() as td:
     finally:
         restore()
     print("OK: known-good builtins.open/fileno accepted by durability oracle.")
+
+    # --- Known-good: state.json.tmp fsync then verification (GD-04b scoped) ---
+    reset_sess(td, dest, src_log, src_exit)
+    state.write_bytes(b'{"seq":6}')
+    state_tmp_kg = td / "state.json.tmp"
+    state_tmp_kg.write_bytes(b'{"seq":7}')
+    tr = Tracer()
+    tmp_good = td / "verification-006.json.tmp"
+    install(tr)
+    try:
+        with open(state_tmp_kg, "rb") as sf:
+            os.fsync(sf.fileno())
+        with open(tmp_good, "wb") as f:
+            f.write(ARTIFACT)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(str(tmp_good), str(dest))
+        dir_fsync()
+        os.unlink(str(src_log))
+        os.unlink(str(src_exit))
+        assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp_good)
+    except AssertionError as exc:
+        print(f"FAIL: S1-R15.3: known-good state.json fsync then verification rejected: {exc}")
+        raise SystemExit(1)
+    finally:
+        restore()
+    print("OK: known-good state.json fsync then verification")
 
     # 1) no fsync
     def deg_no_fsync():
@@ -498,6 +525,23 @@ def fd_path(fd):
         return f"fd:{fd}"
 
 
+def fd_bytes_at_fsync(fd):
+    """Bytes visible on fd at fsync: prefer /proc/self/fd/<fd>, else fstat size pad."""
+    try:
+        with open(f"/proc/self/fd/{fd}", "rb") as rf:
+            return rf.read()
+    except OSError:
+        try:
+            return b"\0" * int(os.fstat(fd).st_size)
+        except OSError:
+            return b""
+
+
+def is_verification_json(path: str) -> bool:
+    base = os.path.basename(str(path))
+    return base.startswith("verification-") and base.endswith(".json") and ".meta." not in base
+
+
 def is_verification_temp(path: str) -> bool:
     """True only for verification replace-src temps, not dest_dir or final json."""
     if not path or str(path).startswith("fd:"):
@@ -514,13 +558,25 @@ def is_verification_temp(path: str) -> bool:
 
 
 def spy_fsync(fd):
-    events.append(("fsync", fd_path(fd)))
+    size = -1
+    try:
+        size = int(os.fstat(fd).st_size)
+    except OSError:
+        pass
+    events.append(("fsync", fd_path(fd), size, fd_bytes_at_fsync(fd)))
     return real_fsync(fd)
 
 
 def spy_replace(src, dst):
-    events.append(("replace", str(src), str(dst)))
-    return real_replace(src, dst)
+    src_s, dst_s = str(src), str(dst)
+    # Record verification-*.json dest only (state.json ignored).
+    if is_verification_json(dst_s):
+        try:
+            artifact = Path(src_s).read_bytes()
+        except OSError:
+            artifact = b""
+        events.append(("replace", src_s, dst_s, artifact))
+    return real_replace(src_s, dst_s)
 
 
 def spy_unlink(path):
@@ -528,68 +584,92 @@ def spy_unlink(path):
     return real_unlink(path)
 
 
-def assert_durability_order(ev, dest, slog, sexit, replace_src=None):
+def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
+    """Same oracle as Block 1: blob==artifact; non-verification pre-fsync ignored."""
     dest = os.path.abspath(str(dest))
-    slog = os.path.abspath(str(slog))
-    sexit = os.path.abspath(str(sexit))
+    src_log = os.path.abspath(str(src_log))
+    src_exit = os.path.abspath(str(src_exit))
     dest_dir_abs = os.path.realpath(str(Path(dest).parent))
     replace_src_abs = os.path.realpath(str(replace_src)) if replace_src is not None else None
+
     abs_events = []
-    for item in ev:
-        k = item[0]
+    for ev in events:
+        k = ev[0]
         if k == "replace":
-            if len(item) == 3:
-                abs_events.append(("replace", os.path.realpath(item[1]), os.path.abspath(item[2])))
-            else:
-                abs_events.append(("replace", None, os.path.abspath(item[1])))
+            abs_events.append(
+                ("replace", os.path.realpath(ev[1]), os.path.abspath(ev[2]), ev[3] if len(ev) > 3 else b"")
+            )
         elif k == "fsync":
-            p = item[1]
+            p = ev[1]
+            size = ev[2] if len(ev) > 2 else -1
+            blob = ev[3] if len(ev) > 3 else b""
             if str(p).startswith("fd:"):
-                abs_events.append((k, p))
+                abs_events.append((k, p, size, blob))
             else:
-                abs_events.append((k, os.path.realpath(p)))
+                abs_events.append((k, os.path.realpath(p), size, blob))
         else:
-            p = item[1]
+            p = ev[1]
             abs_events.append((k, os.path.abspath(p) if not str(p).startswith("fd:") else p))
-    replace_idxs = [i for i, e in enumerate(abs_events) if e[0] == "replace" and e[-1] == dest]
+
+    replace_idxs = [
+        i for i, e in enumerate(abs_events)
+        if e[0] == "replace" and e[2] == dest and is_verification_json(e[2])
+    ]
     if not replace_idxs:
         raise AssertionError("replace of verification destination never observed")
     ri = replace_idxs[0]
     rep = abs_events[ri]
-    observed_src = rep[1] if len(rep) == 3 else None
-    if replace_src_abs is None and observed_src is not None:
+    observed_src = rep[1]
+    artifact = rep[3]
+    if replace_src_abs is None:
         replace_src_abs = observed_src
     if replace_src_abs is None:
         raise AssertionError("replace-src temp path unknown; cannot verify temp fsync")
+    if not artifact:
+        raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
+
     pre = abs_events[:ri]
-    temp_ok = False
+    matching_temp_fsync = False
+    saw_temp_fsync = False
     for e in pre:
         if e[0] != "fsync":
             continue
         p = e[1]
         if str(p).startswith("fd:"):
             raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
-        if os.path.realpath(p) == replace_src_abs:
-            temp_ok = True
-        else:
-            raise AssertionError(
-                f"unrelated pre-replace fsync of {p}; only {replace_src_abs} is allowed"
-            )
-    if not temp_ok:
-        raise AssertionError(f"no fsync of exact replace-src temp path {replace_src_abs} before replace")
-    post = abs_events[ri + 1:]
-    dir_idxs = [
-        i for i, e in enumerate(post)
+        if os.path.realpath(p) != replace_src_abs:
+            # GD-04b: ignore non-verification pre-fsync (state.json, state.json.tmp, dest_dir).
+            continue
+        saw_temp_fsync = True
+        size, blob = e[2], e[3]
+        if blob == artifact or (size >= 0 and size == len(artifact) and blob == artifact):
+            matching_temp_fsync = True
+    if not saw_temp_fsync:
+        raise AssertionError(
+            f"no fsync of exact replace-src temp path {replace_src_abs} before replace"
+        )
+    if not matching_temp_fsync:
+        raise AssertionError(
+            "fsync-before-write / fsync empty then write: temp fsync bytes "
+            f"do not match artifact at replace (len={len(artifact)})"
+        )
+
+    post = abs_events[ri + 1 :]
+    dir_fsync_idxs = [
+        i
+        for i, e in enumerate(post)
         if e[0] == "fsync" and not str(e[1]).startswith("fd:") and os.path.realpath(e[1]) == dest_dir_abs
     ]
-    if not dir_idxs:
-        raise AssertionError("containing-directory fsync not observed after replace")
-    after_dir = post[dir_idxs[0] + 1:]
+    if not dir_fsync_idxs:
+        raise AssertionError("containing-directory fsync / dir-fsync not observed after replace")
+    after_dir = post[dir_fsync_idxs[0] + 1 :]
     unlinks = [(e[0], e[1]) for e in after_dir if e[0] == "unlink"]
-    log_i = next((i for i, e in enumerate(unlinks) if e[1] == slog), None)
-    exit_i = next((i for i, e in enumerate(unlinks) if e[1] == sexit), None)
-    if log_i is None or exit_i is None or not (log_i < exit_i):
-        raise AssertionError(f"unlink order after dir fsync invalid: {unlinks}")
+    log_i = next((i for i, e in enumerate(unlinks) if e[1] == src_log), None)
+    exit_i = next((i for i, e in enumerate(unlinks) if e[1] == src_exit), None)
+    if log_i is None or exit_i is None:
+        raise AssertionError(f"expected unlinks of {src_log} and {src_exit} after dir fsync, got {unlinks}")
+    if not (log_i < exit_i):
+        raise AssertionError("original log unlink must precede original exit unlink")
 
 
 def originals_intact():
