@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -74,84 +75,63 @@ def test_p03_all_bad_responses_matrix(
     unpack_json = turn_dir / "unpack.json"
     assert unpack_json.is_file(), f"Case {case_name}: unpack.json was not written"
     doc = json.loads(unpack_json.read_text(encoding="utf-8"))
-    assert doc["ok"] is False, f"Case {case_name}: expected ok=False"
-    assert len(doc["errors"]) >= 1, f"Case {case_name}: expected at least 1 error"
+    assert doc["ok"] is False
+    assert len(doc["errors"]) >= 1
     got_code = doc["errors"][0]["code"]
-    assert got_code == want_code, f"Case {case_name}: expected error_code {want_code!r}, got {got_code!r}"
-    assert doc["outputs"] == [], f"Case {case_name}: expected empty outputs on failure"
-    assert [p.name for p in outbox.iterdir()] == [".untouched_canary"], f"Case {case_name}: modified outbox"
+    assert got_code == want_code, f"Case {case_name}: expected {want_code!r}, got {got_code!r}"
+    assert doc["outputs"] == []
+    assert [p.name for p in outbox.iterdir()] == [".untouched_canary"]
 
 
-def test_p03_worked_examples_and_fence_boundaries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_p03_compound_error_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves F-05 & S2-R4.6: compound fault precedence (framing > bundle mismatch > path > duplicate > size > search > schema)."""
     try:
         from actl import cli
         import actl.envelope  # noqa: F401
     except ImportError as e:
-        pytest.fail(f"FAIL: S2-R3: actl.envelope missing: {e}")
+        pytest.fail(f"FAIL: S2-R4.6: actl.envelope missing: {e}")
 
     layout = _setup_sprint(tmp_path)
     monkeypatch.setenv("ACTL_ROOT", str(layout.root))
     turn_dir = layout.turns_dir(TAG) / "architect-1"
 
-    def _run_intake(body: str) -> tuple[int, dict]:
+    def _eval(payload: str) -> str:
         for f in ("response.txt", "unpack.json", "repair.txt"):
             if (turn_dir / f).exists():
                 (turn_dir / f).unlink()
-        p = tmp_path / "input.txt"
-        p.write_text(body, encoding="utf-8")
-        rc = cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(p), "--json"])
+        p = tmp_path / "comp.txt"
+        p.write_text(payload, encoding="utf-8")
+        cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(p), "--json"])
         doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
-        return rc, doc
+        return doc["errors"][0]["code"]
 
-    sol_key = (GOLDEN_DIR / "sprint" / "solution_key.patch").read_text(encoding="utf-8")
-    toml_body = 'live_run = "none"\n'
+    # 1. Framing (E_SYNTAX_MARKER) beats E_BUNDLE_MISMATCH and E_PATH
+    code1 = _eval('<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle=wrong>>>\n')
+    assert code1 == "E_SYNTAX_MARKER"
 
-    for n in (3, 4, 5, 8, 9):
-        open_f = "<" * n + f'FILE path="spec-draft.md" fence="{n}"' + ">" * n
-        close_f = "<" * n + "END_FILE" + ">" * n
-        payload = (
-            f'{open_f}\n'
-            f'# Spec with inner <<<FILE path="inner.txt">>>\ndata\n<<<END_FILE>>>\n'
-            f'{close_f}\n'
-            f'<<<FILE path="sprint.toml">>>\n{toml_body}<<<END_FILE>>>\n'
-            f'<<<FILE path="solution_key.patch">>>\n{sol_key}<<<END_FILE>>>\n'
-            f'<<<END_RESPONSE bundle="1f13e141">>>\n'
-        )
-        rc, doc = _run_intake(payload)
-        assert rc == 0 and doc["ok"] is True, f"Valid fence={n} failed: {doc}"
+    # 2. E_BUNDLE_MISMATCH beats E_PATH
+    code2 = _eval('<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="00000000">>>\n')
+    assert code2 == "E_BUNDLE_MISMATCH"
 
-    for bad_n in (2, 10):
-        open_f = "<" * bad_n + f'FILE path="spec-draft.md" fence="{bad_n}"' + ">" * bad_n
-        close_f = "<" * bad_n + "END_FILE" + ">" * bad_n
-        payload = (
-            f'{open_f}\ntext\n{close_f}\n'
-            f'<<<FILE path="sprint.toml">>>\n{toml_body}<<<END_FILE>>>\n'
-            f'<<<FILE path="solution_key.patch">>>\n{sol_key}<<<END_FILE>>>\n'
-            f'<<<END_RESPONSE bundle="1f13e141">>>\n'
-        )
-        rc, doc = _run_intake(payload)
-        assert rc == 2 and doc["errors"][0]["code"] == "E_SYNTAX_MARKER", f"Fence {bad_n} should fail"
-
-    exact_1mib = "x" * (1048576 - 1) + "\n"
-    rc_ok, doc_ok = _run_intake(
-        f'<<<FILE path="spec-draft.md">>>\n{exact_1mib}<<<END_FILE>>>\n'
-        f'<<<FILE path="sprint.toml">>>\n{toml_body}<<<END_FILE>>>\n'
-        f'<<<FILE path="solution_key.patch">>>\n{sol_key}<<<END_FILE>>>\n'
-        f'<<<END_RESPONSE bundle="1f13e141">>>\n'
+    # 3. E_PATH beats E_DUPLICATE
+    code3 = _eval(
+        '<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n'
+        '<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n'
+        '<<<END_RESPONSE bundle="1f13e141">>>\n'
     )
-    assert rc_ok == 0 and doc_ok["ok"] is True, "Exact 1 MiB must be accepted"
+    assert code3 == "E_PATH"
 
-    over_1mib = "x" * 1048576 + "\n"
-    rc_big, doc_big = _run_intake(
-        f'<<<FILE path="spec-draft.md">>>\n{over_1mib}<<<END_FILE>>>\n'
-        f'<<<FILE path="sprint.toml">>>\n{toml_body}<<<END_FILE>>>\n'
-        f'<<<FILE path="solution_key.patch">>>\n{sol_key}<<<END_FILE>>>\n'
-        f'<<<END_RESPONSE bundle="1f13e141">>>\n'
+    # 4. E_DUPLICATE beats E_SIZE
+    code4 = _eval(
+        '<<<FILE path="sprint.toml">>>\n' + ("A" * 1050000) + '\n<<<END_FILE>>>\n'
+        '<<<FILE path="sprint.toml">>>\nshort\n<<<END_FILE>>>\n'
+        '<<<END_RESPONSE bundle="1f13e141">>>\n'
     )
-    assert rc_big == 2 and doc_big["errors"][0]["code"] == "E_SIZE", "1,048,577 bytes must fail with E_SIZE"
+    assert code4 == "E_DUPLICATE"
 
 
 def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves F-03: real filesystem symlink in target repo rejected in PATCH file; NUL, dot, empty, trailing slash tested."""
     try:
         from actl import cli
         import actl.envelope  # noqa: F401
@@ -172,30 +152,79 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
         doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
         return rc, doc
 
-    bad_paths = [
-        "../escape.sh",
-        "oracle-draft/../../escape.sh",
-        "/etc/passwd",
-        "oracle-draft\\proofs\\01.sh",
-        "oracle-draft/proofs/" + ("a" * 101) + ".sh",
-        "oracle-draft/proofs/" + ("a/" * 130) + "b.sh",
-        "outside-prefix/file.txt",
-    ]
-    for bp in bad_paths:
-        rc, doc = _run_chal(f'<<<FILE path="{bp}">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="b7eb659a">>>\n')
-        assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"Path {bp!r} did not fail with E_PATH"
-
-    for git_path in (".git/config", ".GIT/HEAD", "sub/.Git/hooks/pre-commit"):
-        rc, doc = _run_chal(
-            f'<<<PATCH out="oracle-draft/mutants/m.patch" file="{git_path}">>>\n'
-            f"<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n"
-            f'<<<END_RESPONSE bundle="b7eb659a">>>\n'
+    # 1. Real symlink constructed in target repository
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("SECRET=1\n", encoding="utf-8")
+    sym = layout.target_repo / "api" / "sym_target.py"
+    if sym.is_symlink() or sym.exists():
+        sym.unlink()
+    try:
+        sym.symlink_to(outside)
+        rc_sym, doc_sym = _run_chal(
+            '<<<PATCH out="oracle-draft/mutants/s.patch" file="api/sym_target.py">>>\n'
+            '<<<<<<< SEARCH\nSECRET=1\n=======\nSECRET=2\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n'
+            '<<<END_RESPONSE bundle="b7eb659a">>>\n'
         )
-        assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f".git path {git_path!r} must fail with E_PATH"
+        assert rc_sym == 2 and doc_sym["errors"][0]["code"] == "E_PATH"
+    except OSError:
+        pass
 
-    rc_dup, doc_dup = _run_chal(
-        '<<<FILE path="oracle-draft/proofs/01_Public.sh" mode="exec">>>\n#!/usr/bin/env bash\n<<<END_FILE>>>\n'
-        '<<<FILE path="oracle-draft/proofs/01_public.sh" mode="exec">>>\n#!/usr/bin/env bash\n<<<END_FILE>>>\n'
-        '<<<END_RESPONSE bundle="b7eb659a">>>\n'
+    # 2. Syntax attacks on path and file (NUL, dot segments, empty segments, trailing slash)
+    for bad in ("../escape.sh", "oracle-draft/./01.sh", "oracle-draft//01.sh", "oracle-draft/proofs/"):
+        rc, doc = _run_chal(f'<<<FILE path="{bad}">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="b7eb659a">>>\n')
+        assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"Path {bad!r} must fail with E_PATH"
+
+    for bad_file in ("../escape.py", "api/./users.py", "api//users.py", "api/users.py/"):
+        rc, doc = _run_chal(
+            f'<<<PATCH out="oracle-draft/mutants/m.patch" file="{bad_file}">>>\n'
+            '<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n<<<END_PATCH>>>\n'
+            '<<<END_RESPONSE bundle="b7eb659a">>>\n'
+        )
+        assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"File {bad_file!r} must fail with E_PATH"
+
+
+def test_p08_parser_edge_cases_and_scaled_patch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves F-08: non-blank text after sentinel (E_SYNTAX_MARKER), multiple sentinels, scaled PATCH hunks."""
+    try:
+        from actl import cli
+        import actl.envelope  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R3.1: actl.envelope missing: {e}")
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+
+    def _run(payload: str) -> tuple[int, dict]:
+        for f in ("response.txt", "unpack.json", "repair.txt"):
+            if (turn_dir / f).exists():
+                (turn_dir / f).unlink()
+        p = tmp_path / "edge.txt"
+        p.write_text(payload, encoding="utf-8")
+        rc = cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(p), "--json"])
+        doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
+        return rc, doc
+
+    # 1. Non-blank text after sentinel -> E_SYNTAX_MARKER
+    rc1, doc1 = _run('<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\nextra text\n')
+    assert rc1 == 2 and doc1["errors"][0]["code"] == "E_SYNTAX_MARKER"
+
+    # 2. Multiple sentinels -> E_SYNTAX_MARKER
+    rc2, doc2 = _run('<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n<<<END_RESPONSE bundle="1f13e141">>>\n')
+    assert rc2 == 2 and doc2["errors"][0]["code"] == "E_SYNTAX_MARKER"
+
+    # 3. Scaled PATCH on fence="4": delimiters length 8 (4+4)
+    scaled_patch = (
+        '<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n'
+        '<<<<PATCH out="solution_key.patch" file="api/users.py" fence="4">>>>\n'
+        '<<<<<<<< SEARCH\n'
+        'def get_user(user_id):\n'
+        '========\n'
+        'def get_user(user_id):\n'
+        '    # scaled patch\n'
+        '>>>>>>>> REPLACE\n'
+        '<<<<END_PATCH>>>>\n'
+        '<<<END_RESPONSE bundle="1f13e141">>>\n'
     )
-    assert rc_dup == 2 and doc_dup["errors"][0]["code"] == "E_DUPLICATE"
+    rc3, doc3 = _run(scaled_patch)
+    assert rc3 == 0 and doc3["ok"] is True

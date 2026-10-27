@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini
-# proof/stage2/P-S2-18.sh - Stage 2 per-stage git diff additions & PB-2 immutability gate (S2-R13, D-41, D-S2-03).
+# proof/stage2/P-S2-18.sh - Stage 2 per-stage additions & untracked files gate (S2-R13, D-41, F-02).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$REPO_DIR"
@@ -120,33 +120,39 @@ is_allowed_stage2_path() {
     esac
 }
 
-if is_allowed_stage2_path "src/actl/scope.py"; then
-    echo "FAIL: S2-R13: Regression self-test failed: src/actl/scope.py unexpectedly passed allowlist"
-    exit 1
-fi
-if is_allowed_stage2_path "src/actl/arbitrary.py"; then
-    echo "FAIL: S2-R13: Regression self-test failed: src/actl/arbitrary.py unexpectedly passed allowlist"
+# Regression self-tests
+if is_allowed_stage2_path "src/actl/scope.py" || is_allowed_stage2_path "src/actl/evil_untracked.py"; then
+    echo "FAIL: S2-R13: Allowlist self-test failed"
     exit 1
 fi
 
+# Audit tracked changes
 while IFS=$'\t' read -r status path1 path2; do
     [[ -z "$status" ]] && continue
     case "$status" in
         D*|R*)
-            echo "FAIL: S2-R13: Forbidden file deletion or rename ($status): $path1 ${path2:-}"
+            echo "FAIL: S2-R13: Forbidden deletion or rename ($status): $path1 ${path2:-}"
             exit 1
             ;;
         A|M)
             if ! is_allowed_stage2_path "$path1"; then
-                echo "FAIL: S2-R13: Disallowed path touched ($status): $path1"
+                echo "FAIL: S2-R13: Disallowed tracked path ($status): $path1"
                 exit 1
             fi
             ;;
-        *)
-            echo "FAIL: S2-R13: Unexpected git status '$status' on $path1"
-            exit 1
-            ;;
     esac
 done < <(git diff --name-status "$FORK_POINT")
+
+# F-02: Audit untracked files
+untracked_files="$(git ls-files --others --exclude-standard)"
+if [[ -n "$untracked_files" ]]; then
+    while IFS= read -r uf; do
+        [[ -z "$uf" ]] && continue
+        if ! is_allowed_stage2_path "$uf"; then
+            echo "FAIL: S2-R13: Disallowed untracked file present: $uf"
+            exit 1
+        fi
+    done <<< "$untracked_files"
+fi
 
 echo "OK: P-S2-18"

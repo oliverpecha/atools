@@ -222,3 +222,46 @@ def test_p08_amend_fold_replaces_only_named_blocks(
     for rel, want_sha in expected["expect"]["output_hashes"].items():
         got = hashlib.sha256((layout.outbox(TAG, "architect") / rel).read_bytes()).hexdigest()
         assert got == want_sha
+
+def test_p08_amend_immutability_and_replacement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves F-06: amend replaces existing blocks; bundle.* and original response.txt remain byte-identical."""
+    from actl import cli
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+
+    # Step 1: Initial unpack
+    good_resp = GOLDEN_DIR / "responses" / "good_architect_intake.txt"
+    cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(good_resp), "--json"])
+
+    b_txt_sha = hashlib.sha256((turn_dir / "bundle.txt").read_bytes()).hexdigest()
+    b_json_sha = hashlib.sha256((turn_dir / "bundle.json").read_bytes()).hexdigest()
+    r_txt_sha = hashlib.sha256((turn_dir / "response.txt").read_bytes()).hexdigest()
+
+    # Step 2: Amend replacing sprint.toml
+    amend_payload = '<<<FILE path="sprint.toml">>>\nlive_run="none"\nmax_epochs=99\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n'
+    amend_file = tmp_path / "amend.txt"
+    amend_file.write_text(amend_payload, encoding="utf-8")
+
+    cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "--amend", "-f", str(amend_file), "--json"])
+
+    # Output updated
+    assert "max_epochs=99" in (layout.outbox(TAG, "architect") / "sprint.toml").read_text(encoding="utf-8")
+    # Original files byte-identical
+    assert hashlib.sha256((turn_dir / "bundle.txt").read_bytes()).hexdigest() == b_txt_sha
+    assert hashlib.sha256((turn_dir / "bundle.json").read_bytes()).hexdigest() == b_json_sha
+    assert hashlib.sha256((turn_dir / "response.txt").read_bytes()).hexdigest() == r_txt_sha
+
+
+def test_p07_trailing_body_whitespace_preservation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Proves F-08: trailing whitespace on body lines is preserved byte-for-byte in outbox files."""
+    from actl import cli
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+
+    payload = '<<<FILE path="sprint.toml">>>\nlive_run = "none"   \n<<<END_FILE>>>\n<<<END_RESPONSE bundle="1f13e141">>>\n'
+    p = tmp_path / "ws.txt"
+    p.write_text(payload, encoding="utf-8")
+    cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(p), "--json"])
+    assert 'live_run = "none"   \n' in (layout.outbox(TAG, "architect") / "sprint.toml").read_text(encoding="utf-8")

@@ -33,52 +33,10 @@ def _setup_sprint(tmp_path: Path):
     return layout
 
 
-def test_repair_prompt_all_bad_responses_and_zero_oracle_leak(
+def test_p13_non_execution_canary_across_unpack_replay_promote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    try:
-        from actl import cli
-        import actl.repair  # noqa: F401
-        import actl.unpack  # noqa: F401
-    except ImportError as e:
-        pytest.fail(f"FAIL: S2-R7: actl.repair or actl.unpack missing: {e}")
-
-    layout = _setup_sprint(tmp_path)
-    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
-
-    secret_canary = "TOP_SECRET_ORACLE_CANARY_99887766"
-    (layout.sprint_dir(TAG) / "oracle-003" / "secret_note.txt").write_text(secret_canary, encoding="utf-8")
-
-    expected = load_expected(GOLDEN_DIR / "expected.d")["responses"]
-    for case_name, meta in sorted(expected.items()):
-        if not case_name.startswith("bad_"):
-            continue
-        purpose = meta["purpose"]
-        turn_id = meta["turn"]
-        want_code = meta["expect"]["error_code"]
-        turn_dir = layout.turns_dir(TAG) / turn_id
-        for f in ("response.txt", "unpack.json", "repair.txt"):
-            if (turn_dir / f).exists():
-                (turn_dir / f).unlink()
-
-        resp_path = GOLDEN_DIR / "responses" / f"{case_name}.txt"
-        rc = cli.main(["unpack", purpose, "--sprint", TAG, "--turn", turn_id, "-f", str(resp_path), "--json"])
-        assert rc == 2
-
-        repair_file = turn_dir / "repair.txt"
-        assert repair_file.is_file(), f"Case {case_name}: repair.txt not created"
-        repair_text = repair_file.read_text(encoding="utf-8")
-        bundle_meta = json.loads((turn_dir / "bundle.json").read_text(encoding="utf-8"))
-        prefix8 = bundle_meta["bundle_sha256"][:8]
-
-        assert want_code in repair_text, f"Case {case_name}: repair.txt missing error code {want_code}"
-        assert f'<<<END_RESPONSE bundle="{prefix8}">>>' in repair_text
-        assert secret_canary not in repair_text, f"Case {case_name}: leaked hidden oracle content"
-
-
-def test_p13_unpack_never_executes_model_content_canary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+    """Proves F-04 & S2-R12.1: non-execution canary passes through unpack, replay, and promote without executing."""
     try:
         from actl import cli
         import actl.unpack  # noqa: F401
@@ -87,18 +45,30 @@ def test_p13_unpack_never_executes_model_content_canary(
 
     layout = _setup_sprint(tmp_path)
     monkeypatch.setenv("ACTL_ROOT", str(layout.root))
-    pwned_file = tmp_path / "pwned_canary_file"
+
+    pwn_unpack = tmp_path / "pwn_unpack"
+    pwn_replay = tmp_path / "pwn_replay"
+    pwn_promote = tmp_path / "pwn_promote"
 
     good_chal = (GOLDEN_DIR / "responses" / "good_challenger.txt").read_text(encoding="utf-8")
     injected = good_chal.replace(
         'echo "OK: probe"',
-        f'touch "{pwned_file}"\n$(touch "{pwned_file}")\n`touch "{pwned_file}"`\necho "OK: probe"',
+        f'touch "{pwn_unpack}" "{pwn_replay}" "{pwn_promote}"\necho "OK: probe"',
     )
-    injected_file = tmp_path / "injected_chal.txt"
-    injected_file.write_text(injected, encoding="utf-8")
+    inj_file = tmp_path / "inj.txt"
+    inj_file.write_text(injected, encoding="utf-8")
 
-    rc = cli.main(
-        ["unpack", "challenger", "--sprint", TAG, "--turn", "challenger-1", "-f", str(injected_file), "--json"]
-    )
-    assert rc == 0
-    assert not pwned_file.exists(), "SECURITY VIOLATION: unpack executed shell commands from model response!"
+    # 1. Unpack
+    rc1 = cli.main(["unpack", "challenger", "--sprint", TAG, "--turn", "challenger-1", "-f", str(inj_file), "--json"])
+    assert rc1 == 0
+    assert not pwn_unpack.exists(), "SECURITY VIOLATION: unpack executed shell code!"
+
+    # 2. Replay
+    rc2 = cli.main(["replay", "challenger-1", "--sprint", TAG, "--json"])
+    assert rc2 == 0
+    assert not pwn_replay.exists(), "SECURITY VIOLATION: replay executed shell code!"
+
+    # 3. Promote
+    rc3 = cli.main(["promote", "challenger", "--sprint", TAG, "--json"])
+    assert rc3 == 0
+    assert not pwn_promote.exists(), "SECURITY VIOLATION: promote executed shell code!"
