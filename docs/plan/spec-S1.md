@@ -217,6 +217,7 @@ PB-9: Owner-APPROVED 2026-10-27 as a recorded deviation (Grok author + Grok impl
   4. `os.unlink` of the original session `.log`
   5. `os.unlink` of the original session `.exit`
   An implementation that writes the destination and unlinks originals without those fsyncs MUST fail `P-S1-24`. If writing `verification-{seq:03d}.json` fails or raises an exception at any persistence boundary, `src_log` and `src_exit` MUST remain on disk untouched.
+  Residual (NEW-05): a same-UID actor can swap the replace-source path between `lstat`/read and `os.replace` (path-identity race). Core plan section 3, one uid, Invariant P; `P-S0-02` and Owner `git diff --name-only <start>..HEAD` are compensating controls. `P-S1-24` does not close this race.
 
 ### S1-R16 Additive-Change, PB-2 Immutability, and Deliverables Allowlist
 - S1-R16.1 Baseline commit: `4e16cc3` (`PB-2` immutability baseline).
