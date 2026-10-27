@@ -12,6 +12,7 @@ for t in bash python3 git pytest; do
 done
 
 export ACTL_REPO="$REPO_DIR" PYTHONDONTWRITEBYTECODE=1
+export NO_NETWORK=1
 ACTL_ROOT="$(mktemp -d /tmp/actl-s1.XXXXXX)"; export ACTL_ROOT
 trap 'rm -rf "$ACTL_ROOT"' EXIT
 
@@ -20,7 +21,7 @@ selected() {
   local s
   IFS=, read -ra _o <<<"$ONLY"
   for s in "${_o[@]}"; do
-    [[ "$1" == *"$s"* ]] && return 0
+    [[ -n "$s" && "$1" == *"$s"* ]] && return 0
   done
   return 1
 }
@@ -34,7 +35,7 @@ run_check() {
   if (( rc == 0 )); then
     echo "[PASS]"
     PASS=$((PASS+1))
-  elif (( rc == 4 )); then
+  elif (( rc == 4 )) || grep -q 'ENVFAIL:' "$log" 2>/dev/null; then
     echo "[ENV] (see $log)"
     ENVERR=$((ENVERR+1))
     sed -n '1,2p' "$log" | sed 's/^/    /'
@@ -45,17 +46,20 @@ run_check() {
   fi
 }
 
-# 1. Execute Stage 1 pytest suites (GD-02, GD-03)
 run_pytest() {
   local name="$1"
   local test_file="$2"
   selected "$name" || return 0
   local log="proof/out/${name}.log" rc
   echo -n "Running ${name}... "
-  pytest "$test_file" -q -rf > "$log" 2>&1; rc=$?
+  PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}" pytest "$test_file" -q -rf > "$log" 2>&1; rc=$?
   if (( rc == 0 )); then
     echo "[PASS]"
     PASS=$((PASS+1))
+  elif (( rc == 4 )) || grep -q 'ENVFAIL:' "$log" 2>/dev/null; then
+    echo "[ENV] (see $log)"
+    ENVERR=$((ENVERR+1))
+    grep -m2 'ENVFAIL:' "$log" | sed 's/^/    /' || sed -n '1,2p' "$log" | sed 's/^/    /'
   else
     echo "[FAIL] (see $log)"
     FAIL=$((FAIL+1))
@@ -68,7 +72,6 @@ run_pytest "pytest_guards_s1"      "test/actl/test_guards_s1.py"
 run_pytest "pytest_session_s1"     "test/actl/test_session_s1.py"
 run_pytest "pytest_next_phase3"    "test/actl/test_next_phase3.py"
 
-# 2. Execute Stage 1 behavioral proof scripts
 P=proof/stage1
 run_check "P-S1-01_good_patch"             bash $P/P-S1-01.sh
 run_check "P-S1-02_additive_change"        bash $P/P-S1-02.sh
@@ -103,6 +106,10 @@ run_check "P-S1-29_bad_regression_o2"      bash $P/P-S1-29.sh
 echo "=========================================="
 echo "Suite Summary: $PASS Passed, $FAIL Failed, $ENVERR Environment"
 echo "=========================================="
+if (( PASS + FAIL + ENVERR == 0 )); then
+  echo "FAIL: ONLY='${ONLY:-}' matched 0 checks" >&2
+  exit 2
+fi
 (( FAIL == 0 )) || exit 1
 (( ENVERR == 0 )) || exit 4
 exit 0

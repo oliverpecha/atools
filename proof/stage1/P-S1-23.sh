@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
-# P-S1-23: archive_session_log copies raw log and .exit, verifying SHA-256.
+# P-S1-23: archive_session_log copies raw <ATOOLS_LOG_DIR>/<sess>.log and
+# <ATOOLS_SESSION_DIR>/<sess>.exit to runs/logs/impl-{seq:03d}.{log,exit},
+# verifies SHA-256 of both, and leaves source files intact before verify_impl (S1-R15).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -8,9 +10,14 @@ export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p23" "good.patch")"
 
+export ATOOLS_LOG_DIR="${SDIR}/cursor_logs"
+export ATOOLS_SESSION_DIR="${SDIR}/cursor_sessions"
+mkdir -p "$ATOOLS_LOG_DIR" "$ATOOLS_SESSION_DIR"
+
 python3 - "$SDIR" <<'PY'
-import sys
 import hashlib
+import os
+import sys
 from pathlib import Path
 
 sdir = Path(sys.argv[1])
@@ -19,44 +26,50 @@ try:
     from actl.session import archive_session_log
     from actl.layout import Layout
 except ImportError as exc:
-    print(f"FAIL: S1-R15: cannot import actl.session.archive_session_log: {exc}")
+    print(f"FAIL: S1-R15.1: cannot import actl.session.archive_session_log: {exc}")
     sys.exit(1)
 
 layout = Layout(sdir)
 tag = "2026-10-16_public-profiles"
+sess_name = "impl-public-profiles-006"
 
-# Set up mock raw session log and .exit in sprint runs/logs
-raw_logs_dir = sdir / "sprints" / "target-repo" / tag / "runs" / "logs"
-raw_logs_dir.mkdir(parents=True, exist_ok=True)
-sess_name = "test-sess-001"
-raw_log = raw_logs_dir / f"{sess_name}.log"
-raw_data = b"synthetic session log output\nexit line\n"
-raw_log.write_bytes(raw_data)
-expected_sha = hashlib.sha256(raw_data).hexdigest()
+src_log = Path(os.environ["ATOOLS_LOG_DIR"]) / f"{sess_name}.log"
+src_exit = Path(os.environ["ATOOLS_SESSION_DIR"]) / f"{sess_name}.exit"
 
-raw_exit = raw_logs_dir / f"{sess_name}.exit"
-raw_exit.write_text("0\n")
+log_bytes = b"line 1: starting implementer\nline 2: finished\n"
+exit_bytes = b"0\n"
+src_log.write_bytes(log_bytes)
+src_exit.write_bytes(exit_bytes)
 
-try:
-    sha = archive_session_log(layout, tag, 1, sess_name)
-    if sha != expected_sha:
-        print(f"FAIL: S1-R15: Returned archive SHA-256 {sha} != expected {expected_sha}")
-        sys.exit(1)
+expected_log_sha = hashlib.sha256(log_bytes).hexdigest()
+expected_exit_sha = hashlib.sha256(exit_bytes).hexdigest()
 
-    dest_log = raw_logs_dir / "impl-001.log"
-    dest_exit = raw_logs_dir / "impl-001.exit"
-    if not dest_log.exists():
-        print(f"FAIL: S1-R15: Destination archive log does not exist: {dest_log}")
-        sys.exit(1)
-    if not dest_exit.exists():
-        print(f"FAIL: S1-R15: Destination archive exit does not exist: {dest_exit}")
-        sys.exit(1)
+# 1. Missing session returns None
+if archive_session_log(layout, tag, 99, "impl-nonexistent-099") is not None:
+    print("FAIL: S1-R15.1: Expected None when session log does not exist")
+    sys.exit(1)
 
-    actual_dest_sha = hashlib.sha256(dest_log.read_bytes()).hexdigest()
-    if actual_dest_sha != expected_sha:
-        print(f"FAIL: S1-R15: Destination content SHA {actual_dest_sha} != expected {expected_sha}")
-        sys.exit(1)
-except Exception as exc:
-    print(f"FAIL: S1-R15: archive_session_log invocation failed: {exc}")
+# 2. Existing session copies both .log and .exit and returns exact SHA-256 without unlinking sources
+ret_sha = archive_session_log(layout, tag, 6, sess_name)
+if ret_sha != expected_log_sha:
+    print(f"FAIL: S1-R15.1: Returned SHA {ret_sha} != expected {expected_log_sha}")
+    sys.exit(1)
+
+dst_log = layout.logs_dir(tag) / "impl-006.log"
+dst_exit = layout.logs_dir(tag) / "impl-006.exit"
+if not dst_log.is_file() or not dst_exit.is_file():
+    print(f"FAIL: S1-R15.1: Expected archived {dst_log} and {dst_exit} to exist")
+    sys.exit(1)
+
+if hashlib.sha256(dst_log.read_bytes()).hexdigest() != expected_log_sha:
+    print("FAIL: S1-R15.2: Archived .log SHA-256 mismatch")
+    sys.exit(1)
+if hashlib.sha256(dst_exit.read_bytes()).hexdigest() != expected_exit_sha:
+    print("FAIL: S1-R15.2: Archived .exit SHA-256 mismatch")
+    sys.exit(1)
+
+# Source files MUST still exist after archive_session_log (unlink is verify_impl's responsibility)
+if not src_log.is_file() or not src_exit.is_file():
+    print("FAIL: S1-R15.3: archive_session_log prematurely unlinked source .log or .exit")
     sys.exit(1)
 PY

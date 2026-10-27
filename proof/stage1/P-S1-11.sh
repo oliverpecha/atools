@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Authored-by: Gemini 3.1 Pro (Google), model family: Gemini (Serra-S1)
-# P-S1-11: G4 AST analysis rejects hollow tests (pass, ellipsis, docstring only).
+# P-S1-11: G4 AST analysis on thawed test/test_users.py:
+# - accepts valid added async and class-based tests (positive control)
+# - rejects hollow bodies (pass, ..., docstring-only, assert True) and syntax errors (S1-R3.4).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -8,48 +10,86 @@ export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p11" "good.patch")"
 
-# Introduce hollow test into candidate worktree
-cat <<'EOF' >> "${WT}/test/test_public.py"
-
-def test_hollow_pass():
-    """Docstring only."""
-    pass
-
-def test_hollow_ellipsis():
-    ...
-
-def test_hollow_assert_true():
-    assert True
-EOF
-(cd "$WT" && git -c core.hooksPath=/dev/null commit -q -a -m "candidate: add hollow tests")
+TAG="2026-10-16_public-profiles"
+cp "${REPO_DIR}/fixtures/golden/sprint/scope_overrides/bad_testcount.txt" \
+   "${SDIR}/records/target-repo/${TAG}/oracle-003/scope.txt"
 
 python3 - "$SDIR" "$WT" <<'PY'
+import subprocess
 import sys
 from pathlib import Path
 
-sdir = Path(sys.argv[1])
-wt = Path(sys.argv[2])
+sdir, wt = Path(sys.argv[1]), Path(sys.argv[2])
 
 try:
     from actl.verify import check_guards
     from actl.layout import Layout
 except ImportError as exc:
-    print(f"FAIL: S1-R3: cannot import actl.verify.check_guards: {exc}")
+    print(f"FAIL: S1-R3.4: cannot import actl.verify.check_guards: {exc}")
     sys.exit(1)
 
 layout = Layout(sdir)
 tag = "2026-10-16_public-profiles"
+test_file = wt / "test" / "test_users.py"
+orig_content = test_file.read_text(encoding="utf-8")
 
-try:
-    results = check_guards(layout, tag, wt)
-    g4 = next((r for r in results if r.id == "G4"), None)
-    if not g4 or g4.exit_code != 1:
-        print("FAIL: S1-R3: G4 did not fail as expected on hollow test body")
-        sys.exit(1)
-    if "hollow" not in (g4.failing_line or "").lower() and "count" not in (g4.failing_line or "").lower():
-        print(f"FAIL: S1-R3: G4 failing_line missing expected rejection text: {g4.failing_line}")
-        sys.exit(1)
-except Exception as exc:
-    print(f"FAIL: S1-R3: check_guards invocation failed: {exc}")
+
+def commit_test_content(new_text: str, msg: str) -> None:
+    test_file.write_text(new_text, encoding="utf-8")
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null",
+        "GIT_AUTHOR_NAME": "Cand",
+        "GIT_AUTHOR_EMAIL": "c@example.test",
+        "GIT_AUTHOR_DATE": "2026-01-02T00:00:00+0000",
+        "GIT_COMMITTER_NAME": "Cand",
+        "GIT_COMMITTER_EMAIL": "c@example.test",
+        "GIT_COMMITTER_DATE": "2026-01-02T00:00:00+0000",
+    }
+    subprocess.run(
+        ["git", "-c", "core.hooksPath=/dev/null", "add", "test/test_users.py"],
+        cwd=wt, env=env, check=True,
+    )
+    subprocess.run(
+        ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "-q", "-m", msg],
+        cwd=wt, env=env, check=True,
+    )
+
+
+# 1. Positive control: adding a real async test and a real class method test passes G4
+valid_addition = orig_content + """
+
+class TestExtraSuite:
+    def test_class_method_real(self):
+        val = 2 + 2
+        assert val == 4
+
+async def test_async_real():
+    res = "ok"
+    assert res == "ok"
+"""
+commit_test_content(valid_addition, "feat(actl): add valid class and async tests (WI-S1-TEST)")
+res_ok = check_guards(layout, tag, wt)
+g4_ok = next((r for r in res_ok if r.id == "G4"), None)
+if g4_ok is None or g4_ok.exit_code != 0:
+    print(f"FAIL: S1-R3.4: Valid class/async test additions should pass G4, got {g4_ok}")
     sys.exit(1)
+
+# 2. Negative controls: each hollow variant and syntax error must fail G4
+bad_variants = [
+    ("pass_body", orig_content + "\ndef test_hollow_pass():\n    pass\n"),
+    ("ellipsis_body", orig_content + "\ndef test_hollow_ellipsis():\n    ...\n"),
+    ("docstring_only", orig_content + '\ndef test_hollow_doc():\n    """only doc"""\n'),
+    ("assert_true", orig_content + "\ndef test_hollow_assert_true():\n    assert True\n"),
+    ("syntax_error", orig_content + "\ndef test_broken(:\n"),
+]
+
+for label, body in bad_variants:
+    commit_test_content(body, f"feat(actl): test variant {label} (WI-S1-TEST)")
+    res = check_guards(layout, tag, wt)
+    g4 = next((r for r in res if r.id == "G4"), None)
+    if g4 is None or g4.exit_code != 1:
+        print(f"FAIL: S1-R3.4: G4 failed to reject {label}: {g4}")
+        sys.exit(1)
 PY

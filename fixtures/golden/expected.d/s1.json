@@ -51,7 +51,7 @@
         "step": "G1",
         "exit": 3,
         "failing_step": "G1",
-        "failing_line_contains": "Oracle manifest digest mismatch"
+        "failing_line_contains": "integrity_mismatch"
       }
     },
     "tripwire_strict": {

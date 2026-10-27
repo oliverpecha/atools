@@ -6,127 +6,139 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 import pytest
+
+from test_verify_s1 import TAG, _setup_golden_sandbox
 
 
 def test_phase3_rule_discovered_and_priority() -> None:
-    """S1-R12.1: src/actl/next_rules/phase3.py exists and exports PRIORITY=30."""
+    """S1-R12.1: src/actl/next_rules/phase3.py exists and exports PRIORITY=30 and evaluate()."""
     try:
         import actl.next_rules.phase3 as p3
     except ImportError as exc:
         pytest.fail(f"FAIL: S1-R12: actl.next_rules.phase3 missing: {exc}")
 
-    assert getattr(p3, "PRIORITY", None) == 30, "FAIL: S1-R12: PRIORITY must be 30"
-    assert hasattr(p3, "evaluate"), "FAIL: S1-R12: evaluate() function missing"
+    assert getattr(p3, "PRIORITY", None) == 30
+    assert callable(getattr(p3, "evaluate", None))
 
 
 def test_phase3_stage_applicability_entry_guard(tmp_path: Path) -> None:
-    """S1-R12.2: Non-implementer stages fall through immediately (returns None)."""
+    """S1-R12.2: Non-implementer stages return None on a schema-valid sprint state."""
     try:
         from actl.layout import Layout
+        from actl.seq import update_state
         import actl.next_rules.phase3 as p3
-    except ImportError:
-        pytest.fail("FAIL: S1-R12: phase3 module missing")
+    except ImportError as exc:
+        pytest.fail(f"FAIL: S1-R12: phase3 module missing: {exc}")
 
-    layout = Layout(tmp_path / "root")
-    tag = "2026-10-16_test"
-    state_file = layout.runs(tag) / "state.json"
-    state_file.parent.mkdir(parents=True, exist_ok=True)
+    sdir, _wt = _setup_golden_sandbox(tmp_path, None)
+    layout = Layout(sdir)
 
-    for other_stage in ["curator", "oracle", "live", "audit"]:
-        state_file.write_text(json.dumps({"active_stage": other_stage, "status": "running"}))
-        res = p3.evaluate(layout, tag)
-        assert res is None, f"FAIL: S1-R12.2: Stage {other_stage} must return None, got {res}"
+    for other_stage in ("intake", "oracle", "live", "curator", "closeout", None):
+        update_state(layout, TAG, {"active_stage": other_stage, "status": "running"})
+        assert p3.evaluate(layout, TAG) is None
 
 
-def test_phase3_unverified_blocked_closure_enters_verification(tmp_path: Path) -> None:
-    """S1-R12.3: Unverified closure with reason='blocked' enters verification first, NOT hold_owner."""
+def test_phase3_unverified_vs_verified_blocked_closure(tmp_path: Path) -> None:
+    """S1-R12.3, S1A-10: Unverified blocked closure enters verify first; confirmed blocked_check verification triggers hold_owner."""
     try:
         from actl.layout import Layout
-        import actl.next_rules.phase3 as p3
-    except ImportError:
-        pytest.fail("FAIL: S1-R12: phase3 module missing")
+        from actl.next import decide_next
+        from actl.seq import update_state
+    except ImportError as exc:
+        pytest.fail(f"FAIL: S1-R12: phase3 module missing: {exc}")
 
-    layout = Layout(tmp_path / "root")
-    tag = "2026-10-16_test"
+    sdir, _wt = _setup_golden_sandbox(tmp_path, None)
+    layout = Layout(sdir)
+    update_state(layout, TAG, {"active_stage": "implementer", "status": "running"})
 
-    outbox = layout.outbox(tag, "implementer")
+    outbox = layout.outbox(TAG, "implementer")
     outbox.mkdir(parents=True, exist_ok=True)
-    (outbox / "closure.json").write_text(json.dumps({
-        "schema_version": 1,
-        "sprint_tag": tag,
-        "attempt_seq": 1,
+    closure_path = outbox / "closure.json"
+    closure_path.write_text(json.dumps({
         "reason": "blocked",
-        "notes": "cannot reproduce",
+        "blocking_step": "O1:01_public.sh",
+        "notes": ["cannot satisfy R1"],
         "backlog": ["issue-1"],
-        "blocking_step": "O1:02.sh"
-    }))
+        "solution_key_divergence": {"requirement_id": "R1", "rationale": "schema locked"},
+    }), encoding="utf-8")
 
-    res = p3.evaluate(layout, tag)
-    assert res is not None, "FAIL: S1-R12.3: Expected rule action for unverified closure"
-    assert res.get("action") == "verify", f"FAIL: S1-R12.3: Unverified blocked closure must trigger verify, got: {res.get('action')}"
-    assert "--closure" in res.get("command", ""), "FAIL: S1-R12.3: Command must specify --closure"
+    # 1. Unverified blocked closure in outbox -> action == 'verify' with --closure
+    res_unverified = decide_next(layout, TAG)
+    assert res_unverified["action"] == "verify"
+    assert "--closure" in res_unverified["command"]
 
-
-def test_phase3_verified_blocked_closure_triggers_hold_owner(tmp_path: Path) -> None:
-    """S1-R12.3: Verified blocked closure (with confirmed blocking failure) triggers hold_owner."""
-    try:
-        from actl.layout import Layout
-        import actl.next_rules.phase3 as p3
-    except ImportError:
-        pytest.fail("FAIL: S1-R12: phase3 module missing")
-
-    layout = Layout(tmp_path / "root")
-    tag = "2026-10-16_test"
-
-    runs = layout.runs(tag)
-    runs.mkdir(parents=True, exist_ok=True)
-    (runs / "verification-001.json").write_text(json.dumps({
-        "schema_version": 1,
-        "id": "verification-001",
-        "sprint_tag": tag,
-        "seq": 1,
-        "parent": "closure-001.json",
+    # 2. After verification confirms blocked_check (stage == 'blocked_check', failing_step != 'G2') -> hold_owner
+    closure_path.unlink()
+    runs = layout.runs_dir(TAG)
+    (runs / "closure-006.json").write_text(json.dumps({
+        "kind": "closure",
+        "seq": 6,
+        "parent": "contract-005.json",
+        "reason": "blocked",
+        "blocking_step": "O1:01_public.sh",
+        "notes": ["cannot satisfy R1"],
+        "backlog": ["issue-1"],
+        "solution_key_divergence": {"requirement_id": "R1", "rationale": "schema locked"},
+    }), encoding="utf-8")
+    (runs / "verification-007.json").write_text(json.dumps({
+        "kind": "verification",
+        "seq": 7,
+        "parent": "closure-006.json",
+        "id": "verification-007",
+        "stage": "blocked_check",
+        "oracle": "oracle-003",
+        "contract": "contract-005",
+        "head": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
         "exit_code": 1,
-        "failing_step": "O1:02.sh",
-        "blocked_confirmed": True
-    }))
+        "steps": [],
+        "failing_step": "O1:01_public.sh",
+        "failing_line": "FAIL: public profile",
+        "tripwires": [],
+        "halt": None,
+        "session": None,
+    }), encoding="utf-8")
 
-    res = p3.evaluate(layout, tag)
-    assert res is not None and res.get("action") == "hold_owner", f"FAIL: S1-R12.3: Verified blocked must trigger hold_owner, got: {res}"
+    res_verified = decide_next(layout, TAG)
+    assert res_verified["action"] == "hold_owner"
+    assert res_verified["command"] == ""
 
 
 def test_phase3_attempt_exhaustion_and_grants(tmp_path: Path) -> None:
-    """S1-R12.3: Red verification triggers escalate_attempts on 0 grants, dispatch on >0 grants."""
+    """S1-R12.3: Red verification triggers escalate_attempts when attempts >= max_attempts + grants, and dispatch when grants > 0."""
     try:
         from actl.layout import Layout
-        import actl.next_rules.phase3 as p3
-    except ImportError:
-        pytest.fail("FAIL: S1-R12: phase3 module missing")
+        from actl.next import decide_next
+        from actl.seq import update_state
+    except ImportError as exc:
+        pytest.fail(f"FAIL: S1-R12: phase3 module missing: {exc}")
 
-    layout = Layout(tmp_path / "root")
-    tag = "2026-10-16_test"
-    runs = layout.runs(tag)
-    runs.mkdir(parents=True, exist_ok=True)
-    state_file = runs / "state.json"
+    sdir, _wt = _setup_golden_sandbox(tmp_path, None)
+    layout = Layout(sdir)
+    runs = layout.runs_dir(TAG)
+    (runs / "verification-007.json").write_text(json.dumps({
+        "kind": "verification",
+        "seq": 7,
+        "parent": "closure-006.json",
+        "id": "verification-007",
+        "stage": "offline",
+        "oracle": "oracle-003",
+        "contract": "contract-005",
+        "head": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+        "exit_code": 1,
+        "steps": [],
+        "failing_step": "G3",
+        "failing_line": "Scope violation",
+        "tripwires": [],
+        "halt": None,
+        "session": None,
+    }), encoding="utf-8")
 
-    state_file.write_text(json.dumps({
-        "active_stage": "implementer",
-        "status": "running",
-        "attempts": {"implementer": 3},
-        "grants": {"implementer": 0}
-    }))
-    (runs / "verification-001.json").write_text(json.dumps({"exit_code": 1, "seq": 1}))
+    update_state(layout, TAG, {"active_stage": "implementer", "status": "running", "attempts": {"implementer": 2}, "grants": {"implementer": 0}})
+    assert decide_next(layout, TAG)["action"] == "escalate_attempts"
 
-    res_esc = p3.evaluate(layout, tag)
-    assert res_esc is not None and res_esc.get("action") == "escalate_attempts", f"Expected escalate_attempts, got {res_esc}"
-
-    state_file.write_text(json.dumps({
-        "active_stage": "implementer",
-        "status": "running",
-        "attempts": {"implementer": 3},
-        "grants": {"implementer": 1}
-    }))
-    res_disp = p3.evaluate(layout, tag)
-    assert res_disp is not None and res_disp.get("action") == "dispatch", f"Expected dispatch, got {res_disp}"
-
+    update_state(layout, TAG, {"attempts": {"implementer": 2}, "grants": {"implementer": 1}})
+    res_disp = decide_next(layout, TAG)
+    assert res_disp["action"] == "dispatch"
+    assert f"actl dispatch-impl --sprint {TAG}" in res_disp["command"]
