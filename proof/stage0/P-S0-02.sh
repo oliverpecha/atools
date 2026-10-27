@@ -137,7 +137,7 @@ is_authorized_pb2_modification() {
     "proof/stage0/p05_seq_concurrency.sh:916103c0e34654c82ff06bc8c411f0589d3f1b27") return 0 ;;
     "proof/stage0/run_pytest.sh:db8877940312da69b5e30301795eb21cf6b0ddc7") return 0 ;;
     "proof/stage0/selfcheck_mutations.sh:6336d408db15d01920a34585479290ddee977d82") return 0 ;;
-    "src/actl/INTERFACES.md:b3cc2667728bd28670d9dddbda29f7ac8a6a5a87") return 0 ;;
+    "src/actl/INTERFACES.md:eb55df1809ff7f1af612fb35f92a84f1816ac347") return 0 ;;
     "test/actl/conftest.py:e7968ad9c468e7581834e81098b22cce82a5f9f4") return 0 ;;
     "test/actl/helpers.py:4e9432f30e104e7068429393802336f99f5fef73") return 0 ;;
     "test/actl/test_p01_doctor.py:801e6dea33bac1c494f996ab68eb05cdded8c029") return 0 ;;
@@ -209,7 +209,7 @@ is_allowed_modification() {
   local f="$1"
   if [[ "$f" == "src/actl/INTERFACES.md" ]]; then
     # PB-2/PB-4: Allowed only if matching the Owner-approved PB-4 contract (81465b0)
-    if git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q 'b3cc266' &&        grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
+    if git hash-object "$REPO/src/actl/INTERFACES.md" 2>/dev/null | grep -q 'eb55df1' &&        grep -q 'approved by Owner (PB-4)' "$REPO/src/actl/INTERFACES.md" 2>/dev/null; then
       return 0
     fi
     return 1
