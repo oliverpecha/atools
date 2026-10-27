@@ -60,12 +60,15 @@ class Tracer:
         path = fd_path(fd)
         size = -1
         blob = b""
+        inode = (None, None)
         try:
-            size = int(os.fstat(fd).st_size)
+            st = os.fstat(fd)
+            size = int(st.st_size)
+            inode = (st.st_dev, st.st_ino)
         except OSError:
             pass
         blob = fd_bytes_at_fsync(fd)
-        self.events.append(("fsync", path, size, blob))
+        self.events.append(("fsync", path, size, blob, inode))
         return self.real_fsync(fd)
 
     def replace(self, src, dst):
@@ -74,7 +77,14 @@ class Tracer:
             artifact = Path(src_s).read_bytes()
         except OSError:
             artifact = b""
-        self.events.append(("replace", src_s, dst_s, artifact))
+        # Identity of the inode the kernel will rename (stat BEFORE rename).
+        inode = (None, None)
+        try:
+            st = os.stat(src_s)
+            inode = (st.st_dev, st.st_ino)
+        except OSError:
+            pass
+        self.events.append(("replace", src_s, dst_s, artifact, inode))
         return self.real_replace(src_s, dst_s)
 
     def unlink(self, path):
@@ -95,16 +105,23 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         k = ev[0]
         if k == "replace":
             abs_events.append(
-                ("replace", os.path.realpath(ev[1]), os.path.abspath(ev[2]), ev[3] if len(ev) > 3 else b"")
+                (
+                    "replace",
+                    os.path.realpath(ev[1]),
+                    os.path.abspath(ev[2]),
+                    ev[3] if len(ev) > 3 else b"",
+                    ev[4] if len(ev) > 4 else (None, None),
+                )
             )
         elif k == "fsync":
             p = ev[1]
             size = ev[2] if len(ev) > 2 else -1
             blob = ev[3] if len(ev) > 3 else b""
+            inode = ev[4] if len(ev) > 4 else (None, None)
             if str(p).startswith("fd:"):
-                abs_events.append((k, p, size, blob))
+                abs_events.append((k, p, size, blob, inode))
             else:
-                abs_events.append((k, os.path.realpath(p), size, blob))
+                abs_events.append((k, os.path.realpath(p), size, blob, inode))
         else:
             p = ev[1]
             abs_events.append((k, os.path.abspath(p) if not str(p).startswith("fd:") else p))
@@ -119,6 +136,7 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
     rep = abs_events[ri]
     observed_src = rep[1]
     artifact = rep[3]
+    replace_inode = rep[4] if len(rep) > 4 else (None, None)
     if replace_src_abs is None:
         replace_src_abs = observed_src
     if replace_src_abs is None:
@@ -141,8 +159,14 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             continue
         saw_temp_fsync = True
         size, blob = e[2], e[3]
-        # Final content must already be present at temp fsync (reject fsync-before-write).
-        if blob == artifact or (size >= 0 and size == len(artifact) and blob == artifact):
+        fsync_inode = e[4] if len(e) > 4 else (None, None)
+        # Final content + same inode the kernel will rename (reject inode-swap).
+        if (
+            blob == artifact
+            and fsync_inode == replace_inode
+            and fsync_inode[0] is not None
+            and fsync_inode[1] is not None
+        ):
             matching_temp_fsync = True
     if not saw_temp_fsync:
         raise AssertionError(
@@ -150,8 +174,8 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         )
     if not matching_temp_fsync:
         raise AssertionError(
-            "fsync-before-write / fsync empty then write: temp fsync bytes "
-            f"do not match artifact at replace (len={len(artifact)})"
+            "fsync-before-write / fsync empty / different inode: temp fsync bytes "
+            f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
         )
 
     post = abs_events[ri + 1 :]
@@ -380,6 +404,38 @@ with tempfile.TemporaryDirectory() as td:
 
     expect_reject("unlink-before-replace / unlink before counterfeit", deg_unlink_before_replace)
 
+    # 8) inode-swap: fsync inode A, unlink path (hold A via hardlink so B != A),
+    # recreate inode B at same path with same bytes, do not fsync B, replace dest with B.
+    def deg_inode_swap():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        hold = td / "verification-006.json.tmp.hold"  # keeps inode A allocated
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                os.fsync(f.fileno())  # fsync inode A
+            os.link(str(tmp), str(hold))
+            os.unlink(str(tmp))
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                # deliberately no fsync of inode B
+            os.replace(str(tmp), str(dest))
+            dir_fsync()
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+            if hold.exists():
+                hold.unlink()
+
+    expect_reject("inode-swap / different inode counterfeit", deg_inode_swap)
+    print("OK inode-swap rejected")
+
     # 7) replace in finally after failed fsync
     reset_sess(td, dest, src_log, src_exit)
     tmp_deg = td / "verification-006.json.tmpdeg"
@@ -559,11 +615,14 @@ def is_verification_temp(path: str) -> bool:
 
 def spy_fsync(fd):
     size = -1
+    inode = (None, None)
     try:
-        size = int(os.fstat(fd).st_size)
+        st = os.fstat(fd)
+        size = int(st.st_size)
+        inode = (st.st_dev, st.st_ino)
     except OSError:
         pass
-    events.append(("fsync", fd_path(fd), size, fd_bytes_at_fsync(fd)))
+    events.append(("fsync", fd_path(fd), size, fd_bytes_at_fsync(fd), inode))
     return real_fsync(fd)
 
 
@@ -575,7 +634,13 @@ def spy_replace(src, dst):
             artifact = Path(src_s).read_bytes()
         except OSError:
             artifact = b""
-        events.append(("replace", src_s, dst_s, artifact))
+        inode = (None, None)
+        try:
+            st = os.stat(src_s)  # BEFORE rename: inode the kernel will rename
+            inode = (st.st_dev, st.st_ino)
+        except OSError:
+            pass
+        events.append(("replace", src_s, dst_s, artifact, inode))
     return real_replace(src_s, dst_s)
 
 
@@ -585,7 +650,7 @@ def spy_unlink(path):
 
 
 def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
-    """Same oracle as Block 1: blob==artifact; non-verification pre-fsync ignored."""
+    """Same oracle as Block 1: blob==artifact + st_dev/st_ino; non-verification pre-fsync ignored."""
     dest = os.path.abspath(str(dest))
     src_log = os.path.abspath(str(src_log))
     src_exit = os.path.abspath(str(src_exit))
@@ -597,16 +662,23 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         k = ev[0]
         if k == "replace":
             abs_events.append(
-                ("replace", os.path.realpath(ev[1]), os.path.abspath(ev[2]), ev[3] if len(ev) > 3 else b"")
+                (
+                    "replace",
+                    os.path.realpath(ev[1]),
+                    os.path.abspath(ev[2]),
+                    ev[3] if len(ev) > 3 else b"",
+                    ev[4] if len(ev) > 4 else (None, None),
+                )
             )
         elif k == "fsync":
             p = ev[1]
             size = ev[2] if len(ev) > 2 else -1
             blob = ev[3] if len(ev) > 3 else b""
+            inode = ev[4] if len(ev) > 4 else (None, None)
             if str(p).startswith("fd:"):
-                abs_events.append((k, p, size, blob))
+                abs_events.append((k, p, size, blob, inode))
             else:
-                abs_events.append((k, os.path.realpath(p), size, blob))
+                abs_events.append((k, os.path.realpath(p), size, blob, inode))
         else:
             p = ev[1]
             abs_events.append((k, os.path.abspath(p) if not str(p).startswith("fd:") else p))
@@ -621,6 +693,7 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
     rep = abs_events[ri]
     observed_src = rep[1]
     artifact = rep[3]
+    replace_inode = rep[4] if len(rep) > 4 else (None, None)
     if replace_src_abs is None:
         replace_src_abs = observed_src
     if replace_src_abs is None:
@@ -642,7 +715,13 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             continue
         saw_temp_fsync = True
         size, blob = e[2], e[3]
-        if blob == artifact or (size >= 0 and size == len(artifact) and blob == artifact):
+        fsync_inode = e[4] if len(e) > 4 else (None, None)
+        if (
+            blob == artifact
+            and fsync_inode == replace_inode
+            and fsync_inode[0] is not None
+            and fsync_inode[1] is not None
+        ):
             matching_temp_fsync = True
     if not saw_temp_fsync:
         raise AssertionError(
@@ -650,8 +729,8 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         )
     if not matching_temp_fsync:
         raise AssertionError(
-            "fsync-before-write / fsync empty then write: temp fsync bytes "
-            f"do not match artifact at replace (len={len(artifact)})"
+            "fsync-before-write / fsync empty / different inode: temp fsync bytes "
+            f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
         )
 
     post = abs_events[ri + 1 :]

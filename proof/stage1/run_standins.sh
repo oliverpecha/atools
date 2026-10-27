@@ -167,12 +167,12 @@ prepare_overlay() {
 }
 
 classify_log() {
-  # Fail-closed order (NEW-01 + R7/R8):
+  # Fail-closed order (NEW-01 + R7/R8 + GD-01):
   # rc==0 and FAIL: line -> INCONSISTENT (counted as OTHER, not PASS);
   # rc==0 else PASS; rc==4 ENV;
-  # SETUP (fixture_s1 / sandbox setup failed / FAIL: fixture);
+  # SETUP only when a FAIL: line itself is a fixture helper failure (^FAIL: fixture);
   # IMPORT (cannot import / No module named);
-  # ASSERT only on explicit FAIL: S1-R / FAIL: S1A- markers that are not SETUP;
+  # ASSERT on explicit FAIL: S1-R / FAIL: S1A- (not SETUP; no fixture_s1 substring trap);
   # unrecognized FAIL: -> OTHER.
   # Matrix reason for rc!=0 uses the LAST FAIL: line (never an OK: line).
   local log="$1" rc="$2"
@@ -194,10 +194,8 @@ classify_log() {
     echo OTHER
     return
   fi
-  if [[ "$fail_line" == *"fixture_s1"* ]] \
-    || [[ "$fail_line" == *"sandbox setup failed"* ]] \
-    || [[ "$fail_line" == FAIL:\ fixture* ]] \
-    || grep -q 'FAIL: fixture_s1:' "$log" 2>/dev/null; then
+  # GD-01: anchored fixture helper only; do not match fixture_s1 substring on S1-R lines.
+  if grep -qE '^FAIL: fixture' "$log" 2>/dev/null; then
     echo SETUP
     return
   fi
@@ -212,14 +210,22 @@ classify_log() {
   echo OTHER
 }
 
-# --selftest: SETUP for sandbox-setup; INCONSISTENT for rc==0+FAIL; reason=last FAIL:.
+# --selftest: GPT one-liner ASSERT; FAIL: fixture_s1: SETUP; INCONSISTENT; last FAIL:.
 if [[ "${1:-}" == "--selftest" ]]; then
   _st_log="$(mktemp)"
-  printf '%s\n' 'FAIL: S1-R15.3: sandbox setup failed' >"$_st_log"
+  # GPT R9 GD-01: S1-R assertion that mentions fixture_s1 as a literal must be ASSERT.
+  printf '%s\n' 'FAIL: S1-R10.1: assertion failed for transcript containing the literal string "FAIL: fixture_s1:"' >"$_st_log"
+  _st_cls="$(classify_log "$_st_log" 1)"
+  if [[ "$_st_cls" != "ASSERT" ]]; then
+    rm -f "$_st_log"
+    echo "FAIL: --selftest expected ASSERT for GPT S1-R10.1 fixture_s1 substring, got ${_st_cls}"
+    exit 1
+  fi
+  printf '%s\n' 'FAIL: fixture_s1: contract-005.json missing' >"$_st_log"
   _st_cls="$(classify_log "$_st_log" 1)"
   if [[ "$_st_cls" != "SETUP" ]]; then
     rm -f "$_st_log"
-    echo "FAIL: --selftest expected SETUP for 'FAIL: S1-R15.3: sandbox setup failed', got ${_st_cls}"
+    echo "FAIL: --selftest expected SETUP for 'FAIL: fixture_s1: ...', got ${_st_cls}"
     exit 1
   fi
   printf '%s\n' 'OK: intermediate' 'FAIL: S1-R99: bogey' 'OK: should-not-win' >"$_st_log"
@@ -236,7 +242,7 @@ if [[ "${1:-}" == "--selftest" ]]; then
     echo "FAIL: --selftest expected last FAIL: reason, got ${_st_reason}"
     exit 1
   fi
-  echo "OK: run_standins --selftest classify_log SETUP + INCONSISTENT + last FAIL: reason"
+  echo "OK: run_standins --selftest classify_log ASSERT GPT one-liner + SETUP fixture + INCONSISTENT + last FAIL: reason"
   exit 0
 fi
 
