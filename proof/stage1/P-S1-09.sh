@@ -5,7 +5,9 @@
 # sets state.status="hold", and consumes 0 implementer attempts (S1-R3.1, S1-R2.2).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p09" "good.patch")"

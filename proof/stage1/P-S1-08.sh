@@ -5,12 +5,15 @@
 # and verify_impl to halt with selftest_failed (GD-01 fix: no TypeError swallow).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p08" "good.patch")"
 
 python3 - "$REPO_DIR" "$SDIR" "$WT" <<'PY'
+import os
 import shutil
 import subprocess
 import sys
@@ -74,7 +77,7 @@ if ver.get("exit_code") is not None or ver.get("halt") != {"reason": "selftest_f
 """
 proc = subprocess.run(
     [sys.executable, "-c", check_code, str(sdir), str(wt)],
-    env={"PYTHONPATH": str(scratch_repo / "src"), "PATH": "/usr/bin:/bin"},
+    env={**os.environ, "PATH": "/usr/bin:/bin", "PYTHONPATH": os.environ.get("PYTHONPATH", "") + ":" + str(scratch_repo / "src")},
     capture_output=True,
     text=True,
 )

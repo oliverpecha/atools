@@ -4,7 +4,9 @@
 # verify-impl, selftest, and wait, plus S1-R13 determinism verification (GD-01 fix).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR_OK WT_OK <<< "$(create_stage1_sandbox "p28_ok" "good.patch")"
@@ -128,7 +130,7 @@ if (repo_root / "config").is_dir():
 (scratch / "config" / "forbidden.toml").write_text("[[rules]]\n", encoding="utf-8")
 st = subprocess.run(
     [sys.executable, "-c", "from actl.cli import main; raise SystemExit(main(['selftest']))"],
-    env={**os.environ, "PYTHONPATH": str(scratch / "src")},
+    env={**os.environ, "PYTHONPATH": os.environ.get("PYTHONPATH", "") + ":" + str(scratch / "src")},
     capture_output=True, text=True,
 )
 if st.returncode != 3:

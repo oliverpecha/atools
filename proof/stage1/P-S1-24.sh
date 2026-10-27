@@ -6,7 +6,9 @@
 # A no-fsync and an unrelated-fsync counterfeit MUST fail this oracle (S1-R15.2).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 # Control self-check first: reject no-fsync and unrelated-fsync counterfeits without importing actl.
 python3 - <<'PY'

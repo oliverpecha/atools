@@ -5,7 +5,9 @@
 # state.hard_caps_tripped; contrasts with normal exit 0 session (GD-03 fix).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 command -v tmux >/dev/null 2>&1 || { echo "FAIL: tmux not installed (environment error)"; exit 4; }
 

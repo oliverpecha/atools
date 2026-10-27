@@ -184,27 +184,52 @@ MATRIX="${OUT_DIR}/matrix.tsv"
 printf 'standin\tproof\trc\tclass\treason\n' > "$MATRIX"
 
 # Expected behavioral class per stand-in (not merely rc != 0).
-# empty_module -> IMPORT; always_*_stub -> ASSERT (0 IMPORT/SETUP/ENV/PASS/OTHER).
-expected_class_for() {
-  case "$1" in
-    empty_module) echo IMPORT ;;
-    always_pass_stub|always_fail_stub) echo ASSERT ;;
-    *) echo ASSERT ;;
-  esac
+# empty_module -> IMPORT or ASSERT (not PASS); always_*_stub -> ASSERT
+# (0 IMPORT). Do not compare class to the literal string IMPORT_OR_ASSERT.
+print_matrix_class_counts() {
+  local standin="$1"
+  local c_IMPORT=0 c_SETUP=0 c_ASSERT=0 c_ENV=0 c_PASS=0 c_OTHER=0
+  local cls
+  while IFS=$'\t' read -r _s _p _rc cls _rest; do
+    case "$cls" in
+      IMPORT) c_IMPORT=$((c_IMPORT + 1)) ;;
+      SETUP)  c_SETUP=$((c_SETUP + 1)) ;;
+      ASSERT) c_ASSERT=$((c_ASSERT + 1)) ;;
+      ENV)    c_ENV=$((c_ENV + 1)) ;;
+      PASS)   c_PASS=$((c_PASS + 1)) ;;
+      class)  continue ;;
+      *)      c_OTHER=$((c_OTHER + 1)) ;;
+    esac
+  done < <(awk -F'\t' -v s="$standin" 'NR==1 || $1==s {print}' "$MATRIX")
+  echo "matrix.tsv [${standin}] class counts: IMPORT=${c_IMPORT} SETUP=${c_SETUP} ASSERT=${c_ASSERT} ENV=${c_ENV} PASS=${c_PASS} OTHER=${c_OTHER}"
 }
 
 overall_fail=0
 for kind in empty_module always_pass_stub always_fail_stub; do
-  overlay="$(mktemp -d /tmp/actl-standin-${kind}.XXXXXX)"
+  # Layout mirrors REPO/src/actl so schemas.REPO_ROOT (parents[2]) resolves to
+  # standin_root with schemas/ and fixtures/ available; PYTHONPATH entry is overlay.
+  standin_root="$(mktemp -d /tmp/actl-standin-${kind}.XXXXXX)"
+  overlay="${standin_root}/src"
   prepare_overlay "$kind" "$overlay"
-  expect_cls="$(expected_class_for "$kind")"
+  ln -sfn "${REPO_DIR}/schemas" "${standin_root}/schemas"
+  ln -sfn "${REPO_DIR}/fixtures" "${standin_root}/fixtures"
+  if [[ -d "${REPO_DIR}/config" ]]; then
+    ln -sfn "${REPO_DIR}/config" "${standin_root}/config"
+  fi
   c_IMPORT=0; c_SETUP=0; c_ASSERT=0; c_ENV=0; c_PASS=0; c_OTHER=0
   total=0
   matched=0
-  echo "=== stand-in [${kind}] (expect class=${expect_cls}) ===" | tee -a "$SUMMARY"
+  if [[ "$kind" == "empty_module" ]]; then
+    expect_desc="IMPORT|ASSERT (not PASS)"
+  else
+    expect_desc="ASSERT (0 IMPORT)"
+  fi
+  echo "=== stand-in [${kind}] (expect class=${expect_desc}) ===" | tee -a "$SUMMARY"
   for proof in "${BEHAVIORAL[@]}"; do
     total=$((total + 1))
     log="${OUT_DIR}/${kind}_${proof}.log"
+    # Overlay first so stub verify/session/phase3 win; src supplies router/core/sessions.
+    export ACTL_STANDIN_OVERLAY=1
     export PYTHONPATH="${overlay}:${REPO_DIR}/src"
     export ACTL_REPO="$REPO_DIR"
     export PYTHONDONTWRITEBYTECODE=1
@@ -221,30 +246,46 @@ for kind in empty_module always_pass_stub always_fail_stub; do
       PASS)   c_PASS=$((c_PASS + 1)) ;;
       *)      c_OTHER=$((c_OTHER + 1)) ;;
     esac
-    if [[ "$cls" == "$expect_cls" ]]; then
+    # empty_module: IMPORT or ASSERT (never PASS). stubs: ASSERT only.
+    if [[ "$kind" == "empty_module" ]]; then
+      if [[ "$cls" == "IMPORT" || "$cls" == "ASSERT" ]]; then
+        matched=$((matched + 1))
+      fi
+    elif [[ "$cls" == "ASSERT" ]]; then
       matched=$((matched + 1))
     fi
     echo "  ${proof}: rc=${rc} class=${cls}" | tee -a "$SUMMARY"
   done
   echo "Stand-in [${kind}] class counts: IMPORT=${c_IMPORT} SETUP=${c_SETUP} ASSERT=${c_ASSERT} ENV=${c_ENV} PASS=${c_PASS} OTHER=${c_OTHER} (total=${total})" | tee -a "$SUMMARY"
-  echo "Stand-in [${kind}]: ${matched}/${total} matched expected class ${expect_cls}" | tee -a "$SUMMARY"
+  echo "Stand-in [${kind}]: ${matched}/${total} matched expected class (${expect_desc})" | tee -a "$SUMMARY"
+  kind_fail=0
   if [[ "$kind" == "empty_module" ]]; then
-    if [[ "$c_IMPORT" -ne "$total" ]]; then
-      echo "FAIL: empty_module expected ${total} IMPORT, got IMPORT=${c_IMPORT}" | tee -a "$SUMMARY"
+    # empty_module may be IMPORT or ASSERT (CLI-without-import) but never PASS.
+    if [[ "$c_PASS" -ne 0 ]] || [[ $((c_IMPORT + c_ASSERT)) -ne "$total" ]]; then
+      echo "FAIL: empty_module expected IMPORT|ASSERT only (0 PASS); got IMPORT=${c_IMPORT} ASSERT=${c_ASSERT} PASS=${c_PASS} SETUP=${c_SETUP} ENV=${c_ENV} OTHER=${c_OTHER}" | tee -a "$SUMMARY"
+      kind_fail=1
       overall_fail=1
     fi
   else
-    # Stubs must be ASSERT for all 27; any IMPORT/SETUP/ENV/PASS/OTHER fails isolation.
+    # Stubs must be ASSERT for all 27; any IMPORT fails isolation.
     if [[ "$c_ASSERT" -ne "$total" ]] || [[ "$c_IMPORT" -ne 0 ]]; then
       echo "FAIL: ${kind} expected ${total} ASSERT and 0 IMPORT; got ASSERT=${c_ASSERT} IMPORT=${c_IMPORT}" | tee -a "$SUMMARY"
+      kind_fail=1
       overall_fail=1
     fi
   fi
-  rm -rf "$overlay"
+  if [[ "$kind_fail" -ne 0 ]]; then
+    print_matrix_class_counts "$kind" | tee -a "$SUMMARY"
+  fi
+  rm -rf "$standin_root"
 done
 
 echo "Matrix: $MATRIX" | tee -a "$SUMMARY"
 if [[ "$overall_fail" -ne 0 ]]; then
+  echo "Per-stand-in class counts from matrix.tsv:" | tee -a "$SUMMARY"
+  for kind in empty_module always_pass_stub always_fail_stub; do
+    print_matrix_class_counts "$kind" | tee -a "$SUMMARY"
+  done
   echo "FAIL: stand-in class isolation did not match expected ASSERT/IMPORT matrix" | tee -a "$SUMMARY"
   exit 1
 fi

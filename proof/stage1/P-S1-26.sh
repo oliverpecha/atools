@@ -5,7 +5,9 @@
 # asserts not instr.isascii() before expecting ValueError (S1-R9.4).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 command -v tmux >/dev/null 2>&1 || { echo "FAIL: tmux not installed (environment error)"; exit 4; }
 
@@ -66,7 +68,11 @@ if inv_file.exists():
 
 valid_instr = "B" * 99988
 assert len(json.dumps(valid_instr)) < 100000
-rc = start_session("impl-valid-001", wt, valid_instr, mode="foreground", tier="cheap")
+try:
+    rc = start_session("impl-valid-001", wt, valid_instr, mode="foreground", tier="cheap")
+except Exception as exc:
+    print(f"FAIL: S1-R9.4: Positive control start_session raised {type(exc).__name__}: {exc}")
+    sys.exit(1)
 if rc != 0:
     print(f"FAIL: S1-R9.4: Positive control start_session returned {rc}, expected 0")
     sys.exit(1)

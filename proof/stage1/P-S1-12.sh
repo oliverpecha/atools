@@ -5,7 +5,9 @@
 # and redaction (S1-R3.5).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
+if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
+  export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+fi
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR_OK WT_OK <<< "$(create_stage1_sandbox "p12_ok" "good.patch")"
@@ -125,7 +127,7 @@ if g5 is None or g5.exit_code != 0:
 '''
 st = subprocess.run(
     [sys.executable, "-c", probe, str(sdir_ok), tag, str(wt_ok), str(closure_allow)],
-    env={**dict(**{k: v for k, v in __import__("os").environ.items()}), "PYTHONPATH": str(scratch / "src")},
+    env={**dict(**{k: v for k, v in __import__("os").environ.items()}), "PYTHONPATH": __import__("os").environ.get("PYTHONPATH", "") + ":" + str(scratch / "src")},
     capture_output=True, text=True,
 )
 if st.returncode != 0:
