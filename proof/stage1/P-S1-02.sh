@@ -298,17 +298,50 @@ except ValueError as exc:
 errs = validate_diff_records(records, mode=mode)
 if mode == "implementation":
     # Pin object: annotated tag stage-1-authoring-verified (D-41).
+    # Require refs/tags/<tag> with git cat-file -t == tag (annotated).
+    # Lightweight tags (cat-file -t == commit) FAIL. Not tamper-proof (local
+    # mode, one uid; Invariant P is a convention).
     # Never read ACTL_S1_AUTHORING_PIN (bypass stays closed even if set to HEAD/SHA).
+    # No commit SHA in a pinned file.
     tag = AUTHORING_PIN_TAG
+    tag_ref = f"refs/tags/{tag}"
+    tag_obj = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", tag_ref],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    if tag_obj.returncode != 0:
+        print(
+            f"FAIL: S1-R16.2: annotated tag {tag} missing "
+            "(no env SHA fallback, no HEAD fallback)"
+        )
+        sys.exit(1)
+    # git cat-file -t must report "tag" (annotated), not "commit" (lightweight).
+    typ_proc = subprocess.run(
+        ["git", "cat-file", "-t", tag_ref],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    obj_type = typ_proc.stdout.strip()
+    if obj_type != "tag":
+        print(
+            f"FAIL: S1-R16.2: {tag} must be annotated "
+            f"(git cat-file -t == tag), got {obj_type!r}"
+        )
+        sys.exit(1)
+    tag_object_id = tag_obj.stdout.strip()
+    print(f"TAG_OBJECT_ID {tag_object_id}")
     tag_probe = subprocess.run(
-        ["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}"],
+        ["git", "rev-parse", "-q", "--verify", f"{tag_ref}^{{commit}}"],
         cwd=repo_dir,
         capture_output=True,
         text=True,
     )
     if tag_probe.returncode != 0:
         print(
-            f"FAIL: S1-R16.2: annotated tag {tag} missing "
+            f"FAIL: S1-R16.2: annotated tag {tag} missing peeled commit "
             "(no env SHA fallback, no HEAD fallback)"
         )
         sys.exit(1)

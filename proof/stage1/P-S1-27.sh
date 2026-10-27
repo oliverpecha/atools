@@ -59,7 +59,7 @@ os.environ["ATOOLS_CURSOR_HOME"] = str(custom_home)
 
 # S1-R10.4: each of core.config and sessions.storage MUST expose one of
 # cursor_home / get_cursor_home / resolve_cursor_home / cursor_dir returning the override.
-# No scan_tripwires last-resort fallback: missing helper is FAIL.
+# Missing helper is FAIL (no scan_tripwires secondary fallback).
 for mod, label in ((core_cfg, "core.config"), (sess_storage, "sessions.storage")):
     resolver = None
     for name in ("cursor_home", "get_cursor_home", "resolve_cursor_home", "cursor_dir"):

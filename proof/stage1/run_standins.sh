@@ -4,6 +4,8 @@
 # Runs P-S1-01 and P-S1-03..P-S1-29 (27 behavioral proofs) against:
 #   empty_module, always_pass_stub, always_fail_stub
 # Classifies each outcome as IMPORT, SETUP, ASSERT, ENV, PASS, or OTHER.
+# empty_module IMPORT|ASSERT is a designed rejection (module absent).
+# always_pass_stub and always_fail_stub must be ASSERT-only (behavioral).
 set -uo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$REPO_DIR" || exit 4
@@ -165,9 +167,11 @@ prepare_overlay() {
 }
 
 classify_log() {
-  # Classify by rc first (NEW-01): rc==0 -> PASS; rc==4 -> ENV.
-  # A log with ^FAIL: and rc 0 is PASS; rc 4 is ENV.
-  # Else classify FAIL: lines: SETUP / IMPORT / ASSERT; else OTHER.
+  # Fail-closed order (NEW-01 + R7): rc==0 PASS; rc==4 ENV;
+  # SETUP (fixture_s1 / sandbox setup failed / FAIL: fixture);
+  # IMPORT (cannot import / No module named);
+  # ASSERT only on explicit FAIL: S1-R / FAIL: S1A- markers that are not SETUP;
+  # unrecognized FAIL: -> OTHER.
   local log="$1" rc="$2"
   local fail_line
   if [[ "$rc" -eq 0 ]]; then
@@ -179,16 +183,41 @@ classify_log() {
     return
   fi
   fail_line="$(grep -m1 -E '^FAIL:' "$log" 2>/dev/null || true)"
-  if grep -q 'FAIL: fixture_s1:' "$log" 2>/dev/null; then
-    echo SETUP
-  elif [[ -n "$fail_line" ]] && { [[ "$fail_line" == *"cannot import"* ]] || [[ "$fail_line" == *"No module named"* ]]; }; then
-    echo IMPORT
-  elif [[ -n "$fail_line" ]]; then
-    echo ASSERT
-  else
+  if [[ -z "$fail_line" ]]; then
     echo OTHER
+    return
   fi
+  if [[ "$fail_line" == *"fixture_s1"* ]] \
+    || [[ "$fail_line" == *"sandbox setup failed"* ]] \
+    || [[ "$fail_line" == FAIL:\ fixture* ]] \
+    || grep -q 'FAIL: fixture_s1:' "$log" 2>/dev/null; then
+    echo SETUP
+    return
+  fi
+  if [[ "$fail_line" == *"cannot import"* ]] || [[ "$fail_line" == *"No module named"* ]]; then
+    echo IMPORT
+    return
+  fi
+  if [[ "$fail_line" == FAIL:\ S1-R* ]] || [[ "$fail_line" == FAIL:\ S1A-* ]]; then
+    echo ASSERT
+    return
+  fi
+  echo OTHER
 }
+
+# --selftest: GPT counterexample must classify as SETUP, not ASSERT.
+if [[ "${1:-}" == "--selftest" ]]; then
+  _st_log="$(mktemp)"
+  printf '%s\n' 'FAIL: S1-R15.3: sandbox setup failed' >"$_st_log"
+  _st_cls="$(classify_log "$_st_log" 1)"
+  rm -f "$_st_log"
+  if [[ "$_st_cls" != "SETUP" ]]; then
+    echo "FAIL: --selftest expected SETUP for 'FAIL: S1-R15.3: sandbox setup failed', got ${_st_cls}"
+    exit 1
+  fi
+  echo "OK: run_standins --selftest classify_log SETUP"
+  exit 0
+fi
 
 SUMMARY="${OUT_DIR}/summary.txt"
 : > "$SUMMARY"
