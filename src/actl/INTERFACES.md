@@ -7,6 +7,8 @@ Revision note: 2026-10-19 baseline header moved to 2acaf3c / v0.1.7; no interfac
 Revision note: 2026-10-20 align C-2, C-3, F-17 per spec-S0-rulings.md; approved by Owner (PB-4).
 Revision note: 2026-10-19 error types, scope parse/validate split, validator error paths, state_lock threading, reserve highwater, run_id rule and verify_impl effects clarified; `actl.errors` added (3 entries); no signature removed; applied at Owner request (PB-4).
 Revision note: 2026-10-25 Layout transition (L-1 to L-11); Layout(root, repo="target-repo"), Layout.profile, Layout.records, verification and qualification artifact kinds; approved by Owner (PB-4).
+
+Revision note: 2026-10-27 Stage 2 return-value docs (allocate_turn rule wording, promote_role returns 7 keys per D-43); no interface signature or manifest entry changed; approved by Owner (PB-4).
 Status: Normative interface contract for `S0-R15` (`PB-2`, `PB-4`). Changes after Owner acceptance require explicit Owner approval and a revision note in this file.
 
 ---
@@ -447,7 +449,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`allocate_turn(layout: Layout, tag: str, role: str) -> tuple[int, Path]`** (`actl.turns`, `kind: function`)
 * **Preconditions:** `role` in `("architect", "challenger", "curator")`.
-* **Return value:** `(n, turn_dir)` where `n = 1 + max((existing_n for {role}-{existing_n} in turns_dir(tag)), default=0)` created atomically via `os.mkdir` under `runs/state.lock`.
+* **Return value:** `(n, turn_dir)` where `n` is one more than the highest existing turn number for `role` in `turns_dir(tag)`, or 1 if there is none, created atomically via `os.mkdir` under `runs/state.lock`.
 * **Errors raised:** `ValueError` on invalid `tag` or `role`; `OSError`.
 * **Side effects:** Creates `runs/turns/{role}-{n}/`. **Idempotence:** Non-idempotent (increments per-role turn index `n`).
 
@@ -466,7 +468,7 @@ Constructs and validates all paths under `$ACTL_ROOT` (default `$HOME/actl-graph
 
 * **`promote_role(layout: Layout, tag: str, role: str) -> dict[str, Any]`** (`actl.promote`, `kind: function`)
 * **Preconditions:** `role` in `("architect", "challenger")`; `layout.outbox(tag, role)` contains validated outputs.
-* **Return value:** Dict `{"sprint_tag": str, "role": str, "promoted": list[dict], "staged_to": str, "active_spec": str | None}` (`S2-R9`).
+* **Return value:** Dict `{"sprint_tag": str, "role": str, "promoted": list[dict], "staged_to": str, "active_spec": str | None, "active_solution_key": str | None, "active_oracle_draft": str | None}` (`S2-R9`, D-43).
 * **Errors raised:** `ValueError` on invalid role or invalid/missing draft outputs; `FileNotFoundError`.
 * **Side effects:** Under `runs/state.lock`, computes content digest (`file_sha256` or `manifest_sha256`) and parent (`None` for `spec`; resulting `active_spec` for `solution_key` and `oracle-draft`). Reuses an existing artifact `seq` iff an artifact in `sprint_dir(tag)` has identical `(kind, parent, sha256)`; otherwise reserves a new `seq` via `actl.seq.reserve` and writes immutable `spec-{seq:03d}.md`, `solution_key-{seq:03d}.patch`, or `oracle-draft-{seq:03d}/` plus `*.meta.json`. Always updates `active_spec`, `active_solution_key`, and `active_oracle_draft` in `runs/state.json` and stages read-only copies into `inbox(tag, next_role)` by unlinking any existing target file before copying and applying `0550` to executable scripts (`proofs/*.sh`, `probe.sh`) and `0440` to regular files.
 * **Idempotence:** Idempotent for identical draft content (same SHA-256 / `manifest_sha256` allocates no new `seq`).
