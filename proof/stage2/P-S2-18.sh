@@ -104,6 +104,7 @@ is_allowed_stage2_path() {
         prompts/curator.md|\
         prompts/_output_contract.md|\
         docs/plan/spec-S2.md|\
+        docs/plan/stage2-implementer-runbook.md|\
         proof/run_suite_actl_s2.sh|\
         proof/stage2/*|\
         test/actl/test_s2_*.py|\
