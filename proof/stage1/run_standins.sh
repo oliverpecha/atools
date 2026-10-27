@@ -18,6 +18,7 @@ BEHAVIORAL=(
 )
 
 write_pass_stub() {
+  # root is $overlay/src (mini-repo layout: $overlay/src/actl/...)
   local root="$1"
   cat > "${root}/actl/verify.py" <<'PY'
 class StepResult:
@@ -143,31 +144,37 @@ PY
 }
 
 prepare_overlay() {
+  # Mini-repo: $overlay/{src/actl,schemas,fixtures}; stubs written under src/actl.
   local kind="$1"
   local overlay="$2"
+  local src="${overlay}/src"
   rm -rf "$overlay"
-  mkdir -p "$overlay"
-  cp -a "${REPO_DIR}/src/actl" "${overlay}/actl"
+  mkdir -p "$src"
+  cp -a "${REPO_DIR}/src/actl" "${src}/actl"
   case "$kind" in
     empty_module)
-      rm -f "${overlay}/actl/verify.py" "${overlay}/actl/session.py"
-      rm -f "${overlay}/actl/cmd_verify_impl.py" "${overlay}/actl/cmd_dispatch_impl.py"
-      rm -f "${overlay}/actl/cmd_wait.py" "${overlay}/actl/cmd_selftest.py"
-      rm -f "${overlay}/actl/next_rules/phase3.py"
+      rm -f "${src}/actl/verify.py" "${src}/actl/session.py"
+      rm -f "${src}/actl/cmd_verify_impl.py" "${src}/actl/cmd_dispatch_impl.py"
+      rm -f "${src}/actl/cmd_wait.py" "${src}/actl/cmd_selftest.py"
+      rm -f "${src}/actl/next_rules/phase3.py"
       ;;
-    always_pass_stub) write_pass_stub "$overlay" ;;
-    always_fail_stub) write_fail_stub "$overlay" ;;
+    always_pass_stub) write_pass_stub "$src" ;;
+    always_fail_stub) write_fail_stub "$src" ;;
     *) echo "unknown stand-in $kind" >&2; return 2 ;;
   esac
 }
 
 classify_log() {
+  # IMPORT only when the proof's own FAIL: line reports cannot import /
+  # No module named — not a later traceback under a non-import FAIL.
   local log="$1" rc="$2"
+  local fail_line
+  fail_line="$(grep -m1 -E '^FAIL:' "$log" 2>/dev/null || true)"
   if grep -q 'FAIL: fixture_s1:' "$log" 2>/dev/null; then
     echo SETUP
-  elif grep -q 'cannot import' "$log" 2>/dev/null || grep -q 'No module named' "$log" 2>/dev/null; then
+  elif [[ -n "$fail_line" ]] && { [[ "$fail_line" == *"cannot import"* ]] || [[ "$fail_line" == *"No module named"* ]]; }; then
     echo IMPORT
-  elif grep -q '^FAIL:' "$log" 2>/dev/null; then
+  elif [[ -n "$fail_line" ]]; then
     echo ASSERT
   elif [[ "$rc" -eq 4 ]] || grep -q 'ENVFAIL:' "$log" 2>/dev/null; then
     echo ENV
@@ -206,15 +213,14 @@ print_matrix_class_counts() {
 
 overall_fail=0
 for kind in empty_module always_pass_stub always_fail_stub; do
-  # Layout mirrors REPO/src/actl so schemas.REPO_ROOT (parents[2]) resolves to
-  # standin_root with schemas/ and fixtures/ available; PYTHONPATH entry is overlay.
-  standin_root="$(mktemp -d /tmp/actl-standin-${kind}.XXXXXX)"
-  overlay="${standin_root}/src"
+  # Mini-repo overlay: $overlay/src/actl + schemas/fixtures symlinks so
+  # schemas.REPO_ROOT (parents[2] of src/actl/*.py) resolves to $overlay.
+  overlay="$(mktemp -d /tmp/actl-standin-${kind}.XXXXXX)"
   prepare_overlay "$kind" "$overlay"
-  ln -sfn "${REPO_DIR}/schemas" "${standin_root}/schemas"
-  ln -sfn "${REPO_DIR}/fixtures" "${standin_root}/fixtures"
+  ln -sfn "${REPO_DIR}/schemas" "${overlay}/schemas"
+  ln -sfn "${REPO_DIR}/fixtures" "${overlay}/fixtures"
   if [[ -d "${REPO_DIR}/config" ]]; then
-    ln -sfn "${REPO_DIR}/config" "${standin_root}/config"
+    ln -sfn "${REPO_DIR}/config" "${overlay}/config"
   fi
   c_IMPORT=0; c_SETUP=0; c_ASSERT=0; c_ENV=0; c_PASS=0; c_OTHER=0
   total=0
@@ -222,15 +228,15 @@ for kind in empty_module always_pass_stub always_fail_stub; do
   if [[ "$kind" == "empty_module" ]]; then
     expect_desc="IMPORT|ASSERT (not PASS)"
   else
-    expect_desc="ASSERT (0 IMPORT)"
+    expect_desc="ASSERT (0 IMPORT, 0 OTHER, 0 PASS)"
   fi
   echo "=== stand-in [${kind}] (expect class=${expect_desc}) ===" | tee -a "$SUMMARY"
   for proof in "${BEHAVIORAL[@]}"; do
     total=$((total + 1))
     log="${OUT_DIR}/${kind}_${proof}.log"
-    # Overlay first so stub verify/session/phase3 win; src supplies router/core/sessions.
+    # Overlay first so stub verify/session/phase3 win; REPO src supplies router/core/sessions.
     export ACTL_STANDIN_OVERLAY=1
-    export PYTHONPATH="${overlay}:${REPO_DIR}/src"
+    export PYTHONPATH="${overlay}/src:${REPO_DIR}/src"
     export ACTL_REPO="$REPO_DIR"
     export PYTHONDONTWRITEBYTECODE=1
     bash "${REPO_DIR}/proof/stage1/${proof}.sh" >"$log" 2>&1
@@ -267,17 +273,21 @@ for kind in empty_module always_pass_stub always_fail_stub; do
       overall_fail=1
     fi
   else
-    # Stubs must be ASSERT for all 27; any IMPORT fails isolation.
-    if [[ "$c_ASSERT" -ne "$total" ]] || [[ "$c_IMPORT" -ne 0 ]]; then
-      echo "FAIL: ${kind} expected ${total} ASSERT and 0 IMPORT; got ASSERT=${c_ASSERT} IMPORT=${c_IMPORT}" | tee -a "$SUMMARY"
+    # Stubs must be ASSERT for all 27; 0 IMPORT, 0 OTHER, 0 PASS.
+    if [[ "$c_ASSERT" -ne "$total" ]] || [[ "$c_IMPORT" -ne 0 ]] || [[ "$c_OTHER" -ne 0 ]] || [[ "$c_PASS" -ne 0 ]]; then
+      echo "FAIL: ${kind} expected ${total} ASSERT and 0 IMPORT/OTHER/PASS; got ASSERT=${c_ASSERT} IMPORT=${c_IMPORT} OTHER=${c_OTHER} PASS=${c_PASS}" | tee -a "$SUMMARY"
       kind_fail=1
       overall_fail=1
     fi
   fi
   if [[ "$kind_fail" -ne 0 ]]; then
     print_matrix_class_counts "$kind" | tee -a "$SUMMARY"
+    # Surface OTHER proof ids for stub thickening / FAIL: S1-R... fixes.
+    if [[ "$c_OTHER" -ne 0 ]]; then
+      awk -F'\t' -v s="$kind" '$1==s && $4=="OTHER" {print "OTHER proof: "$2" rc="$3" reason="$5}' "$MATRIX" | tee -a "$SUMMARY"
+    fi
   fi
-  rm -rf "$standin_root"
+  rm -rf "$overlay"
 done
 
 echo "Matrix: $MATRIX" | tee -a "$SUMMARY"
