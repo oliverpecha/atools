@@ -167,14 +167,21 @@ prepare_overlay() {
 }
 
 classify_log() {
-  # Fail-closed order (NEW-01 + R7): rc==0 PASS; rc==4 ENV;
+  # Fail-closed order (NEW-01 + R7/R8):
+  # rc==0 and FAIL: line -> INCONSISTENT (counted as OTHER, not PASS);
+  # rc==0 else PASS; rc==4 ENV;
   # SETUP (fixture_s1 / sandbox setup failed / FAIL: fixture);
   # IMPORT (cannot import / No module named);
   # ASSERT only on explicit FAIL: S1-R / FAIL: S1A- markers that are not SETUP;
   # unrecognized FAIL: -> OTHER.
+  # Matrix reason for rc!=0 uses the LAST FAIL: line (never an OK: line).
   local log="$1" rc="$2"
   local fail_line
   if [[ "$rc" -eq 0 ]]; then
+    if grep -qE '^FAIL:' "$log" 2>/dev/null; then
+      echo INCONSISTENT
+      return
+    fi
     echo PASS
     return
   fi
@@ -182,7 +189,7 @@ classify_log() {
     echo ENV
     return
   fi
-  fail_line="$(grep -m1 -E '^FAIL:' "$log" 2>/dev/null || true)"
+  fail_line="$(grep -E '^FAIL:' "$log" 2>/dev/null | tail -n1 || true)"
   if [[ -z "$fail_line" ]]; then
     echo OTHER
     return
@@ -205,17 +212,31 @@ classify_log() {
   echo OTHER
 }
 
-# --selftest: GPT counterexample must classify as SETUP, not ASSERT.
+# --selftest: SETUP for sandbox-setup; INCONSISTENT for rc==0+FAIL; reason=last FAIL:.
 if [[ "${1:-}" == "--selftest" ]]; then
   _st_log="$(mktemp)"
   printf '%s\n' 'FAIL: S1-R15.3: sandbox setup failed' >"$_st_log"
   _st_cls="$(classify_log "$_st_log" 1)"
-  rm -f "$_st_log"
   if [[ "$_st_cls" != "SETUP" ]]; then
+    rm -f "$_st_log"
     echo "FAIL: --selftest expected SETUP for 'FAIL: S1-R15.3: sandbox setup failed', got ${_st_cls}"
     exit 1
   fi
-  echo "OK: run_standins --selftest classify_log SETUP"
+  printf '%s\n' 'OK: intermediate' 'FAIL: S1-R99: bogey' 'OK: should-not-win' >"$_st_log"
+  _st_cls="$(classify_log "$_st_log" 0)"
+  if [[ "$_st_cls" != "INCONSISTENT" ]]; then
+    rm -f "$_st_log"
+    echo "FAIL: --selftest expected INCONSISTENT for rc==0 with FAIL: line, got ${_st_cls}"
+    exit 1
+  fi
+  # rc!=0 matrix reason must be LAST FAIL: line, never an OK: line.
+  _st_reason="$(grep -E '^FAIL:' "$_st_log" | tail -n1)"
+  rm -f "$_st_log"
+  if [[ "$_st_reason" != "FAIL: S1-R99: bogey" ]]; then
+    echo "FAIL: --selftest expected last FAIL: reason, got ${_st_reason}"
+    exit 1
+  fi
+  echo "OK: run_standins --selftest classify_log SETUP + INCONSISTENT + last FAIL: reason"
   exit 0
 fi
 
@@ -239,7 +260,7 @@ print_matrix_class_counts() {
       ENV)    c_ENV=$((c_ENV + 1)) ;;
       PASS)   c_PASS=$((c_PASS + 1)) ;;
       class)  continue ;;
-      *)      c_OTHER=$((c_OTHER + 1)) ;;
+      INCONSISTENT|*) c_OTHER=$((c_OTHER + 1)) ;;
     esac
   done < <(awk -F'\t' -v s="$standin" 'NR==1 || $1==s {print}' "$MATRIX")
   echo "matrix.tsv [${standin}] class counts: IMPORT=${c_IMPORT} SETUP=${c_SETUP} ASSERT=${c_ASSERT} ENV=${c_ENV} PASS=${c_PASS} OTHER=${c_OTHER}"
@@ -276,7 +297,12 @@ for kind in empty_module always_pass_stub always_fail_stub; do
     bash "${REPO_DIR}/proof/stage1/${proof}.sh" >"$log" 2>&1
     rc=$?
     cls="$(classify_log "$log" "$rc")"
-    reason="$(grep -m1 -E '^(FAIL:|OK:)' "$log" 2>/dev/null | tr '\t' ' ' | cut -c1-200 || true)"
+    # NEW-01: rc!=0 reason = LAST FAIL: line, never an OK: line.
+    if [[ "$rc" -ne 0 ]]; then
+      reason="$(grep -E '^FAIL:' "$log" 2>/dev/null | tail -n1 | tr '\t' ' ' | cut -c1-200 || true)"
+    else
+      reason="$(grep -m1 -E '^(FAIL:|OK:)' "$log" 2>/dev/null | tr '\t' ' ' | cut -c1-200 || true)"
+    fi
     printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$proof" "$rc" "$cls" "$reason" >> "$MATRIX"
     case "$cls" in
       IMPORT) c_IMPORT=$((c_IMPORT + 1)) ;;
@@ -284,7 +310,7 @@ for kind in empty_module always_pass_stub always_fail_stub; do
       ASSERT) c_ASSERT=$((c_ASSERT + 1)) ;;
       ENV)    c_ENV=$((c_ENV + 1)) ;;
       PASS)   c_PASS=$((c_PASS + 1)) ;;
-      *)      c_OTHER=$((c_OTHER + 1)) ;;
+      INCONSISTENT|*) c_OTHER=$((c_OTHER + 1)) ;;
     esac
     # empty_module: IMPORT or ASSERT (never PASS). stubs: ASSERT only.
     if [[ "$kind" == "empty_module" ]]; then

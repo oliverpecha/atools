@@ -25,6 +25,32 @@ from pathlib import Path
 
 sdir, custom_home = Path(sys.argv[1]), Path(sys.argv[2])
 
+
+def path_contained(resolved, home) -> bool:
+    """Canonical containment: equality or Path.is_relative_to (realpath)."""
+    r = Path(os.path.realpath(str(resolved)))
+    h = Path(os.path.realpath(str(home)))
+    if r == h:
+        return True
+    try:
+        return r.is_relative_to(h)
+    except AttributeError:
+        return str(r).startswith(str(h) + os.sep)
+
+
+# Degenerate resolver returning custom_home_evil must REJECT (substring trap).
+evil = Path(str(custom_home) + "_evil")
+evil.mkdir(parents=True, exist_ok=True)
+if path_contained(evil, custom_home):
+    print(
+        "FAIL: S1-R10.4: custom_home_evil accepted as contained in custom_home "
+        f"(resolved={evil}, home={custom_home})"
+    )
+    sys.exit(1)
+if path_contained(str(custom_home) + "_evil", custom_home):
+    print("FAIL: S1-R10.4: custom_home_evil string accepted by containment check")
+    sys.exit(1)
+
 try:
     from actl.session import scan_tripwires
     from actl.layout import Layout
@@ -60,6 +86,8 @@ os.environ["ATOOLS_CURSOR_HOME"] = str(custom_home)
 # S1-R10.4: each of core.config and sessions.storage MUST expose one of
 # cursor_home / get_cursor_home / resolve_cursor_home / cursor_dir returning the override.
 # Missing helper is FAIL (no scan_tripwires secondary fallback).
+# Require canonical containment (equality or is_relative_to), not substring.
+# Exercise a real consumer: open/read/write under the returned home.
 for mod, label in ((core_cfg, "core.config"), (sess_storage, "sessions.storage")):
     resolver = None
     for name in ("cursor_home", "get_cursor_home", "resolve_cursor_home", "cursor_dir"):
@@ -70,11 +98,30 @@ for mod, label in ((core_cfg, "core.config"), (sess_storage, "sessions.storage")
     if resolver is None:
         print(f"FAIL: S1-R10.4: {label} does not honor ATOOLS_CURSOR_HOME")
         sys.exit(1)
-    resolved = str(resolver())
-    if str(custom_home) not in resolved and os.path.abspath(str(custom_home)) not in os.path.abspath(resolved):
+    resolved = Path(resolver())
+    if not path_contained(resolved, custom_home):
         print(
             f"FAIL: S1-R10.4: {label} does not honor ATOOLS_CURSOR_HOME "
-            f"(resolved={resolved!r}, expected under {custom_home})"
+            f"(resolved={resolved!s}, expected contained in {custom_home})"
         )
         sys.exit(1)
+    # Consumer of the resolver: write/read under the returned home path.
+    marker = resolved / f"p27_consumer_{label.replace('.', '_')}.txt"
+    try:
+        marker.write_text("consumer-ok\n", encoding="utf-8")
+        got = marker.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"FAIL: S1-R10.4: {label} resolver home not usable for open/read/write: {exc}")
+        sys.exit(1)
+    if got != "consumer-ok\n":
+        print(f"FAIL: S1-R10.4: {label} consumer read mismatch under resolved home")
+        sys.exit(1)
+    if not path_contained(marker, custom_home):
+        print(
+            f"FAIL: S1-R10.4: {label} consumer path escaped custom_home "
+            f"(marker={marker}, home={custom_home})"
+        )
+        sys.exit(1)
+
+print("OK: S1-R10.4 cursor home containment and consumer checks passed.")
 PY

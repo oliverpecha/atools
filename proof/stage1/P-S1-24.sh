@@ -10,23 +10,46 @@ if [[ -z "${ACTL_STANDIN_OVERLAY:-}" ]]; then
   export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 fi
 
-# Control self-check first: known-good builtins.open/fileno PASS; reject
-# no-fsync and unrelated-fsync counterfeits without importing actl (GD-04a).
+# Oracle TABLE (GD-04a/b): in-script before actl.session import.
+# PASS: write+flush+fsync temp (final bytes already in it) -> replace dest ->
+# dir fsync -> unlink. At temp fsync compare fstat/proc bytes to replace bytes.
+# Spies count only verification-*.json (not state.json).
 python3 - <<'PY'
 import os
 import tempfile
 from pathlib import Path
 
+ARTIFACT = b'{"kind":"verification","id":"verification-006"}'
+
 
 def fd_path(fd):
-    """Resolve fd to a path via /proc; do not depend on os.open mapping (GD-04a)."""
+    """Resolve fd via /proc/self/fd; do not depend on os.open mapping (GD-04a)."""
     try:
         return os.path.realpath(os.readlink(f"/proc/self/fd/{fd}"))
     except OSError:
         return f"fd:{fd}"
 
 
-class FdMap:
+def fd_bytes_at_fsync(fd):
+    """Bytes visible on fd at fsync: prefer /proc/self/fd/<fd>, else fstat size pad."""
+    try:
+        with open(f"/proc/self/fd/{fd}", "rb") as rf:
+            return rf.read()
+    except OSError:
+        try:
+            return b"\0" * int(os.fstat(fd).st_size)
+        except OSError:
+            return b""
+
+
+def is_verification_json(path: str) -> bool:
+    base = os.path.basename(str(path))
+    return base.startswith("verification-") and base.endswith(".json") and ".meta." not in base
+
+
+class Tracer:
+    """Record fsync/replace/unlink; on fsync capture path + visible bytes (fstat/proc)."""
+
     def __init__(self):
         self.events = []
         self.real_fsync = os.fsync
@@ -35,12 +58,24 @@ class FdMap:
 
     def fsync(self, fd):
         path = fd_path(fd)
-        self.events.append(("fsync", path))
+        size = -1
+        blob = b""
+        try:
+            size = int(os.fstat(fd).st_size)
+        except OSError:
+            pass
+        blob = fd_bytes_at_fsync(fd)
+        self.events.append(("fsync", path, size, blob))
         return self.real_fsync(fd)
 
     def replace(self, src, dst):
-        self.events.append(("replace", str(src), str(dst)))
-        return self.real_replace(src, dst)
+        src_s, dst_s = str(src), str(dst)
+        try:
+            artifact = Path(src_s).read_bytes()
+        except OSError:
+            artifact = b""
+        self.events.append(("replace", src_s, dst_s, artifact))
+        return self.real_replace(src_s, dst_s)
 
     def unlink(self, path):
         self.events.append(("unlink", str(path)))
@@ -48,62 +83,53 @@ class FdMap:
 
 
 def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
-    """Require fsync of the exact replace-src temp path (via /proc fd path) before replace dest.
-    Reject unmapped fd and any other pre-replace fsync. Then dest-dir fsync, unlink log, unlink exit.
-    """
+    """Require write-final-bytes fsync of replace-src before replace, then dir fsync + unlinks."""
     dest = os.path.abspath(str(dest))
     src_log = os.path.abspath(str(src_log))
     src_exit = os.path.abspath(str(src_exit))
-    dest_dir_abs = os.path.abspath(str(Path(dest).parent))
+    dest_dir_abs = os.path.realpath(str(Path(dest).parent))
     replace_src_abs = os.path.realpath(str(replace_src)) if replace_src is not None else None
 
     abs_events = []
     for ev in events:
         k = ev[0]
         if k == "replace":
-            if len(ev) == 3:
-                abs_events.append(("replace", os.path.realpath(ev[1]), os.path.abspath(ev[2])))
-            else:
-                abs_events.append(("replace", None, os.path.abspath(ev[1])))
+            abs_events.append(
+                ("replace", os.path.realpath(ev[1]), os.path.abspath(ev[2]), ev[3] if len(ev) > 3 else b"")
+            )
         elif k == "fsync":
             p = ev[1]
+            size = ev[2] if len(ev) > 2 else -1
+            blob = ev[3] if len(ev) > 3 else b""
             if str(p).startswith("fd:"):
-                abs_events.append((k, p))
+                abs_events.append((k, p, size, blob))
             else:
-                abs_events.append((k, os.path.realpath(p)))
+                abs_events.append((k, os.path.realpath(p), size, blob))
         else:
             p = ev[1]
             abs_events.append((k, os.path.abspath(p) if not str(p).startswith("fd:") else p))
 
     replace_idxs = [
         i for i, e in enumerate(abs_events)
-        if e[0] == "replace" and e[-1] == dest
+        if e[0] == "replace" and e[2] == dest and is_verification_json(e[2])
     ]
     if not replace_idxs:
         raise AssertionError("replace of verification destination never observed")
     ri = replace_idxs[0]
     rep = abs_events[ri]
-    observed_src = rep[1] if len(rep) == 3 else None
-    if replace_src_abs is None and observed_src is not None:
+    observed_src = rep[1]
+    artifact = rep[3]
+    if replace_src_abs is None:
         replace_src_abs = observed_src
     if replace_src_abs is None:
         raise AssertionError("replace-src temp path unknown; cannot verify temp fsync")
+    if not artifact:
+        raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
 
     pre = abs_events[:ri]
-    temp_fsync_idxs = []
-    for i, e in enumerate(pre):
-        if e[0] != "fsync":
-            continue
-        p = e[1]
-        if str(p).startswith("fd:"):
-            continue
-        if os.path.realpath(p) == replace_src_abs:
-            temp_fsync_idxs.append(i)
-    if not temp_fsync_idxs:
-        raise AssertionError(
-            f"no fsync of exact replace-src temp path {replace_src_abs} before replace"
-        )
-    for i, e in enumerate(pre):
+    matching_temp_fsync = False
+    saw_temp_fsync = False
+    for e in pre:
         if e[0] != "fsync":
             continue
         p = e[1]
@@ -113,16 +139,30 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             raise AssertionError(
                 f"unrelated pre-replace fsync of {p}; only {replace_src_abs} is allowed"
             )
+        saw_temp_fsync = True
+        size, blob = e[2], e[3]
+        # Final content must already be present at temp fsync (reject fsync-before-write).
+        if blob == artifact or (size >= 0 and size == len(artifact) and blob == artifact):
+            matching_temp_fsync = True
+    if not saw_temp_fsync:
+        raise AssertionError(
+            f"no fsync of exact replace-src temp path {replace_src_abs} before replace"
+        )
+    if not matching_temp_fsync:
+        raise AssertionError(
+            "fsync-before-write / fsync empty then write: temp fsync bytes "
+            f"do not match artifact at replace (len={len(artifact)})"
+        )
 
-    post = abs_events[ri + 1:]
+    post = abs_events[ri + 1 :]
     dir_fsync_idxs = [
-        i for i, e in enumerate(post)
+        i
+        for i, e in enumerate(post)
         if e[0] == "fsync" and not str(e[1]).startswith("fd:") and os.path.realpath(e[1]) == dest_dir_abs
     ]
     if not dir_fsync_idxs:
-        raise AssertionError("containing-directory fsync not observed after replace")
-    di = dir_fsync_idxs[0]
-    after_dir = post[di + 1:]
+        raise AssertionError("containing-directory fsync / dir-fsync not observed after replace")
+    after_dir = post[dir_fsync_idxs[0] + 1 :]
     unlinks = [(e[0], e[1]) for e in after_dir if e[0] == "unlink"]
     log_i = next((i for i, e in enumerate(unlinks) if e[1] == src_log), None)
     exit_i = next((i for i, e in enumerate(unlinks) if e[1] == src_exit), None)
@@ -132,120 +172,262 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
         raise AssertionError("original log unlink must precede original exit unlink")
 
 
+def expect_reject(label, fn):
+    try:
+        fn()
+    except AssertionError:
+        print(f"OK: {label} rejected by durability oracle.")
+        return
+    print(f"FAIL: S1-R15.3: {label} was accepted by the durability oracle")
+    raise SystemExit(1)
+
+
+def reset_sess(td, dest, src_log, src_exit):
+    if dest.exists():
+        dest.unlink()
+    for p in td.glob("verification-*.json"):
+        p.unlink()
+    src_log.write_bytes(b"log\n")
+    src_exit.write_bytes(b"0\n")
+
+
 with tempfile.TemporaryDirectory() as td:
     td = Path(td)
     dest = td / "verification-006.json"
     src_log = td / "sess.log"
     src_exit = td / "sess.exit"
     other = td / "unrelated.dat"
+    state = td / "state.json"
     src_log.write_bytes(b"log\n")
     src_exit.write_bytes(b"0\n")
     other.write_bytes(b"x\n")
+    state.write_bytes(b'{"seq":6}')
 
-    # Known-good (GD-04a): builtins.open + write + flush + os.fsync(fileno) + replace
-    tracer_good = FdMap()
-    tmp_good = td / "verification-006.json.tmp"
     _prev_fsync, _prev_replace, _prev_unlink = os.fsync, os.replace, os.unlink
-    os.fsync = tracer_good.fsync
-    os.replace = tracer_good.replace
-    os.unlink = tracer_good.unlink
-    try:
-        with open(tmp_good, "w", encoding="utf-8") as f:
-            f.write("{}")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(str(tmp_good), str(dest))
+
+    def install(tr):
+        os.fsync, os.replace, os.unlink = tr.fsync, tr.replace, tr.unlink
+
+    def restore():
+        os.fsync, os.replace, os.unlink = _prev_fsync, _prev_replace, _prev_unlink
+
+    def dir_fsync():
         dfd = os.open(str(td), os.O_RDONLY)
         try:
             os.fsync(dfd)
         finally:
             os.close(dfd)
+
+    # --- Reference PASS: write, flush, fsync (final bytes), replace, dir fsync, unlink ---
+    reset_sess(td, dest, src_log, src_exit)
+    tr = Tracer()
+    tmp_good = td / "verification-006.json.tmp"
+    install(tr)
+    try:
+        with open(tmp_good, "wb") as f:
+            f.write(ARTIFACT)
+            f.flush()
+            os.fsync(f.fileno())  # fstat|/proc/self/fd sees final bytes
+        os.replace(str(tmp_good), str(dest))
+        dir_fsync()
         os.unlink(str(src_log))
         os.unlink(str(src_exit))
-        assert_durability_order(
-            tracer_good.events, dest, src_log, src_exit, replace_src=tmp_good
-        )
+        assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp_good)
     except AssertionError as exc:
         print(f"FAIL: S1-R15.3: known-good builtins.open/fileno rejected: {exc}")
         raise SystemExit(1)
     finally:
-        os.fsync, os.replace, os.unlink = _prev_fsync, _prev_replace, _prev_unlink
+        restore()
     print("OK: known-good builtins.open/fileno accepted by durability oracle.")
 
-    # Counterfeit 1: no fsync at all before replace
-    if dest.exists():
-        dest.unlink()
-    src_log.write_bytes(b"log\n")
-    src_exit.write_bytes(b"0\n")
-    tracer = FdMap()
-    tmp = td / "verification-006.json.tmp"
-    tmp.write_text("{}", encoding="utf-8")
-    tracer.replace(str(tmp), str(dest))
-    tracer.unlink(str(src_log))
-    tracer.unlink(str(src_exit))
-    try:
-        assert_durability_order(tracer.events, dest, src_log, src_exit, replace_src=tmp)
-    except AssertionError:
-        pass
-    else:
-        print("FAIL: S1-R15.3: no-fsync counterfeit was accepted by the durability oracle")
-        raise SystemExit(1)
-    print("OK: no-fsync counterfeit rejected by durability oracle.")
+    # 1) no fsync
+    def deg_no_fsync():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        tmp.write_bytes(ARTIFACT)
+        tr.replace(str(tmp), str(dest))
+        tr.unlink(str(src_log))
+        tr.unlink(str(src_exit))
+        assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
 
-    # Counterfeit 2: unrelated-file fsync then replace dest (must be rejected)
-    if dest.exists():
-        dest.unlink()
-    src_log.write_bytes(b"log\n")
-    src_exit.write_bytes(b"0\n")
-    tracer2 = FdMap()
-    tmp2 = td / "verification-006.json.tmp2"
-    tmp2.write_text("{}", encoding="utf-8")
-    tracer2.events.append(("fsync", str(other)))
-    tracer2.replace(str(tmp2), str(dest))
-    ofd = os.open(str(td), os.O_RDONLY)
-    try:
-        tracer2.events.append(("fsync", str(td)))
-    finally:
-        os.close(ofd)
-    tracer2.unlink(str(src_log))
-    tracer2.unlink(str(src_exit))
-    try:
-        assert_durability_order(tracer2.events, dest, src_log, src_exit, replace_src=tmp2)
-    except AssertionError:
-        pass
-    else:
-        print("FAIL: S1-R15.3: unrelated-fsync counterfeit was accepted by the durability oracle")
-        raise SystemExit(1)
-    print("OK: unrelated-fsync counterfeit rejected by durability oracle.")
+    expect_reject("no-fsync counterfeit", deg_no_fsync)
 
-    # GD-04b degenerate: catch fsync OSError, replace in finally/handler, re-raise.
-    # Boundary-1 rejection criteria: replace called OR verification-*.json present.
-    if dest.exists():
-        dest.unlink()
-    src_log.write_bytes(b"log\n")
-    src_exit.write_bytes(b"0\n")
+    # 2) unrelated fsync
+    def deg_unrelated():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        tmp.write_bytes(ARTIFACT)
+        tr.events.append(("fsync", str(other), other.stat().st_size, other.read_bytes()))
+        tr.replace(str(tmp), str(dest))
+        tr.events.append(("fsync", str(td), 0, b""))
+        tr.unlink(str(src_log))
+        tr.unlink(str(src_exit))
+        assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+
+    expect_reject("unrelated-fsync counterfeit", deg_unrelated)
+
+    # 3) fsync-before-write (fsync empty, then write+flush, then replace)
+    def deg_fsync_before_write():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.flush()
+                os.fsync(f.fileno())  # fsync empty
+                f.write(ARTIFACT)
+                f.flush()
+                # deliberately no second fsync after final write
+            os.replace(str(tmp), str(dest))
+            dir_fsync()
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+
+    expect_reject("fsync-before-write / fsync empty then write counterfeit", deg_fsync_before_write)
+
+    # 4) replace-before-fsync (write+flush, replace, then fsync of gone/wrong path)
+    def deg_replace_before_fsync():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+            os.replace(str(tmp), str(dest))  # replace before fsync
+            dir_fsync()
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+
+    expect_reject("replace-before-fsync / replace before temp fsync counterfeit", deg_replace_before_fsync)
+
+    # 5) no directory fsync
+    def deg_no_dir_fsync():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(str(tmp), str(dest))
+            # skip directory fsync / dir-fsync
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+
+    expect_reject("no directory fsync / dir-fsync counterfeit", deg_no_dir_fsync)
+
+    # 6) unlink-before-replace
+    def deg_unlink_before_replace():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                os.fsync(f.fileno())
+            os.unlink(str(src_log))  # unlink before replace
+            os.unlink(str(src_exit))
+            os.replace(str(tmp), str(dest))
+            dir_fsync()
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+
+    expect_reject("unlink-before-replace / unlink before counterfeit", deg_unlink_before_replace)
+
+    # 7) replace in finally after failed fsync
+    reset_sess(td, dest, src_log, src_exit)
     tmp_deg = td / "verification-006.json.tmpdeg"
-    tmp_deg.write_text("{}", encoding="utf-8")
+    tmp_deg.write_bytes(ARTIFACT)
     replace_called_deg = {"n": 0}
     try:
         try:
             raise OSError("Simulated disk failure at verification temp fsync")
         except OSError:
+            # finally-style commit after failed fsync
             os.replace(str(tmp_deg), str(dest))
             replace_called_deg["n"] += 1
             raise
     except OSError:
         pass
-    ver_after = list(td.glob("verification-*.json"))
-    if replace_called_deg["n"] < 1 and not ver_after:
-        print("FAIL: S1-R15.3: degenerate finally-replace stand-in did not commit")
-        raise SystemExit(1)
-    # Rejection criteria that boundary 1 enforces after fail_temp_fsync:
+    ver_after = [p for p in td.glob("verification-*.json") if is_verification_json(p.name)]
     if replace_called_deg["n"] >= 1 or ver_after:
-        print("OK: degenerate finally-replace stand-in rejected by boundary-1 criteria.")
+        print("OK: finally-replace after failed fsync rejected by boundary-1 criteria.")
     else:
-        print("FAIL: S1-R15.3: degenerate finally-replace was not rejected")
+        print("FAIL: S1-R15.3: finally-replace after failed fsync was not rejected")
         raise SystemExit(1)
+
+    # GD-04b known-good: os.replace state.json then injected temp-fsync failure;
+    # boundary 1 PASS because spy counts only verification-*.json (unrelated replace ignored).
+    reset_sess(td, dest, src_log, src_exit)
+    state.write_bytes(b'{"seq":6}')
+    state_tmp = td / "state.json.tmp"
+    state_tmp.write_bytes(b'{"seq":7}')
+    tmp_v = td / "verification-006.json.tmp"
+    tmp_v.write_bytes(ARTIFACT)
+    ver_replace_after_fail = {"n": 0}
+    temp_fsync_fail_reached = {"n": 0}
+
+    def fail_temp_only(fd):
+        base = os.path.basename(fd_path(fd))
+        # verification temp names: verification-NNN.json.tmp (not final .json)
+        if base.startswith("verification-") and not (
+            base.endswith(".json") and ".tmp" not in base and ".meta." not in base
+        ):
+            temp_fsync_fail_reached["n"] += 1
+            raise OSError("Simulated disk failure at verification temp fsync")
+        return _prev_fsync(fd)
+
+    def spy_replace_ver_only(src, dst):
+        # Spies count only verification-*.json dest (state.json ignored).
+        if is_verification_json(dst):
+            ver_replace_after_fail["n"] += 1
+        return _prev_replace(src, dst)
+
+    # Unrelated state.json replace first (must be ignored by boundary-1 spy).
+    os.replace(str(state_tmp), str(state))
+    os.fsync = fail_temp_only
+    os.replace = spy_replace_ver_only
+    try:
+        with open(tmp_v, "rb") as f:
+            try:
+                fail_temp_only(f.fileno())
+            except OSError:
+                pass
+        if temp_fsync_fail_reached["n"] < 1:
+            print("FAIL: S1-R15.3: temp-fsync failure injection was never reached")
+            raise SystemExit(1)
+        # conforming code does NOT replace verification dest after temp-fsync failure
+        if ver_replace_after_fail["n"] != 0:
+            print("FAIL: S1-R15.3: verification replace counted after temp-fsync failure")
+            raise SystemExit(1)
+        if any(is_verification_json(p.name) for p in td.glob("verification-*.json")):
+            print("FAIL: S1-R15.3: verification-*.json present after temp-fsync failure")
+            raise SystemExit(1)
+        if not state.is_file() or state.read_bytes() != b'{"seq":7}':
+            print("FAIL: S1-R15.3: state.json replace was not preserved as unrelated")
+            raise SystemExit(1)
+        print("OK: state.json replace ignored by boundary-1; temp-fsync failure PASS.")
+    finally:
+        restore()
 PY
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
@@ -447,8 +629,15 @@ def fail_temp_fsync(fd):
 
 
 def track_replace_b1(src, dst):
-    replace_called_b1["n"] += 1
-    last_replace_src["path"] = str(src)
+    # GD-04b: count only verification-*.json dest replaces (ignore state.json).
+    base = os.path.basename(str(dst))
+    if (
+        base.startswith("verification-")
+        and base.endswith(".json")
+        and ".meta." not in base
+    ):
+        replace_called_b1["n"] += 1
+        last_replace_src["path"] = str(src)
     return real_replace(src, dst)
 
 
