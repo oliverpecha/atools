@@ -241,6 +241,14 @@ except ValueError:
 assert pin_drift_errors({"docs/plan/spec-S1.md", "src/actl/verify.py"})
 assert not pin_drift_errors({"src/actl/verify.py"})
 
+# Hard-coded Stage 1 authoring pin (do not trust ACTL_S1_AUTHORING_PIN alone).
+AUTHORING_PIN = "59cc0fc7badb852233c35267f52a1262b17ae936"
+assert AUTHORING_PIN == "59cc0fc7badb852233c35267f52a1262b17ae936"
+# Self-test: a caller-supplied PIN equal to HEAD must still be rejected when it
+# differs from the hard-coded trust anchor (PIN=HEAD bypass is closed).
+_fake_head_pin = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+assert _fake_head_pin != AUTHORING_PIN
+
 print("OK: P-S1-02 validator self-tests passed.")
 
 # 2. Baseline commit must exist for the live inventory check
@@ -291,18 +299,43 @@ except ValueError as exc:
 
 errs = validate_diff_records(records, mode=mode)
 if mode == "implementation":
-    pin = os.environ.get("ACTL_S1_AUTHORING_PIN", "").strip()
-    if not pin:
-        print("FAIL: S1-R16.2: implementation mode requires ACTL_S1_AUTHORING_PIN")
-        sys.exit(1)
-    pin_probe = subprocess.run(
-        ["git", "rev-parse", "-q", "--verify", f"{pin}^{{commit}}"],
-        cwd=repo_dir,
-        capture_output=True,
-    )
-    if pin_probe.returncode != 0:
-        print(f"FAIL: S1-R16.2: ACTL_S1_AUTHORING_PIN {pin} is not a commit")
-        sys.exit(1)
+    # Never trust ACTL_S1_AUTHORING_PIN as the drift baseline; hard-code the pin.
+    pin = AUTHORING_PIN
+    env_pin = os.environ.get("ACTL_S1_AUTHORING_PIN", "").strip()
+    if env_pin:
+        env_full = subprocess.run(
+            ["git", "rev-parse", "-q", "--verify", f"{env_pin}^{{commit}}"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+        pin_full = subprocess.run(
+            ["git", "rev-parse", "-q", "--verify", f"{pin}^{{commit}}"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+        if env_full.returncode != 0:
+            print(f"FAIL: S1-R16.2: ACTL_S1_AUTHORING_PIN {env_pin} is not a commit")
+            sys.exit(1)
+        if pin_full.returncode != 0:
+            print(f"FAIL: S1-R16.2: hard-coded authoring pin {pin} is not a commit")
+            sys.exit(1)
+        if env_full.stdout.strip() != pin_full.stdout.strip():
+            print(
+                f"FAIL: S1-R16.2: ACTL_S1_AUTHORING_PIN {env_pin} does not match "
+                f"hard-coded authoring pin {pin}"
+            )
+            sys.exit(1)
+    else:
+        pin_probe = subprocess.run(
+            ["git", "rev-parse", "-q", "--verify", f"{pin}^{{commit}}"],
+            cwd=repo_dir,
+            capture_output=True,
+        )
+        if pin_probe.returncode != 0:
+            print(f"FAIL: S1-R16.2: hard-coded authoring pin {pin} is not a commit")
+            sys.exit(1)
     changed_authoring: set[str] = set()
     for req in REQUIRED_AUTHORING_FILES:
         drift = subprocess.run(

@@ -221,6 +221,130 @@ def test_halt_precedence_over_session_flags(tmp_path: Path) -> None:
     assert st["status"] == "hold", "FAIL: S1-R2.2: Halt must set sprint status to 'hold'"
 
 
+def test_verification_atomic_write_interrupt_no_partial(tmp_path: Path) -> None:
+    """S1-R2.2: SIGTERM before atomic replace of verification-NNN.json leaves no partial in runs/.
+
+    Subprocess pauses immediately before os.replace of the verification artifact,
+    parent sends SIGTERM, then asserts runs/ has no verification-*.json and session
+    source files remain intact.
+    """
+    import os
+    import signal
+    import sys
+    import time
+
+    try:
+        from actl.verify import verify_impl  # noqa: F401
+        from actl.layout import Layout
+    except ImportError as exc:
+        pytest.fail(f"FAIL: S1-R2.2: actl.verify missing: {exc}")
+
+    sdir, wt = _setup_golden_sandbox(tmp_path, "good.patch")
+    layout = Layout(sdir)
+    log_dir = tmp_path / "cursor_logs"
+    sess_dir = tmp_path / "cursor_sessions"
+    log_dir.mkdir()
+    sess_dir.mkdir()
+    sess_name = "impl-public-profiles-006"
+    src_log = log_dir / f"{sess_name}.log"
+    src_exit = sess_dir / f"{sess_name}.exit"
+    log_bytes = b"interrupt durability session log\n"
+    exit_bytes = b"0\n"
+    src_log.write_bytes(log_bytes)
+    src_exit.write_bytes(exit_bytes)
+
+    child_script = tmp_path / "interrupt_verify_child.py"
+    ready_gate = tmp_path / "ready_for_sigterm"
+    child_script.write_text(
+        f"""
+import os, time
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ["ATOOLS_LOG_DIR"] = {str(log_dir)!r}
+os.environ["ATOOLS_SESSION_DIR"] = {str(sess_dir)!r}
+os.environ["ACTL_ROOT"] = {str(sdir)!r}
+
+from actl.verify import verify_impl
+from actl.layout import Layout
+from actl.session import archive_session_log
+
+layout = Layout(Path({str(sdir)!r}))
+tag = {TAG!r}
+wt = Path({str(wt)!r})
+sess_name = {sess_name!r}
+archive_session_log(layout, tag, 6, sess_name)
+session_info = {{
+    "name": sess_name,
+    "exit_code": 0,
+    "hard_cap": False,
+    "lost": False,
+    "log_sha256": None,
+}}
+ready = Path({str(ready_gate)!r})
+real_replace = os.replace
+
+def pause_before_verification_replace(src, dst):
+    if "verification-" in str(dst):
+        ready.write_text("ready", encoding="utf-8")
+        # Park here until SIGTERM arrives; do not complete atomic replace.
+        while True:
+            time.sleep(0.05)
+    return real_replace(src, dst)
+
+with patch("os.replace", side_effect=pause_before_verification_replace):
+    verify_impl(layout, tag, worktree=wt, session_info=session_info)
+""",
+        encoding="utf-8",
+    )
+
+    py_path = str(REPO_ROOT / "src")
+    if os.environ.get("PYTHONPATH"):
+        py_path = py_path + ":" + os.environ["PYTHONPATH"]
+    env = {
+        **os.environ,
+        "PYTHONPATH": py_path,
+        "ATOOLS_LOG_DIR": str(log_dir),
+        "ATOOLS_SESSION_DIR": str(sess_dir),
+        "ACTL_ROOT": str(sdir),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    proc = subprocess.Popen(
+        [sys.executable, str(child_script)],
+        env=env,
+        cwd=str(REPO_ROOT),
+    )
+    deadline = time.time() + 60
+    while time.time() < deadline and not ready_gate.is_file():
+        if proc.poll() is not None:
+            pytest.fail(
+                f"FAIL: S1-R2.2: child exited before replace pause (rc={proc.returncode})"
+            )
+        time.sleep(0.05)
+    if not ready_gate.is_file():
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=10)
+        pytest.fail("FAIL: S1-R2.2: timed out waiting for pre-replace pause gate")
+
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
+        pytest.fail("FAIL: S1-R2.2: child did not exit after SIGTERM")
+
+    runs = layout.runs_dir(TAG)
+    leftovers = list(runs.glob("verification-*.json"))
+    assert leftovers == [], f"FAIL: S1-R2.2: partial verification artifact left in runs/: {leftovers}"
+    assert src_log.is_file() and src_log.read_bytes() == log_bytes, (
+        "FAIL: S1-R2.2: session log must remain intact after interrupt"
+    )
+    assert src_exit.is_file() and src_exit.read_bytes() == exit_bytes, (
+        "FAIL: S1-R2.2: session exit must remain intact after interrupt"
+    )
+
+
 def test_failing_line_sanitization_rules() -> None:
     """S1-R1.7, O-8: failing_line strips ANSI CSI and OSC sequences, replaces control chars, and truncates to 300 chars."""
     try:

@@ -3,7 +3,7 @@
 # P-S1-05: bad_secret.patch fails G5 with expected substring; good.patch passes G5 (S1-R3.5).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR_OK WT_OK <<< "$(create_stage1_sandbox "p05_ok" "good.patch")"

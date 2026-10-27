@@ -183,13 +183,25 @@ SUMMARY="${OUT_DIR}/summary.txt"
 MATRIX="${OUT_DIR}/matrix.tsv"
 printf 'standin\tproof\trc\tclass\treason\n' > "$MATRIX"
 
+# Expected behavioral class per stand-in (not merely rc != 0).
+# empty_module -> IMPORT; always_*_stub -> ASSERT (0 IMPORT/SETUP/ENV/PASS/OTHER).
+expected_class_for() {
+  case "$1" in
+    empty_module) echo IMPORT ;;
+    always_pass_stub|always_fail_stub) echo ASSERT ;;
+    *) echo ASSERT ;;
+  esac
+}
+
 overall_fail=0
 for kind in empty_module always_pass_stub always_fail_stub; do
   overlay="$(mktemp -d /tmp/actl-standin-${kind}.XXXXXX)"
   prepare_overlay "$kind" "$overlay"
-  rejected=0
+  expect_cls="$(expected_class_for "$kind")"
+  c_IMPORT=0; c_SETUP=0; c_ASSERT=0; c_ENV=0; c_PASS=0; c_OTHER=0
   total=0
-  echo "=== stand-in [${kind}] ===" | tee -a "$SUMMARY"
+  matched=0
+  echo "=== stand-in [${kind}] (expect class=${expect_cls}) ===" | tee -a "$SUMMARY"
   for proof in "${BEHAVIORAL[@]}"; do
     total=$((total + 1))
     log="${OUT_DIR}/${kind}_${proof}.log"
@@ -201,22 +213,40 @@ for kind in empty_module always_pass_stub always_fail_stub; do
     cls="$(classify_log "$log" "$rc")"
     reason="$(grep -m1 -E '^(FAIL:|OK:)' "$log" 2>/dev/null | tr '\t' ' ' | cut -c1-200 || true)"
     printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$proof" "$rc" "$cls" "$reason" >> "$MATRIX"
-    if [[ "$rc" -ne 0 ]]; then
-      rejected=$((rejected + 1))
+    case "$cls" in
+      IMPORT) c_IMPORT=$((c_IMPORT + 1)) ;;
+      SETUP)  c_SETUP=$((c_SETUP + 1)) ;;
+      ASSERT) c_ASSERT=$((c_ASSERT + 1)) ;;
+      ENV)    c_ENV=$((c_ENV + 1)) ;;
+      PASS)   c_PASS=$((c_PASS + 1)) ;;
+      *)      c_OTHER=$((c_OTHER + 1)) ;;
+    esac
+    if [[ "$cls" == "$expect_cls" ]]; then
+      matched=$((matched + 1))
     fi
     echo "  ${proof}: rc=${rc} class=${cls}" | tee -a "$SUMMARY"
   done
-  echo "Stand-in [${kind}]: ${rejected}/${total} rejected (exit != 0)" | tee -a "$SUMMARY"
-  if [[ "$rejected" -ne "$total" ]]; then
-    overall_fail=1
+  echo "Stand-in [${kind}] class counts: IMPORT=${c_IMPORT} SETUP=${c_SETUP} ASSERT=${c_ASSERT} ENV=${c_ENV} PASS=${c_PASS} OTHER=${c_OTHER} (total=${total})" | tee -a "$SUMMARY"
+  echo "Stand-in [${kind}]: ${matched}/${total} matched expected class ${expect_cls}" | tee -a "$SUMMARY"
+  if [[ "$kind" == "empty_module" ]]; then
+    if [[ "$c_IMPORT" -ne "$total" ]]; then
+      echo "FAIL: empty_module expected ${total} IMPORT, got IMPORT=${c_IMPORT}" | tee -a "$SUMMARY"
+      overall_fail=1
+    fi
+  else
+    # Stubs must be ASSERT for all 27; any IMPORT/SETUP/ENV/PASS/OTHER fails isolation.
+    if [[ "$c_ASSERT" -ne "$total" ]] || [[ "$c_IMPORT" -ne 0 ]]; then
+      echo "FAIL: ${kind} expected ${total} ASSERT and 0 IMPORT; got ASSERT=${c_ASSERT} IMPORT=${c_IMPORT}" | tee -a "$SUMMARY"
+      overall_fail=1
+    fi
   fi
   rm -rf "$overlay"
 done
 
 echo "Matrix: $MATRIX" | tee -a "$SUMMARY"
 if [[ "$overall_fail" -ne 0 ]]; then
-  echo "FAIL: one or more stand-ins was not fully rejected" | tee -a "$SUMMARY"
+  echo "FAIL: stand-in class isolation did not match expected ASSERT/IMPORT matrix" | tee -a "$SUMMARY"
   exit 1
 fi
-echo "ALL 3 STAND-INS REJECTED BY 100% OF BEHAVIORAL PROOFS." | tee -a "$SUMMARY"
+echo "ALL 3 STAND-INS MATCHED EXPECTED BEHAVIORAL CLASSES." | tee -a "$SUMMARY"
 exit 0

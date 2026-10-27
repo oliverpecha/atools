@@ -5,7 +5,7 @@
 # generated verify-impl commands (S1A-16, S1-R12).
 set -euo pipefail
 REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-export PYTHONPATH="${REPO_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_DIR}/src"
 
 source "${REPO_DIR}/proof/stage1/fixture_s1.sh"
 IFS='|' read -r SDIR WT <<< "$(create_stage1_sandbox "p18" "good.patch")"
@@ -100,6 +100,36 @@ if r2.get("action") != "wait" or "impl-public-profiles-006" not in r2.get("comma
     print(f"FAIL: S1-R12.3 (Row 1 active session): got {r2}")
     sys.exit(1)
 
+def assert_red_g2_artifact(label: str, before_attempts: int, failing_line_substr: str) -> None:
+    """Lost-session / missing-outbox: rc==1, new verification-NNN.json, parent null, G2."""
+    vers = sorted(runs.glob("verification-*.json"))
+    if not vers:
+        print(f"FAIL: S1A-16: {label}: expected new verification-*.json, none written")
+        sys.exit(1)
+    doc = json.loads(vers[-1].read_text(encoding="utf-8"))
+    if doc.get("parent") is not None:
+        print(f"FAIL: S1A-16: {label}: verification.parent must be null, got {doc.get('parent')!r}")
+        sys.exit(1)
+    if doc.get("failing_step") != "G2":
+        print(f"FAIL: S1A-16: {label}: failing_step must be G2, got {doc.get('failing_step')!r}")
+        sys.exit(1)
+    fl = doc.get("failing_line") or ""
+    if failing_line_substr not in fl:
+        print(f"FAIL: S1A-16: {label}: failing_line must contain {failing_line_substr!r}, got {fl!r}")
+        sys.exit(1)
+    if doc.get("exit_code") != 1:
+        print(f"FAIL: S1A-16: {label}: verification.exit_code must be 1, got {doc.get('exit_code')!r}")
+        sys.exit(1)
+    st = read_state(layout, tag)
+    impl_attempts = st.get("attempts", {}).get("implementer", 0)
+    if impl_attempts != before_attempts + 1:
+        print(
+            f"FAIL: S1A-16: {label}: attempts.implementer must increment "
+            f"{before_attempts}->+1, got {impl_attempts}"
+        )
+        sys.exit(1)
+
+
 r3 = decide_next(layout, tag, session_probe=lambda s: {"running": False, "exit_code": None, "lost": True})
 if r3.get("action") != "verify" or "verify-impl" not in r3.get("command", ""):
     print(f"FAIL: S1-R12.3 (Row 2 session lost): got {r3}")
@@ -107,12 +137,19 @@ if r3.get("action") != "verify" or "verify-impl" not in r3.get("command", ""):
 if "--closure" in r3.get("command", ""):
     print(f"FAIL: S1A-16: lost-session command must omit --closure, got {r3}")
     sys.exit(1)
+attempts_before_lost = read_state(layout, tag).get("attempts", {}).get("implementer", 0)
+for f in runs.glob("verification-*.json"):
+    f.unlink()
 rc_lost = run_generated(r3["command"])
-if rc_lost == 2:
-    print("FAIL: S1A-16: lost-session verify-impl without --closure must not be usage exit 2")
+if rc_lost != 1:
+    print(f"FAIL: S1A-16: lost-session verify-impl must exit 1 (red G2), got {rc_lost}")
     sys.exit(1)
-if rc_lost not in (0, 1, 3):
-    print(f"FAIL: S1A-16: lost-session verify-impl unexpected exit {rc_lost}")
+assert_red_g2_artifact("lost-session", attempts_before_lost, "Session lost")
+
+# Explicit bad --closure path stays usage exit 2 (not conflated with omit --closure).
+rc_bad_path = run_generated(f"actl verify-impl --sprint {tag} --closure {sdir / 'no-such-closure.json'}")
+if rc_bad_path != 2:
+    print(f"FAIL: S1A-16: explicit missing --closure path must be usage exit 2, got {rc_bad_path}")
     sys.exit(1)
 
 update_state(layout, tag, {"tmux_sessions": []})
@@ -134,6 +171,8 @@ if rc_cl == 2:
     sys.exit(1)
 
 (outbox / "closure.json").unlink()
+for f in runs.glob("verification-*.json"):
+    f.unlink()
 r5 = decide_next(layout, tag)
 if r5.get("action") != "verify" or "verify-impl" not in r5.get("command", ""):
     print(f"FAIL: S1-R12.3 (Row 4 finished without closure): got {r5}")
@@ -141,10 +180,12 @@ if r5.get("action") != "verify" or "verify-impl" not in r5.get("command", ""):
 if "--closure" in r5.get("command", ""):
     print(f"FAIL: S1A-16: missing-outbox command must omit --closure, got {r5}")
     sys.exit(1)
+attempts_before_miss = read_state(layout, tag).get("attempts", {}).get("implementer", 0)
 rc_miss = run_generated(r5["command"])
-if rc_miss == 2:
-    print("FAIL: S1A-16: missing-outbox verify-impl without --closure must not be usage exit 2")
+if rc_miss != 1:
+    print(f"FAIL: S1A-16: missing-outbox verify-impl must exit 1 (red G2), got {rc_miss}")
     sys.exit(1)
+assert_red_g2_artifact("missing-outbox", attempts_before_miss, "Missing implementer closure")
 
 (runs / "verification-007.json").write_text(
     json.dumps(make_ver(7, 1, stage="blocked_check", failing_step="O1:01_public.sh", parent="closure-006.json")),
