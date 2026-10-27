@@ -12,17 +12,18 @@ Close the four doctor.py survivors found at seed 61 (lines 117, 154, 164, 170) u
 - test/actl/test_s0_gap5_doctor_contract.py
 
 ## 3. Accepted Survivors and Equivalence Justifications
-Decision of Vela-1 (GPT 6.1 Sol concurred); the Owner ruled yes on 2026-10-27:
+Decision of Vela-1 (GPT 6.1 Sol concurred); the Owner ruled yes on 2026-10-27 (Owner message in the Step 0 supervising thread):
 1. timeout=600 constants (src/actl/doctor.py lines ~150, 170, 171): accepted survivors. No contract specifies the internal suite execution timeout of 600 seconds.
 2. Proven equivalent survivors (49:16, 85:75): accepted; arguments in section 5.
 
-In the scratch hand-check, 63 of 68 token sites were killed (section 5). mutate.py sampled 21 distinct sites over seeds 61, 67 and 71.
+In the scratch hand-check, 63 of 68 token sites were killed (section 5). mutate.py sampled at least 21 distinct lines (a line can hold more than one site) over seeds 61, 67 and 71.
 
 ## 4. Gate Verification
 - proof/run_suite_actl_s0.sh: PASS (19/19)
 - pytest test/actl: PASS
 - audit/atools-compliance_audit.sh --cursor: PASS
-- audit/atools-compliance_audit.sh --self-test: PASS
+- audit/atools-compliance_audit.sh --self-test: PASS (reported by Vela-S2, not re-run independently on this tip; it ran clean at 4e16cc3)
+- Independent re-run by Vela-1 at 842906b: S0 suite 19 passed, 0 failed, 0 environment with P-S0-02 PASS; pytest 889 passed; audit --cursor 49 passed, 0 failed, 18 skipped, 2 warnings. The engines suite and --self-test were not re-run on that tip.
 
 ## 5. Evidence
 Tests commit 849635a; merge and signoff c98e94d.
@@ -31,7 +32,7 @@ Mutation (tools/mutate.py --only src/actl/doctor.py --n 8 --timeout 240, clean c
   117, 154 and 164 killed, 170 accepted.
 - seed 67: 8 sampled, 7 killed, 1 survived (150:76 600 to 601, accepted).
 - seed 71: 8 sampled, 8 killed.
-- Total 24 draws on 21 distinct sites: 22 killed, 2 accepted constants, 0 unexplained. Stop rule not triggered.
+- Total 24 draws on at least 21 distinct lines: 22 killed, 2 accepted constants, 0 unexplained. Stop rule not triggered.
 Hand-check in a scratch export (not mutate.py): 68 token mutants, 63 killed; survivors 49:16 and 85:75 (equivalent),
 150:76, 170:91 and 171:94 (accepted constants). Plus 13 distinct structural mutants (15 entries; S9 and S13 repeat S5), all killed (S8 by a suites_fs test, not by the contract file); S8, S10, S11 and S12 were not run without the contract file.
 Equivalence arguments:
