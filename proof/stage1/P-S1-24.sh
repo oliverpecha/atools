@@ -16,6 +16,7 @@ fi
 # Spies count only verification-*.json (not state.json).
 python3 - <<'PY'
 import os
+import stat as stat_mod
 import tempfile
 from pathlib import Path
 
@@ -47,6 +48,29 @@ def is_verification_json(path: str) -> bool:
     return base.startswith("verification-") and base.endswith(".json") and ".meta." not in base
 
 
+def lstat_replace_identity(src_s: str):
+    """Identity of the directory entry os.replace will move: lstat, not stat/realpath."""
+    inode = (None, None)
+    is_symlink = False
+    is_reg = False
+    try:
+        st = os.lstat(src_s)
+        inode = (st.st_dev, st.st_ino)
+        is_symlink = stat_mod.S_ISLNK(st.st_mode)
+        is_reg = stat_mod.S_ISREG(st.st_mode)
+    except OSError:
+        pass
+    artifact = b""
+    # Symlink is not durable content; only read bytes of a regular file dirent.
+    if is_reg and not is_symlink:
+        try:
+            with open(src_s, "rb") as rf:
+                artifact = rf.read()
+        except OSError:
+            artifact = b""
+    return artifact, inode, is_symlink, is_reg
+
+
 class Tracer:
     """Record fsync/replace/unlink; on fsync capture path + visible bytes (fstat/proc)."""
 
@@ -73,18 +97,9 @@ class Tracer:
 
     def replace(self, src, dst):
         src_s, dst_s = str(src), str(dst)
-        try:
-            artifact = Path(src_s).read_bytes()
-        except OSError:
-            artifact = b""
-        # Identity of the inode the kernel will rename (stat BEFORE rename).
-        inode = (None, None)
-        try:
-            st = os.stat(src_s)
-            inode = (st.st_dev, st.st_ino)
-        except OSError:
-            pass
-        self.events.append(("replace", src_s, dst_s, artifact, inode))
+        # lstat BEFORE rename: object replace moves (reject symlink via S_ISLNK).
+        artifact, inode, is_symlink, is_reg = lstat_replace_identity(src_s)
+        self.events.append(("replace", src_s, dst_s, artifact, inode, is_symlink, is_reg))
         return self.real_replace(src_s, dst_s)
 
     def unlink(self, path):
@@ -93,12 +108,12 @@ class Tracer:
 
 
 def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
-    """Require write-final-bytes fsync of replace-src before replace, then dir fsync + unlinks."""
+    """Every verification replace: prior fsync with lstat identity + blob; dir fsync+unlinks after last replace."""
     dest = os.path.abspath(str(dest))
     src_log = os.path.abspath(str(src_log))
     src_exit = os.path.abspath(str(src_exit))
     dest_dir_abs = os.path.realpath(str(Path(dest).parent))
-    replace_src_abs = os.path.realpath(str(replace_src)) if replace_src is not None else None
+    del replace_src  # identity is lstat inode at replace, not realpath of replace_src
 
     abs_events = []
     for ev in events:
@@ -107,10 +122,12 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             abs_events.append(
                 (
                     "replace",
-                    os.path.realpath(ev[1]),
+                    os.path.abspath(ev[1]),  # dirent path; do not realpath (GD-04a)
                     os.path.abspath(ev[2]),
                     ev[3] if len(ev) > 3 else b"",
                     ev[4] if len(ev) > 4 else (None, None),
+                    ev[5] if len(ev) > 5 else False,
+                    ev[6] if len(ev) > 6 else False,
                 )
             )
         elif k == "fsync":
@@ -121,6 +138,7 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             if str(p).startswith("fd:"):
                 abs_events.append((k, p, size, blob, inode))
             else:
+                # realpath OK for dir-fsync matching; temp identity uses inode below
                 abs_events.append((k, os.path.realpath(p), size, blob, inode))
         else:
             p = ev[1]
@@ -132,52 +150,53 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
     ]
     if not replace_idxs:
         raise AssertionError("replace of verification destination never observed")
-    ri = replace_idxs[0]
-    rep = abs_events[ri]
-    observed_src = rep[1]
-    artifact = rep[3]
-    replace_inode = rep[4] if len(rep) > 4 else (None, None)
-    if replace_src_abs is None:
-        replace_src_abs = observed_src
-    if replace_src_abs is None:
-        raise AssertionError("replace-src temp path unknown; cannot verify temp fsync")
-    if not artifact:
-        raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
 
-    pre = abs_events[:ri]
-    matching_temp_fsync = False
-    saw_temp_fsync = False
-    for e in pre:
-        if e[0] != "fsync":
-            continue
-        p = e[1]
-        if str(p).startswith("fd:"):
-            raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
-        if os.path.realpath(p) != replace_src_abs:
-            # GD-04b: ignore non-verification pre-fsync (state.json, state.json.tmp, dest_dir).
-            # deg_unrelated still REJECTS: replace_src itself was never fsynced.
-            continue
-        saw_temp_fsync = True
-        size, blob = e[2], e[3]
-        fsync_inode = e[4] if len(e) > 4 else (None, None)
-        # Final content + same inode the kernel will rename (reject inode-swap).
-        if (
-            blob == artifact
-            and fsync_inode == replace_inode
-            and fsync_inode[0] is not None
-            and fsync_inode[1] is not None
-        ):
-            matching_temp_fsync = True
-    if not saw_temp_fsync:
-        raise AssertionError(
-            f"no fsync of exact replace-src temp path {replace_src_abs} before replace"
-        )
-    if not matching_temp_fsync:
-        raise AssertionError(
-            "fsync-before-write / fsync empty / different inode: temp fsync bytes "
-            f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
-        )
+    # NEW-03: validate every verification replace (not only replace_idxs[0]).
+    for ri in replace_idxs:
+        rep = abs_events[ri]
+        artifact = rep[3]
+        replace_inode = rep[4] if len(rep) > 4 else (None, None)
+        is_symlink = rep[5] if len(rep) > 5 else False
+        is_reg = rep[6] if len(rep) > 6 else False
+        if is_symlink or not is_reg:
+            raise AssertionError(
+                "symlink-replace rejected: replace-src lstat is S_ISLNK or not S_ISREG"
+            )
+        if not artifact:
+            raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
+        if replace_inode[0] is None or replace_inode[1] is None:
+            raise AssertionError("replace-src lstat inode unknown; cannot verify identity")
 
+        pre = abs_events[:ri]
+        matching_temp_fsync = False
+        saw_temp_fsync = False
+        for e in pre:
+            if e[0] != "fsync":
+                continue
+            p = e[1]
+            if str(p).startswith("fd:"):
+                raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
+            fsync_inode = e[4] if len(e) > 4 else (None, None)
+            # GD-04a: fstat must equal replace lstat (st_dev, st_ino); not realpath/stat.
+            if fsync_inode != replace_inode or fsync_inode[0] is None or fsync_inode[1] is None:
+                # GD-04b: ignore non-matching pre-fsync (state.json, state.json.tmp, dest_dir).
+                continue
+            saw_temp_fsync = True
+            blob = e[3]
+            if blob == artifact:
+                matching_temp_fsync = True
+        if not saw_temp_fsync:
+            raise AssertionError(
+                f"no fsync of replace-src lstat inode {replace_inode} before replace"
+            )
+        if not matching_temp_fsync:
+            raise AssertionError(
+                "fsync-before-write / fsync empty / different inode: temp fsync bytes "
+                f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
+            )
+
+    # Dir fsync + unlinks required after the last verification replace.
+    ri = replace_idxs[-1]
     post = abs_events[ri + 1 :]
     dir_fsync_idxs = [
         i
@@ -436,6 +455,61 @@ with tempfile.TemporaryDirectory() as td:
     expect_reject("inode-swap / different inode counterfeit", deg_inode_swap)
     print("OK inode-swap rejected")
 
+    # GD-04a: symlink .tmp -> .tmp.real; fsync through symlink; replace moves the symlink.
+    def deg_symlink_replace():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp = td / "verification-006.json.tmp"
+        tmp_real = td / "verification-006.json.tmp.real"
+        install(tr)
+        try:
+            with open(tmp_real, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+            tmp.symlink_to(tmp_real.name)
+            with open(tmp, "rb") as f:  # open+fsync through symlink (fstat=target)
+                os.fsync(f.fileno())
+            os.replace(str(tmp), str(dest))  # moves the symlink dirent
+            dir_fsync()
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+            if tmp_real.exists():
+                tmp_real.unlink()
+
+    expect_reject("symlink-replace counterfeit", deg_symlink_replace)
+    print("OK symlink-replace rejected")
+
+    # NEW-03: durable first replace, then non-fsynced second replace of same dest.
+    def deg_second_replace():
+        reset_sess(td, dest, src_log, src_exit)
+        tr = Tracer()
+        tmp_a = td / "verification-006.json.tmp.a"
+        tmp_b = td / "verification-006.json.tmp.b"
+        install(tr)
+        try:
+            with open(tmp_a, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(str(tmp_a), str(dest))
+            with open(tmp_b, "wb") as f:
+                f.write(ARTIFACT)
+                f.flush()
+                # deliberately no fsync of second replace source
+            os.replace(str(tmp_b), str(dest))
+            dir_fsync()
+            os.unlink(str(src_log))
+            os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit)
+        finally:
+            restore()
+
+    expect_reject("second-replace / every replace counterfeit", deg_second_replace)
+    print("OK second-replace rejected")
+
     # 7) replace in finally after failed fsync
     reset_sess(td, dest, src_log, src_exit)
     tmp_deg = td / "verification-006.json.tmpdeg"
@@ -529,6 +603,7 @@ python3 - "$SDIR" "$WT" <<'PY'
 import hashlib
 import os
 import re
+import stat as stat_mod
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -613,6 +688,28 @@ def is_verification_temp(path: str) -> bool:
     return ap.startswith(dest_abs + os.sep) or os.path.dirname(ap) == dest_abs
 
 
+def lstat_replace_identity(src_s: str):
+    """Identity of the directory entry os.replace will move: lstat, not stat/realpath."""
+    inode = (None, None)
+    is_symlink = False
+    is_reg = False
+    try:
+        st = os.lstat(src_s)
+        inode = (st.st_dev, st.st_ino)
+        is_symlink = stat_mod.S_ISLNK(st.st_mode)
+        is_reg = stat_mod.S_ISREG(st.st_mode)
+    except OSError:
+        pass
+    artifact = b""
+    if is_reg and not is_symlink:
+        try:
+            with open(src_s, "rb") as rf:
+                artifact = rf.read()
+        except OSError:
+            artifact = b""
+    return artifact, inode, is_symlink, is_reg
+
+
 def spy_fsync(fd):
     size = -1
     inode = (None, None)
@@ -630,17 +727,8 @@ def spy_replace(src, dst):
     src_s, dst_s = str(src), str(dst)
     # Record verification-*.json dest only (state.json ignored).
     if is_verification_json(dst_s):
-        try:
-            artifact = Path(src_s).read_bytes()
-        except OSError:
-            artifact = b""
-        inode = (None, None)
-        try:
-            st = os.stat(src_s)  # BEFORE rename: inode the kernel will rename
-            inode = (st.st_dev, st.st_ino)
-        except OSError:
-            pass
-        events.append(("replace", src_s, dst_s, artifact, inode))
+        artifact, inode, is_symlink, is_reg = lstat_replace_identity(src_s)
+        events.append(("replace", src_s, dst_s, artifact, inode, is_symlink, is_reg))
     return real_replace(src_s, dst_s)
 
 
@@ -650,12 +738,12 @@ def spy_unlink(path):
 
 
 def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
-    """Same oracle as Block 1: blob==artifact + st_dev/st_ino; non-verification pre-fsync ignored."""
+    """Same oracle as Block 1: every replace durable via lstat+fstat; dir fsync after last replace."""
     dest = os.path.abspath(str(dest))
     src_log = os.path.abspath(str(src_log))
     src_exit = os.path.abspath(str(src_exit))
     dest_dir_abs = os.path.realpath(str(Path(dest).parent))
-    replace_src_abs = os.path.realpath(str(replace_src)) if replace_src is not None else None
+    del replace_src  # identity is lstat inode at replace, not realpath of replace_src
 
     abs_events = []
     for ev in events:
@@ -664,10 +752,12 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             abs_events.append(
                 (
                     "replace",
-                    os.path.realpath(ev[1]),
+                    os.path.abspath(ev[1]),  # dirent path; do not realpath (GD-04a)
                     os.path.abspath(ev[2]),
                     ev[3] if len(ev) > 3 else b"",
                     ev[4] if len(ev) > 4 else (None, None),
+                    ev[5] if len(ev) > 5 else False,
+                    ev[6] if len(ev) > 6 else False,
                 )
             )
         elif k == "fsync":
@@ -689,50 +779,51 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
     ]
     if not replace_idxs:
         raise AssertionError("replace of verification destination never observed")
-    ri = replace_idxs[0]
-    rep = abs_events[ri]
-    observed_src = rep[1]
-    artifact = rep[3]
-    replace_inode = rep[4] if len(rep) > 4 else (None, None)
-    if replace_src_abs is None:
-        replace_src_abs = observed_src
-    if replace_src_abs is None:
-        raise AssertionError("replace-src temp path unknown; cannot verify temp fsync")
-    if not artifact:
-        raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
 
-    pre = abs_events[:ri]
-    matching_temp_fsync = False
-    saw_temp_fsync = False
-    for e in pre:
-        if e[0] != "fsync":
-            continue
-        p = e[1]
-        if str(p).startswith("fd:"):
-            raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
-        if os.path.realpath(p) != replace_src_abs:
-            # GD-04b: ignore non-verification pre-fsync (state.json, state.json.tmp, dest_dir).
-            continue
-        saw_temp_fsync = True
-        size, blob = e[2], e[3]
-        fsync_inode = e[4] if len(e) > 4 else (None, None)
-        if (
-            blob == artifact
-            and fsync_inode == replace_inode
-            and fsync_inode[0] is not None
-            and fsync_inode[1] is not None
-        ):
-            matching_temp_fsync = True
-    if not saw_temp_fsync:
-        raise AssertionError(
-            f"no fsync of exact replace-src temp path {replace_src_abs} before replace"
-        )
-    if not matching_temp_fsync:
-        raise AssertionError(
-            "fsync-before-write / fsync empty / different inode: temp fsync bytes "
-            f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
-        )
+    # NEW-03: validate every verification replace (not only replace_idxs[0]).
+    for ri in replace_idxs:
+        rep = abs_events[ri]
+        artifact = rep[3]
+        replace_inode = rep[4] if len(rep) > 4 else (None, None)
+        is_symlink = rep[5] if len(rep) > 5 else False
+        is_reg = rep[6] if len(rep) > 6 else False
+        if is_symlink or not is_reg:
+            raise AssertionError(
+                "symlink-replace rejected: replace-src lstat is S_ISLNK or not S_ISREG"
+            )
+        if not artifact:
+            raise AssertionError("artifact bytes empty at replace; nothing durable to prove")
+        if replace_inode[0] is None or replace_inode[1] is None:
+            raise AssertionError("replace-src lstat inode unknown; cannot verify identity")
 
+        pre = abs_events[:ri]
+        matching_temp_fsync = False
+        saw_temp_fsync = False
+        for e in pre:
+            if e[0] != "fsync":
+                continue
+            p = e[1]
+            if str(p).startswith("fd:"):
+                raise AssertionError(f"unmapped fd fsync before replace is not proof of temp fsync: {p}")
+            fsync_inode = e[4] if len(e) > 4 else (None, None)
+            if fsync_inode != replace_inode or fsync_inode[0] is None or fsync_inode[1] is None:
+                # GD-04b: ignore non-matching pre-fsync (state.json, state.json.tmp, dest_dir).
+                continue
+            saw_temp_fsync = True
+            blob = e[3]
+            if blob == artifact:
+                matching_temp_fsync = True
+        if not saw_temp_fsync:
+            raise AssertionError(
+                f"no fsync of replace-src lstat inode {replace_inode} before replace"
+            )
+        if not matching_temp_fsync:
+            raise AssertionError(
+                "fsync-before-write / fsync empty / different inode: temp fsync bytes "
+                f"or st_dev/st_ino do not match artifact at replace (len={len(artifact)})"
+            )
+
+    ri = replace_idxs[-1]  # last replace: dir fsync + unlinks after
     post = abs_events[ri + 1 :]
     dir_fsync_idxs = [
         i
