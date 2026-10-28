@@ -530,7 +530,7 @@ Every requirement `S2-R1`..`S2-R13` maps to executable proofs, and every proof `
 
 | ID | Unclear Area | Possible Readings | Chosen Reading | Why |
 | --- | --- | --- | --- | --- |
-| S2A-1 | Scale of inner hunk delimiters in `fence="N"`. | (a) Fixed 7 characters. (b) Scaled to `N+4` characters. | (b) Scaled to `N+4` characters. | Addendum §7.5 and O-3 state inner delimiters scale to `N+4` so hunks can contain arbitrary diff markers without collision. |
+| S2A-1 | Scale of inner hunk delimiters in `fence="N"`. | (a) Fixed 7 characters. (b) Scaled to `N+4` characters. | (b) Scaled to `N+4` characters. | Addendum §7.5 and D-49 (closes O-3) state inner delimiters scale to `N+4` so hunks can contain arbitrary diff markers without collision. |
 | S2A-2 | Normalization of outer Markdown code block fences. | (a) Leave untouched. (b) Strip single enclosing ````` block outside top-level `<<<...>>>` markers. | (b) Strip single enclosing ````` block. | Addendum §7.4 S2-R4 step 3 explicitly specifies stripping one enclosing Markdown code fence outside top-level markers. |
 | S2A-3 | `promote_role` return dictionary key count. | (a) 5 keys (`INTERFACES.md` §1.11). (b) 7 keys (`INTERFACES.md` §2 CLI synopsis and D-43). | (b) 7 keys. | Ruling D-43 resolves this in favor of 7 keys (`sprint_tag`, `role`, `promoted`, `staged_to`, `active_spec`, `active_solution_key`, `active_oracle_draft`). |
 | S2A-4 | Challenger draft promotion `staged_to` destination. | (a) `inbox/actl`. (b) Records path of promoted `oracle-draft-{seq}` directory. | (b) Records path string. | Ruling D-43 establishes that no `actl` role mailbox exists; challenger `staged_to` is `str(layout.sprint_dir(tag) / f"oracle-draft-{seq:03d}")`. |
@@ -542,14 +542,14 @@ Every requirement `S2-R1`..`S2-R13` maps to executable proofs, and every proof `
 | S2A-10 | Command recommended by `actl next` when `unpack.json` has `ok == False`. | (a) `actl bundle ... --repair` (unlisted flag). (b) `actl unpack <purpose> --sprint <TAG> --turn <TURN_ID> --amend`. | (b) `actl unpack <purpose> --sprint <TAG> --turn <TURN_ID> --amend`. | `INTERFACES.md` §2 has no `--repair` flag on `actl bundle`; `repair.txt` instructs the user to paste the model's fix into `actl unpack --amend`. |
 | S2A-11 | `actl bundle --out -` combined with `--json`. | (a) Interleave on stdout. (b) Reject with `UsageError` (exit `2`). | (b) Reject with `UsageError` (exit `2`). | Addendum §7.4 S2-R2 explicitly specifies that `--out -` with `--json` is rejected with exit `2`. |
 | S2A-12 | Deduplication tuple in `promote_role`. | (a) `sha256` only. (b) `(kind, parent, sha256)`. | (b) `(kind, parent, sha256)`. | Addendum §7.4 S2-R9 and `INTERFACES.md` §1.11 require deduplication by `(kind, parent, sha256)`. |
-| S2A-13 | `sprint.toml` vs `sprint-proposal.toml` filename in `architect-intake`. | (a) Accept only `sprint-proposal.toml`. (b) Accept `sprint-proposal.toml` (or `sprint.toml` as alias in intake) and validate against `schemas/sprint-proposal.json`. | (b) Validate against `schemas/sprint-proposal.json` in both cases. | Addendum §7.5 lists `sprint-proposal.toml` while golden `expected.d/s2.json` uses `sprint.toml`; accepting both names and validating against `sprint-proposal.json` satisfies both. |
+| S2A-13 | `sprint.toml` vs `sprint-proposal.toml` filename in `architect-intake`. | (a) Accept only `sprint-proposal.toml`. (b) Accept `sprint-proposal.toml` (or `sprint.toml` as alias in intake, D-51) and validate against `schemas/sprint-proposal.json`. | (b) Validate against `schemas/sprint-proposal.json` in both cases. | Addendum §7.5 lists `sprint-proposal.toml` while golden `expected.d/s2.json` uses `sprint.toml`; accepting both names and validating against `sprint-proposal.json` satisfies both. |
 | S2A-14 | Crash recovery if `unpack` is interrupted mid-swap between the two `os.rename` calls. | (a) Leave `outbox` missing. (b) Hold `state_lock`, roll back `.prev` on rename error, and auto-recover `.prev -> outbox` on next entry if `outbox` is absent. | (b) Lock + rollback + auto-recovery (§S2-R4.7). | Prevents an interrupted swap from permanently losing the prior valid outbox. |
 
 ---
 
 ## 4. Proposed Decisions and Rulings Verification
 
-* **O-3 (Envelope & Hunk Escape):** Closed per `INTERFACES.md` §6: `fence="N"` (`N` in `3..9`, default `3`) scales block markers to `N` and inner hunk delimiters to `N+4`.
-* **O-9 (Step 3 Normalization):** Closed per §S2-R4.5: strip UTF-8 BOM, convert `CRLF`/`CR` to `LF`, strip one enclosing Markdown fence outside top-level markers, and strip trailing horizontal whitespace on marker and hunk delimiter lines only.
+* **O-3 (Envelope & Hunk Escape):** Closed (D-49), consistent with `INTERFACES.md` §6: `fence="N"` (`N` in `3..9`, default `3`) scales block markers to `N` and inner hunk delimiters to `N+4`.
+* **D-50 (Step 3 Normalization; addendum O-18):** Decided, see §S2-R4.5: strip UTF-8 BOM, convert `CRLF`/`CR` to `LF`, strip one enclosing Markdown fence outside top-level markers, and strip trailing horizontal whitespace on marker and hunk delimiter lines only.
 * **Sentinel Quoting (D-44):** Mandatory double quotes around `HEX8` (`<<<END_RESPONSE bundle="HEX8">>>`) in both emitters and parsers.
 * **Rulings D-34, D-41, D-43, D-44, D-46:** Verified compliant across all clauses and proofs.
