@@ -21,15 +21,28 @@ def test_real_expected_dir_loads_base():
     for key, val in base.get("cases", {}).items():
         if key not in d["cases"]: fail("base case missing: %s" % key)
         if d["cases"][key] != val: fail("base case altered: %s" % key)
-    union = {}
+    union_resp = {}
+    union_cases = {}
     ed = GOLDEN / "expected.d"
     for frag in sorted(ed.glob("*.json"), key=lambda x: x.name):
         if frag.name == "base.json":
             continue
         doc = json.loads(frag.read_text())
-        if isinstance(doc, dict) and isinstance(doc.get("responses"), dict):
-            union.update(doc["responses"])
-    if d["responses"] != union: fail("responses must be the union of non-base fragments")
+        if not isinstance(doc, dict):
+            continue
+        if isinstance(doc.get("responses"), dict):
+            union_resp.update(doc["responses"])
+        if isinstance(doc.get("cases"), dict):
+            for key, val in doc["cases"].items():
+                if key in union_cases or key in base.get("cases", {}):
+                    fail("duplicate case in fragments: %s" % key)
+                union_cases[key] = val
+    if d["responses"] != union_resp: fail("responses must be the union of non-base fragments")
+    for key, val in union_cases.items():
+        if key not in d["cases"]: fail("fragment case missing: %s" % key)
+        if d["cases"][key] != val: fail("fragment case altered: %s" % key)
+    if set(d["cases"]) != set(base.get("cases", {})) | set(union_cases):
+        fail("merged cases keys must be base union fragment cases")
 
 
 def test_merges_base_s1_s2(tmp_path):
@@ -66,3 +79,13 @@ def test_lexical_order_is_deterministic(tmp_path):
     (ed / "s1.json").write_text(json.dumps({"cases": {"b": {}}}))
     d1 = _load()(ed)
     if list(d1["cases"]) != ["z", "a", "b", "m"]: fail("fragments must merge in lexical filename order (base, s1, s2); got %s" % list(d1["cases"]))
+
+def test_duplicate_case_across_non_base_fragments(tmp_path):
+    """S0-R14.2: a case key in two non-base fragments is ValueError (D28-01)."""
+    ed = tmp_path / "e"
+    ed.mkdir()
+    shutil.copy(GOLDEN / "expected.d" / "base.json", ed / "base.json")
+    (ed / "s1.json").write_text(json.dumps({"cases": {"s1_only": {"applies_on": "base", "expect": {"step": "O1", "exit": 1, "failing_step": "O1:x.sh", "failing_line_contains": None}}}}))
+    (ed / "s2.json").write_text(json.dumps({"cases": {"s1_only": {"applies_on": "base", "expect": {"step": "O2", "exit": 0, "failing_step": None, "failing_line_contains": None}}}}))
+    with pytest.raises(ValueError):
+        _load()(ed)
