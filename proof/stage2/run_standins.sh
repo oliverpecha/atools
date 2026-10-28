@@ -172,10 +172,26 @@ for m in ("empty", "pass", "fail"):
         f"OTHER:{c['OTHER']:2d}"
     )
 
-assert counts["empty"]["PASS"] == 0 and counts["empty"]["OTHER"] == 0
-assert counts["empty"]["IMPORT"] + counts["empty"]["ASSERT"] == 17
-for m in ("pass", "fail"):
-    assert counts[m]["ASSERT"] == 17 and counts[m]["OTHER"] == 0
-    assert counts[m]["PASS"] == 0 and counts[m]["IMPORT"] == 0
+expected_empty_import = {pn for pn, c in results["empty"].items() if c == "IMPORT"}
+for pn in expected_empty_import:
+    assert results["empty"][pn] == "IMPORT"
+for pn in set(results["empty"]) - expected_empty_import:
+    assert results["empty"][pn] == "ASSERT"
 
+assert counts["empty"]["PASS"] == 0
+assert counts["empty"]["SETUP"] == 0
+assert counts["empty"]["ENV"] == 0
+assert counts["empty"]["OTHER"] == 0
+assert counts["empty"]["IMPORT"] == 3
+assert counts["empty"]["ASSERT"] == 14
+
+for m in ("pass", "fail"):
+    assert counts[m]["ASSERT"] == 17
+    assert counts[m]["PASS"] == 0
+    assert counts[m]["IMPORT"] == 0
+    assert counts[m]["SETUP"] == 0
+    assert counts[m]["ENV"] == 0
+    assert counts[m]["OTHER"] == 0
+
+print(f"EMPTY_IMPORTS: {sorted(expected_empty_import)}")
 print("OK: run_standins verified with strict classification")
