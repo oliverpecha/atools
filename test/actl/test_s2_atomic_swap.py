@@ -50,14 +50,20 @@ def test_outbox_swap_rollback_on_rename_failure(tmp_path: Path, monkeypatch: pyt
     orig_file = outbox / "preserved.txt"
     orig_file.write_text("prior_valid_state\n", encoding="utf-8")
 
-    # Mock os.rename so the staging -> outbox rename raises OSError
+    # Mock rename/replace with resolved-path equality to target outbox
     real_rename = os.rename
+    real_replace = os.replace
     def faulty_rename(src, dst):
-        if ".architect-staging" in str(src) and str(dst).endswith("outbox"):
+        if Path(dst).resolve() == Path(outbox).resolve():
             raise OSError("Injected disk failure during atomic rename")
         return real_rename(src, dst)
+    def faulty_replace(src, dst):
+        if Path(dst).resolve() == Path(outbox).resolve():
+            raise OSError("Injected disk failure during atomic replace")
+        return real_replace(src, dst)
 
     monkeypatch.setattr(os, "rename", faulty_rename)
+    monkeypatch.setattr(os, "replace", faulty_replace)
 
     good_resp = GOLDEN_DIR / "responses" / "good_architect_intake.txt"
     with pytest.raises(OSError):
@@ -67,3 +73,31 @@ def test_outbox_swap_rollback_on_rename_failure(tmp_path: Path, monkeypatch: pyt
     assert outbox.is_dir()
     assert (outbox / "preserved.txt").is_file()
     assert (outbox / "preserved.txt").read_text(encoding="utf-8") == "prior_valid_state\n"
+
+
+def test_atomic_swap_spy_path_restriction(tmp_path: Path):
+    """Self-test: os.replace spy only triggers on target outbox."""
+    outbox = tmp_path / "outbox"
+    outbox.mkdir()
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    unrelated_src = tmp_path / "unrelated_src"
+    unrelated_src.mkdir()
+    unrelated_dst = tmp_path / "unrelated_dst"
+
+    orig_replace = os.replace
+    def _spy_replace(src, dst):
+        if Path(dst).resolve() == Path(outbox).resolve():
+            raise OSError("simulated atomic swap failure")
+        return orig_replace(src, dst)
+
+    # Unrelated replace must pass without raising
+    _spy_replace(str(unrelated_src), str(unrelated_dst))
+    assert unrelated_dst.is_dir()
+
+    # Target outbox replace must raise OSError
+    try:
+        _spy_replace(str(staging), str(outbox))
+        assert False, "Expected OSError on target outbox"
+    except OSError:
+        pass
