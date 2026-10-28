@@ -821,10 +821,21 @@ def originals_intact():
     )
 
 
+# NEW-04-LIVE: snapshot seq before failure injections; restore in clear so happy
+# path reserves verification-006.json (five verify_impl calls would else advance
+# to verification-011.json). Also drop seq.highwater so reserve sees the same seq.
+state_path = dest_dir / "state.json"
+initial_state = state_path.read_bytes()
+
+
 def clear_verification_artifacts():
     """NEW-02: drop prior commits so a later boundary cannot be satisfied by leftovers."""
     for p in dest_dir.glob("verification-*.json"):
         p.unlink()
+    state_path.write_bytes(initial_state)
+    hw = dest_dir / "seq.highwater"
+    if hw.is_file():
+        hw.unlink()
 
 
 # --- Failure injection at every persistence boundary ---
