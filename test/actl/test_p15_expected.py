@@ -13,12 +13,23 @@ def _load():
 
 
 def test_real_expected_dir_loads_base():
+    """Merged expected.d keeps every base case; fragments may add cases/responses (S0-R14)."""
     d = _load()(GOLDEN / "expected.d")
     base = json.loads((GOLDEN / "expected.d" / "base.json").read_text())
     if d["base_sha"] != base["base_sha"] or d["base_sha"] != BASE_SHA: fail("base_sha not loaded")
-    if d["cases"] != base["cases"]: fail("cases not loaded from base.json")
     if set(d) != {"base_sha", "cases", "responses"}: fail("merged dict keys must be base_sha/cases/responses, got %s" % sorted(d))
-    if d["responses"] != {}: fail("responses defaults to {} when no fragment defines them")
+    for key, val in base.get("cases", {}).items():
+        if key not in d["cases"]: fail("base case missing: %s" % key)
+        if d["cases"][key] != val: fail("base case altered: %s" % key)
+    union = {}
+    ed = GOLDEN / "expected.d"
+    for frag in sorted(ed.glob("*.json"), key=lambda x: x.name):
+        if frag.name == "base.json":
+            continue
+        doc = json.loads(frag.read_text())
+        if isinstance(doc, dict) and isinstance(doc.get("responses"), dict):
+            union.update(doc["responses"])
+    if d["responses"] != union: fail("responses must be the union of non-base fragments")
 
 
 def test_merges_base_s1_s2(tmp_path):

@@ -45,6 +45,7 @@ fi
 # LT-A3 pin refresh applied
 # LT-FINAL pin refresh applied
 # LT-A4 pin refresh applied
+# LT-A5 pin refresh applied
 is_authorized_pb2_modification() {
   local f="$1"
   [[ -f "$REPO/$f" ]] || return 1
@@ -152,7 +153,7 @@ is_authorized_pb2_modification() {
     "test/actl/test_p12_scope.py:c68869b8c468ddc2f964d0665f10c0ea57d5225a") return 0 ;;
     "test/actl/test_p13_next_rules.py:7d0922afcee311bb046eaa29e7364dce8dce11bb") return 0 ;;
     "test/actl/test_p14_registries.py:4eac996f088e54d5ab8af5ca54b1eab6ce57fc3b") return 0 ;;
-    "test/actl/test_p15_expected.py:310ad68138f0e91cb7bdc1443e4a11265d542887") return 0 ;;
+    "test/actl/test_p15_expected.py:3cbdd7129e6c2b77bd90eff14ad2fd88d0280baa") return 0 ;;
     "test/actl/test_p26_interfaces.py:cb77a27cf8d5ea8f0e8fa14644c96ef4c2cd272b") return 0 ;;
     "test/actl/test_s0_gap2_cli_next.py:973ef7643b5777d9a680a7a4f33dba4501763d1c") return 0 ;;
     "test/actl/test_s0_gap2_hashing.py:c0eac4944fad85b4d14ac77e6e56bbd0cf9f08ce") return 0 ;;
