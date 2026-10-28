@@ -84,41 +84,35 @@ done
 
 is_allowed_stage2_path() {
     local p="$1"
-    case "$p" in
-        src/actl/turns.py|\
-        src/actl/bundle.py|\
-        src/actl/envelope.py|\
-        src/actl/unpack.py|\
-        src/actl/patchsynth.py|\
-        src/actl/repair.py|\
-        src/actl/replay.py|\
-        src/actl/promote.py|\
-        src/actl/cmd_bundle.py|\
-        src/actl/cmd_unpack.py|\
-        src/actl/cmd_replay.py|\
-        src/actl/cmd_promote.py|\
-        src/actl/next_rules/phase12.py|\
-        prompts/architect-intake.md|\
-        prompts/architect-review.md|\
-        prompts/challenger.md|\
-        prompts/curator.md|\
-        prompts/_output_contract.md|\
-        docs/plan/spec-S2.md|\
-        docs/plan/stage2-implementer-runbook.md|\
-        proof/run_suite_actl_s2.sh|\
-        proof/stage2/*|\
-        test/actl/test_s2_*.py|\
-        fixtures/golden/make_responses.sh|\
-        fixtures/golden/expected.d/s2.json|\
-        fixtures/golden/responses/*|\
-        fixtures/golden/turns/*|\
-        install.sh|README.md)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    if ! python3 -c '
+import pathlib, sys
+repo = pathlib.Path(sys.argv[1]).resolve()
+try: t = (repo / sys.argv[2]).resolve()
+except Exception: sys.exit(1)
+if not t.is_relative_to(repo): sys.exit(1)
+ALLOWED = {repo / p for p in [
+    "src/actl/turns.py", "src/actl/bundle.py", "src/actl/envelope.py",
+    "src/actl/unpack.py", "src/actl/patchsynth.py", "src/actl/repair.py",
+    "src/actl/replay.py", "src/actl/promote.py", "src/actl/cmd_bundle.py",
+    "src/actl/cmd_unpack.py", "src/actl/cmd_replay.py",
+    "src/actl/cmd_promote.py", "src/actl/next_rules/phase12.py",
+    "prompts/architect-intake.md", "prompts/architect-review.md",
+    "prompts/challenger.md", "prompts/curator.md",
+    "prompts/_output_contract.md", "docs/plan/spec-S2.md",
+    "docs/plan/stage2-implementer-runbook.md",
+    "proof/run_suite_actl_s2.sh", "proof/stage2/run_standins.sh",
+    "fixtures/golden/make_responses.sh",
+    "fixtures/golden/expected.d/s2.json", "install.sh", "README.md"
+]}
+if t in ALLOWED: sys.exit(0)
+if t.parent == repo / "proof/stage2": sys.exit(0)
+if t.parent == repo / "test/actl" and t.name.startswith("test_s2_") and t.name.endswith(".py"): sys.exit(0)
+if t.is_relative_to(repo / "fixtures/golden"): sys.exit(0)
+sys.exit(1)
+' "${REPO_DIR:-.}" "$p"; then
+    echo "FAIL: disallowed path in Stage 2 additions gate: $p"
+    exit 1
+fi
 }
 
 # Audit tracked changes: reject D/R outside scope (R4-08)
