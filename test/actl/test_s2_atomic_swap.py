@@ -1,4 +1,4 @@
-# Authored-by: Flash 3.8 High
+# Authored-by: Gemini 3.1 Pro (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
 from __future__ import annotations
 
 import json
