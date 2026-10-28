@@ -81,11 +81,21 @@ def test_lexical_order_is_deterministic(tmp_path):
     if list(d1["cases"]) != ["z", "a", "b", "m"]: fail("fragments must merge in lexical filename order (base, s1, s2); got %s" % list(d1["cases"]))
 
 def test_duplicate_case_across_non_base_fragments(tmp_path):
-    """S0-R14.2: a case key in two non-base fragments is ValueError (D28-01)."""
-    ed = tmp_path / "e"
+    """S0-R14.2: duplicate case key in any two non-base fragments is ValueError (D28-01, D28-02)."""
+    case1 = {"applies_on": "base", "expect": {"step": "O1", "exit": 1, "failing_step": "O1:x.sh", "failing_line_contains": None}}
+    case2 = {"applies_on": "base", "expect": {"step": "O2", "exit": 0, "failing_step": None, "failing_line_contains": None}}
+    ed = tmp_path / "adj"
     ed.mkdir()
     shutil.copy(GOLDEN / "expected.d" / "base.json", ed / "base.json")
-    (ed / "s1.json").write_text(json.dumps({"cases": {"s1_only": {"applies_on": "base", "expect": {"step": "O1", "exit": 1, "failing_step": "O1:x.sh", "failing_line_contains": None}}}}))
-    (ed / "s2.json").write_text(json.dumps({"cases": {"s1_only": {"applies_on": "base", "expect": {"step": "O2", "exit": 0, "failing_step": None, "failing_line_contains": None}}}}))
+    (ed / "s1.json").write_text(json.dumps({"cases": {"s1_only": case1}}))
+    (ed / "s2.json").write_text(json.dumps({"cases": {"s1_only": case2}}))
     with pytest.raises(ValueError):
         _load()(ed)
+    ed2 = tmp_path / "nonadj"
+    ed2.mkdir()
+    shutil.copy(GOLDEN / "expected.d" / "base.json", ed2 / "base.json")
+    (ed2 / "s1.json").write_text(json.dumps({"cases": {"duplicate_across_files": case1}}))
+    (ed2 / "s2.json").write_text(json.dumps({"cases": {"middle_only": case1}}))
+    (ed2 / "s3.json").write_text(json.dumps({"cases": {"duplicate_across_files": case2}}))
+    with pytest.raises(ValueError):
+        _load()(ed2)
