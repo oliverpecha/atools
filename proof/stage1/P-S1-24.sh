@@ -76,13 +76,23 @@ def lstat_replace_identity(src_s: str):
 
 
 class Tracer:
-    """Record fsync/replace/unlink; on fsync capture size/mtime/ctime/sha256 (NEW-03)."""
+    """Record fsync/replace/unlink/write; on fsync capture size/mtime/ctime/sha256 (NEW-03)."""
 
     def __init__(self):
         self.events = []
         self.real_fsync = os.fsync
         self.real_replace = os.replace
         self.real_unlink = os.unlink
+        import builtins as _bi
+        self.real_open = _bi.open
+
+    def open(self, file, mode="r", *a, **kw):
+        p, f = os.path.abspath(str(file)), self.real_open(file, mode, *a, **kw)
+        if set(str(mode)) & set("wxa+"):
+            w, t = f.write, f.truncate
+            f.write = lambda d, *x, **y: self.events.append(("write", p)) or w(d, *x, **y)
+            f.truncate = lambda s=None: self.events.append(("truncate", p)) or (t() if s is None else t(s))
+        return f
 
     def fsync(self, fd):
         path = fd_path(fd)
@@ -255,8 +265,20 @@ def assert_durability_order(events, dest, src_log, src_exit, replace_src=None):
             f"replace=(mtime_ns={rep_mtime},ctime_ns={rep_ctime},size={rep_size})"
         )
 
-    # Dir fsync + unlinks required after the (only) verification replace.
+    # NEW-03 dest-mutate: dest bytes == artifact; post-replace write needs dest fsync.
+    dest_bytes = Path(dest).read_bytes() if os.path.isfile(dest) else b""
+    if dest_bytes != artifact:
+        raise AssertionError("dest-mutate-after-replace: dest bytes != artifact")
     post = abs_events[ri + 1 :]
+    for j, e in enumerate(post):
+        if e[0] not in ("write", "truncate") or e[1] != dest:
+            continue
+        if not any(
+            e2[0] == "fsync" and len(e2) > 7 and e2[4] == replace_inode
+            and e2[3] == artifact and e2[7] == rep_sha and e2[2] == rep_size
+            for e2 in post[j + 1 :]
+        ):
+            raise AssertionError("dest-mutate-after-replace: write without dest fsync")
     dir_fsync_idxs = [
         i
         for i, e in enumerate(post)
@@ -332,13 +354,14 @@ with tempfile.TemporaryDirectory() as td:
     other.write_bytes(b"x\n")
     state.write_bytes(b'{"seq":6}')
 
-    _prev_fsync, _prev_replace, _prev_unlink = os.fsync, os.replace, os.unlink
+    import builtins as _bi
+    _prev_fsync, _prev_replace, _prev_unlink, _prev_open = os.fsync, os.replace, os.unlink, _bi.open
 
     def install(tr):
-        os.fsync, os.replace, os.unlink = tr.fsync, tr.replace, tr.unlink
+        os.fsync, os.replace, os.unlink, _bi.open = tr.fsync, tr.replace, tr.unlink, tr.open
 
     def restore():
-        os.fsync, os.replace, os.unlink = _prev_fsync, _prev_replace, _prev_unlink
+        os.fsync, os.replace, os.unlink, _bi.open = _prev_fsync, _prev_replace, _prev_unlink, _prev_open
 
     def dir_fsync():
         dfd = os.open(str(td), os.O_RDONLY)
@@ -658,6 +681,24 @@ with tempfile.TemporaryDirectory() as td:
     expect_reject("other-dest-replace / verification-005 counterfeit", deg_other_dest)
     print("OK other-dest-replace rejected")
 
+    # NEW-03: replace then in-place dest corrupt write; no dest fsync (dir fsync ≠ durable).
+    def deg_dest_mutate_after_replace():
+        reset_sess(td, dest, src_log, src_exit)
+        tr, tmp = Tracer(), td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT); f.flush(); os.fsync(f.fileno())
+            os.replace(str(tmp), str(dest))
+            with open(dest, "wb") as f:
+                f.write(b'{"kind":"corrupt-after-replace"}'); f.flush()
+            dir_fsync(); os.unlink(str(src_log)); os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+    expect_reject("dest-mutate-after-replace counterfeit", deg_dest_mutate_after_replace)
+    print("OK dest-mutate-after-replace rejected")
+
     # 7) replace in finally after failed fsync
     reset_sess(td, dest, src_log, src_exit)
     tmp_deg = td / "verification-006.json.tmpdeg"
@@ -821,15 +862,13 @@ def originals_intact():
     )
 
 
-# NEW-04-LIVE: snapshot seq before failure injections; restore in clear so happy
-# path reserves verification-006.json (five verify_impl calls would else advance
-# to verification-011.json). Also drop seq.highwater so reserve sees the same seq.
+# NEW-04-LIVE: snapshot/restore state.json so happy path stays verification-006.json.
 state_path = dest_dir / "state.json"
 initial_state = state_path.read_bytes()
 
 
 def clear_verification_artifacts():
-    """NEW-02: drop prior commits so a later boundary cannot be satisfied by leftovers."""
+    """NEW-02: drop prior commits; NEW-04-LIVE restore state.json + drop highwater."""
     for p in dest_dir.glob("verification-*.json"):
         p.unlink()
     state_path.write_bytes(initial_state)
@@ -1025,7 +1064,8 @@ src_exit.write_bytes(exit_bytes)
 selected_dest = dest_dir / "verification-006.json"
 tr = Tracer()
 with patch("os.fsync", side_effect=tr.fsync), \
-     patch("os.replace", side_effect=tr.replace), patch("os.unlink", side_effect=tr.unlink):
+     patch("os.replace", side_effect=tr.replace), patch("os.unlink", side_effect=tr.unlink), \
+     patch("builtins.open", tr.open):
     res = verify_impl(layout, tag, worktree=wt, session_info=session_info)
 
 if not selected_dest.is_file():
