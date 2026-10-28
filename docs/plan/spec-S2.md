@@ -1,7 +1,7 @@
 
 # spec-S2.md - Stage 2 (Paste Bridge and Promotion) Specification and Proof Map
 
-Authored-by: Gemini 3.1 Pro (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
+Authored-by: Gemini Flash 3.8 (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
 Date: 2026-10-27. Inputs: Design rev. 2, core plan, addendum, src/actl/INTERFACES.md (frozen, PB-2/PB-4), spec-S0.md, rulings D-1..D-48.
 
 ## 0. Conventions
