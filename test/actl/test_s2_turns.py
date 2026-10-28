@@ -1,4 +1,4 @@
-# Authored-by: Gemini 3.1 Pro (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
+# Authored-by: Gemini Flash 3.8 (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
