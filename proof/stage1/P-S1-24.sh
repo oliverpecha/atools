@@ -83,8 +83,9 @@ class Tracer:
         self.real_fsync = os.fsync
         self.real_replace = os.replace
         self.real_unlink = os.unlink
-        import builtins as _bi
-        self.real_open = _bi.open
+        import builtins as _bi, io
+        self._open = self.real_open = _bi.open
+        self._io_open = io.open
 
     def open(self, file, mode="r", *a, **kw):
         p, f = os.path.abspath(str(file)), self.real_open(file, mode, *a, **kw)
@@ -355,13 +356,14 @@ with tempfile.TemporaryDirectory() as td:
     state.write_bytes(b'{"seq":6}')
 
     import builtins as _bi
-    _prev_fsync, _prev_replace, _prev_unlink, _prev_open = os.fsync, os.replace, os.unlink, _bi.open
+    import io
+    _prev_fsync, _prev_replace, _prev_unlink, _prev_open, _prev_io_open = os.fsync, os.replace, os.unlink, _bi.open, io.open
 
     def install(tr):
-        os.fsync, os.replace, os.unlink, _bi.open = tr.fsync, tr.replace, tr.unlink, tr.open
+        os.fsync, os.replace, os.unlink, _bi.open, io.open = tr.fsync, tr.replace, tr.unlink, tr.open, tr.open
 
     def restore():
-        os.fsync, os.replace, os.unlink, _bi.open = _prev_fsync, _prev_replace, _prev_unlink, _prev_open
+        os.fsync, os.replace, os.unlink, _bi.open, io.open = _prev_fsync, _prev_replace, _prev_unlink, _prev_open, _prev_io_open
 
     def dir_fsync():
         dfd = os.open(str(td), os.O_RDONLY)
@@ -698,6 +700,23 @@ with tempfile.TemporaryDirectory() as td:
             restore()
     expect_reject("dest-mutate-after-replace counterfeit", deg_dest_mutate_after_replace)
     print("OK dest-mutate-after-replace rejected")
+
+    # NEW-03 B2: Path.write_bytes via io.open; CORRUPT then ARTIFACT; no dest fsync.
+    def deg_pathlib_write_bytes():
+        reset_sess(td, dest, src_log, src_exit)
+        tr, tmp = Tracer(), td / "verification-006.json.tmp"
+        install(tr)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(ARTIFACT); f.flush(); os.fsync(f.fileno())
+            os.replace(str(tmp), str(dest))
+            Path(dest).write_bytes(b"CORRUPT"); Path(dest).write_bytes(ARTIFACT)
+            dir_fsync(); os.unlink(str(src_log)); os.unlink(str(src_exit))
+            assert_durability_order(tr.events, dest, src_log, src_exit, replace_src=tmp)
+        finally:
+            restore()
+    expect_reject("pathlib-write_bytes counterfeit", deg_pathlib_write_bytes)
+    print("OK pathlib-write_bytes rejected")
 
     # 7) replace in finally after failed fsync
     reset_sess(td, dest, src_log, src_exit)
@@ -1065,7 +1084,7 @@ selected_dest = dest_dir / "verification-006.json"
 tr = Tracer()
 with patch("os.fsync", side_effect=tr.fsync), \
      patch("os.replace", side_effect=tr.replace), patch("os.unlink", side_effect=tr.unlink), \
-     patch("builtins.open", tr.open):
+     patch("builtins.open", tr.open), patch("io.open", tr.open):
     res = verify_impl(layout, tag, worktree=wt, session_info=session_info)
 
 if not selected_dest.is_file():
