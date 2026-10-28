@@ -1,3 +1,4 @@
+<!-- Authored-by: Gemini 3.1 Pro (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini -->
 # Stage 2 Implementer Runbook (Paste Bridge & Promotion)
 
 ## 1. Goal
