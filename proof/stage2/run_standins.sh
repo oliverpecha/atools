@@ -12,6 +12,7 @@ mods = [
 ]
 
 def classify(rc, out):
+    # R4-03: hierarchy SETUP -> IMPORT -> OTHER(RuntimeError) -> ASSERT
     lines = out.splitlines()
     has_fail = any(s in out for s in ["FAIL:", "FAILED "])
 
@@ -42,6 +43,10 @@ def classify(rc, out):
     if is_imp:
         return "IMPORT"
 
+    # RuntimeError without AssertionError is OTHER (not ASSERT via FAILED summary)
+    if "RuntimeError" in out and "AssertionError" not in out:
+        return "OTHER"
+
     is_assert = (
         any(l.startswith("E   AssertionError") for l in lines)
         or any("pytest.fail" in l for l in lines)
@@ -58,6 +63,8 @@ assert classify(0, "All good\nFAIL: background error") == "OTHER"
 assert classify(1, "FAIL: setup failure in harness") == "SETUP"
 assert classify(1, "ERROR: setup hook failed") == "SETUP"
 assert classify(1, "E   AssertionError: 1 != 2\nFAILED test.py::t") == "ASSERT"
+assert classify(1, "E   RuntimeError: stand-in fail\nFAILED test.py::t") == "OTHER"
+assert classify(1, "E   RuntimeError: x\nE   AssertionError: y\nFAILED test.py::t") == "ASSERT"
 
 def clean():
     for m in mods:
@@ -122,11 +129,12 @@ def populate(mode):
             encoding="utf-8"
         )
     elif mode == "fail":
+        # R4-03: FAIL stand-in raises AssertionError so rejection is assertion-level
         for m in ["cmd_bundle", "cmd_unpack", "cmd_replay", "cmd_promote"]:
             c = m.replace("cmd_", "")
             (src / f"{m}.py").write_text(
                 f'def register(sp): p=sp.add_parser("{c}"); '
-                f'p.set_defaults(func=lambda *a,**k: 1)\n',
+                f'p.set_defaults(func=lambda *a,**k: (_ for _ in ()).throw(AssertionError("stand-in fail")))\n',
                 encoding="utf-8"
             )
         for m in [
@@ -134,11 +142,11 @@ def populate(mode):
             "repair", "replay", "promote"
         ]:
             (src / f"{m}.py").write_text(
-                'def __getattr__(n): raise RuntimeError("fail")\n',
+                'def __getattr__(n): raise AssertionError("stand-in fail")\n',
                 encoding="utf-8"
             )
         (nr / "phase12.py").write_text(
-            'PRIORITY=10\ndef evaluate(*a,**k): raise RuntimeError("fail")\n',
+            'PRIORITY=10\ndef evaluate(*a,**k): raise AssertionError("stand-in fail")\n',
             encoding="utf-8"
         )
 
