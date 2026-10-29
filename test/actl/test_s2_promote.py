@@ -131,3 +131,56 @@ def test_promote_policy_merge_preserves_frozen_fields(tmp_path: Path, monkeypatc
     assert merged["max_epochs"] == 99, "Proposable policy field max_epochs was not merged"
     assert merged["base_sha"] != "0000000000000000000000000000000000000000", "Frozen base_sha must never be overwritten by promotion"
     assert merged["sprint_tag"] == tag
+
+
+def test_promote_immutable_frozen_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """R4-07: Overwrite attempts on repo, repo_test_cmd, base_sha, and sprint_tag must fail; exact match passes."""
+    from actl.promote import promote_role
+    from actl.sprint import load_sprint_toml
+
+    monkeypatch.setenv("ACTL_TODAY", "2026-10-16")
+    layout, tag = _create_fresh_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+
+    before = load_sprint_toml(layout, tag)
+    frozen = {
+        "repo": before["repo"],
+        "repo_test_cmd": before["repo_test_cmd"],
+        "base_sha": before["base_sha"],
+        "sprint_tag": before["sprint_tag"],
+    }
+    assert frozen["sprint_tag"] == tag
+
+    arch_out = layout.outbox(tag, "architect")
+    (arch_out / "spec-draft.md").write_text("# Spec\nR1: ok\n", encoding="utf-8")
+    (arch_out / "solution_key.patch").write_text("diff\n", encoding="utf-8")
+    # Attempt to overwrite all four frozen identity fields via sprint-proposal
+    (arch_out / "sprint-proposal.toml").write_text(
+        'live_run="none"\n'
+        'max_epochs=7\n'
+        'repo="evil-repo"\n'
+        'repo_test_cmd="echo pwned"\n'
+        'base_sha="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"\n'
+        f'sprint_tag="tampered-{tag}"\n',
+        encoding="utf-8",
+    )
+
+    promote_role(layout, tag, "architect")
+    merged = load_sprint_toml(layout, tag)
+    assert merged["max_epochs"] == 7, "proposable max_epochs must merge"
+    for key, expected in frozen.items():
+        assert merged[key] == expected, f"Frozen field {key} must remain immutable on promote"
+    # Exact-match proposal of the real frozen values must also leave them unchanged
+    (arch_out / "spec-draft.md").write_text("# Spec\nR1: ok\n# rev\n", encoding="utf-8")
+    (arch_out / "sprint-proposal.toml").write_text(
+        f'live_run="none"\n'
+        f'repo="{frozen["repo"]}"\n'
+        f'repo_test_cmd="{frozen["repo_test_cmd"]}"\n'
+        f'base_sha="{frozen["base_sha"]}"\n'
+        f'sprint_tag="{frozen["sprint_tag"]}"\n',
+        encoding="utf-8",
+    )
+    promote_role(layout, tag, "architect")
+    merged2 = load_sprint_toml(layout, tag)
+    for key, expected in frozen.items():
+        assert merged2[key] == expected, f"Frozen field {key} must match exactly after echo proposal"
