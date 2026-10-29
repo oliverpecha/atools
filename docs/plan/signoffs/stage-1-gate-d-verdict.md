@@ -172,23 +172,23 @@ Newest ledger: 20261029T1734Z_gate_d_answers_ledger.txt. Verdict column is the f
 
 | Round | File | Reviewer | Verdict | ledger_token (heuristic) | Blockers named | Closing commit | Reviewed-delta author | Flag |
 |---|---|---|---|---|---|---|---|---|
-| R5-GPT | 20261026T2110Z_s1_gate_d_bundle_response.txt | GPT | REJECT | REJECT | GD-01 | - | unknown | - |
+| R5-GPT | 20261026T2110Z_s1_gate_d_bundle_response.txt | GPT | PASS | REJECT | GD-01 | - | unknown | DISAGREE_VERDICT |
 | R6-Argon | 20261027T1744Z_s1_preflight_r6_argon_response.txt | Argon 4 High | REJECT | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02 | e614697 | Cursor-S1 (Grok 4.6) | - |
 | R6-GPT | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | GPT | NOT READY | READY | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | b14a0a8 | Cursor-S1 (Grok 4.6) | - |
 | R7-GPT | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | - |
 | R8-Argon | 20261027T2152Z_s1_preflight_r8_argon_response.txt | Argon 4 High | unparsed | PASS | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
 | R9-Argon | 20261027T2217Z_s1_preflight_r9_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-04b | e163c7f | Cursor-S1 (Grok 4.6) | - |
-| R9-GPT | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | GPT | unparsed | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R9-GPT | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | - |
 | R10-Argon | 20261027T2312Z_s1_preflight_r10_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-01 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
-| R10-GPT | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | GPT | unparsed | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R10-GPT | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
 | R11-Argon | 20261027T2330Z_s1_preflight_r11_argon_response.txt | Argon 4 High | unparsed | PASS | GD-04a,NEW-03 | 6958c65 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
-| R11-GPT | 20261028T2244Z_s1_gate_d_r11_gpt_response.txt | GPT | unparsed | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04,NEW-05,P-S1-27 | 6958c65 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R11-GPT | 20261028T2244Z_s1_gate_d_r11_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04,NEW-05,P-S1-27 | 6958c65 | Cursor-S1 (Grok 4.6) | - |
 | R12-Argon | 20261027T2359Z_s1_preflight_r12_argon_response.txt | Argon 4 High | REJECT | REJECT | GD-04b,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 68263cd | Cursor-S1 (Grok 4.6) | - |
 | R13-Argon | 20261028T0021Z_s1_preflight_r13_argon_response.txt | Argon 4 High | PASS | PASS | NEW-04-LIVE,NEW-04 | 2f04433 | Cursor-S1 (Grok 4.6) | - |
 | R13-GPT | 20261028T0021Z_s1_gate_d_r13_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 2f04433 | Cursor-S1 (Grok 4.6) | - |
-| R14-GPT | 20261028T2243Z_s1_gate_d_r14_gpt_response.txt | GPT | unparsed | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | 24bf10a | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R14-GPT | 20261028T2243Z_s1_gate_d_r14_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | 24bf10a | Cursor-S1 (Grok 4.6) | - |
 | R15-Argon | 20261028T1018Z_s1_preflight_r15_argon_response.txt | Argon 4 High | PASS | PASS | NEW-03,B2 | a968d9d | Cursor-S1 (Grok 4.6) | - |
-| R15-GPT | 20261028T1018Z_s1_gate_d_r15_gpt_response.txt | GPT | unparsed | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | a968d9d | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R15-GPT | 20261028T1018Z_s1_gate_d_r15_gpt_response.txt | GPT | ACCEPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | a968d9d | Cursor-S1 (Grok 4.6) | - |
 | D28-R1 | 20261028T2242Z_s0_p15_gate_d_r1_response.txt | GPT | REJECT | REJECT | D28-01,D28-02 | - | unknown | - |
 | D28-R2 | 20261028T2242Z_s0_p15_gate_d_r2_response.txt | GPT | REJECT | REJECT | D28-01,D28-02 | - | unknown | - |
 | D28-R3 | 20261028T1820Z_s0_p15_gate_d_r3_response.txt | GPT | ACCEPT | ACCEPT | D28-01,D28-02 | fa3387d | Cursor-S1 (Grok 4.6) P-S0-15 | - |
