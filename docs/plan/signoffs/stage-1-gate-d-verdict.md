@@ -143,7 +143,7 @@ Preflight credit is cross-family relative to the Grok author. Preflights are not
 Header note: 36 of the 40 S1 authoring files carry "Authored-by: Gemini 3.1 Pro" (Serra-S1 UI label). Those headers are intentionally unchanged because editing proofs after the pin would invalidate it.
 
 Same-family note: Serra-S1 text is Gemini family, as is INTERFACES.md by Argon 4 High. Mitigated by GPT's cross-family Gate D.
-Owner decision: PENDING
+Owner decision: ACCEPTED (Owner, 2026-10-29): same-family authoring for S1-original and S2 accepted, mitigated by GPT cross-family Gate D.
 
 ### Line authorship (git blame)
 
@@ -168,21 +168,22 @@ Ten largest files by line count:
 
 ## Round-table audit versus Sync originals
 
-Cite Sync file names. R5..R15 and P-S0-15 D-28.
+Newest ledger: 20261029T1734Z_gate_d_answers_ledger.txt (sha16, bytes, file, last verdict token). No Sync writes. R6 has two rows. R8 and R12: GPT none (preflight rejected, GPT not dispatched). R15 verdict is the final token (ACCEPT). P-S0-15 r1 REJECT, r2 REJECT, r3 ACCEPT. Flag only real disagreements.
 
-| Round | File | Verdict | Blockers named | Closing commit | Reviewed-delta author | Flag |
-|---|---|---|---|---|---|---|
-| R5 | 20261026T2110Z_s1_gate_d_bundle_response.txt | REJECT | GD-01 | - | unknown | MISSING_ROW |
-| R6 | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | NOT READY | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | - | unknown | MISSING_ROW |
-| R7 | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R8 | 20261027T2152Z_s1_preflight_r8_argon_response.txt | REJECT | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R9 | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R10 | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R11 | 20261028T2244Z_s1_gate_d_r11_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04,NEW-05,P-S1-27 | 6958c65 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R12 | 20261027T2359Z_s1_preflight_r12_argon_response.txt | REJECT | GD-04b,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 68263cd | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R13 | 20261028T0021Z_s1_gate_d_r13_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 2f04433 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R14 | 20261028T2243Z_s1_gate_d_r14_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | 24bf10a | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| R15 | 20261028T1018Z_s1_gate_d_r15_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | a968d9d7ae7c86157630ca1ca3f5dab5bb456e2b | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
-| D28-R1 | MISSING | n/a | - | - | n/a | MISSING_FILE |
-| D28-R2 | 20261028T1806Z_s0_p15_d28_r2_delta.txt | REJECT | D28-01,B2 | - | unknown | MISSING_ROW |
-| D28-R3 | 20261028T1820Z_s0_p15_d28_r3_delta.txt | REJECT | D28-01,D28-02,B2 | - | unknown | MISSING_ROW |
+| Round | File | Reviewer | Verdict | Blockers named | Closing commit | Reviewed-delta author | Flag |
+|---|---|---|---|---|---|---|---|
+| R5 | 20261027T1453Z_s1_gate_d_r5_gpt_response.txt | GPT | REJECT | GD-01,GD-06,P-S1-27 | - | unknown | - |
+| R6-Argon | 20261027T1744Z_s1_preflight_r6_argon_response.txt | Argon 4 High | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02 | e614697 | Cursor-S1 (Grok 4.6) | - |
+| R6-GPT | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | GPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | b14a0a8 | Cursor-S1 (Grok 4.6) | - |
+| R7 | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | GPT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | - |
+| R8 | 20261027T2152Z_s1_preflight_r8_argon_response.txt | none (preflight rejected, GPT not dispatched) | ACCEPT | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | - |
+| R9 | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | GPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | - |
+| R10 | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | GPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
+| R11 | 20261028T2244Z_s1_gate_d_r11_gpt_response.txt | GPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04,NEW-05,P-S1-27 | 6958c65 | Cursor-S1 (Grok 4.6) | - |
+| R12 | 20261027T2359Z_s1_preflight_r12_argon_response.txt | none (preflight rejected, GPT not dispatched) | REJECT | GD-04b,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 68263cd | Cursor-S1 (Grok 4.6) | - |
+| R13 | 20261028T0021Z_s1_gate_d_r13_gpt_response.txt | GPT | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 2f04433 | Cursor-S1 (Grok 4.6) | - |
+| R14 | 20261028T2243Z_s1_gate_d_r14_gpt_response.txt | GPT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | 24bf10a | Cursor-S1 (Grok 4.6) | - |
+| R15 | 20261028T1018Z_s1_gate_d_r15_gpt_response.txt | GPT | ACCEPT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | a968d9d7ae7c86157630ca1ca3f5dab5bb456e2b | Cursor-S1 (Grok 4.6) | - |
+| D28-R1 | 20261028T2242Z_s0_p15_gate_d_r1_response.txt | GPT | REJECT | D28-01,D28-02 | - | unknown | - |
+| D28-R2 | 20261028T2242Z_s0_p15_gate_d_r2_response.txt | GPT | REJECT | D28-01,D28-02 | - | unknown | - |
+| D28-R3 | 20261028T1820Z_s0_p15_gate_d_r3_response.txt | GPT | ACCEPT | D28-01,D28-02 | fa3387d | Cursor-S1 (Grok 4.6) P-S0-15 | - |
