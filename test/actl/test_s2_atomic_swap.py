@@ -95,9 +95,6 @@ def test_atomic_swap_spy_path_restriction(tmp_path: Path):
     _spy_replace(str(unrelated_src), str(unrelated_dst))
     assert unrelated_dst.is_dir()
 
-    # Target outbox replace must raise OSError
-    try:
+    # Target outbox replace must raise OSError (expected; not a silent precondition skip)
+    with pytest.raises(OSError, match="simulated atomic swap failure"):
         _spy_replace(str(staging), str(outbox))
-        assert False, "Expected OSError on target outbox"
-    except OSError as e:
-        pytest.fail(f"FAIL: unexpected OSError in test execution: {e}")
