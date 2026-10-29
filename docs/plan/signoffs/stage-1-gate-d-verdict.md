@@ -176,7 +176,7 @@ Newest ledger: 20261029T1734Z_gate_d_answers_ledger.txt. Verdict column is the f
 | R6-Argon | 20261027T1744Z_s1_preflight_r6_argon_response.txt | Argon 4 High | REJECT | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02 | e614697 | Cursor-S1 (Grok 4.6) | - |
 | R6-GPT | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | GPT | NOT READY | READY | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | b14a0a8 | Cursor-S1 (Grok 4.6) | - |
 | R7-GPT | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | - |
-| R8-Argon | 20261027T2152Z_s1_preflight_r8_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R8-Argon | 20261027T2152Z_s1_preflight_r8_argon_response.txt | Argon 4 High | REJECT (GD-04a 1 blocker; GD-04b 1 blocker/advisory on the happy path; NEW-01 and P-S1-27 PASS) | PASS | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | - |
 | R9-Argon | 20261027T2217Z_s1_preflight_r9_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-04b | e163c7f | Cursor-S1 (Grok 4.6) | - |
 | R9-GPT | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | - |
 | R10-Argon | 20261027T2312Z_s1_preflight_r10_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-01 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
@@ -192,3 +192,5 @@ Newest ledger: 20261029T1734Z_gate_d_answers_ledger.txt. Verdict column is the f
 | D28-R1 | 20261028T2242Z_s0_p15_gate_d_r1_response.txt | GPT | REJECT | REJECT | D28-01,D28-02 | - | unknown | - |
 | D28-R2 | 20261028T2242Z_s0_p15_gate_d_r2_response.txt | GPT | REJECT | REJECT | D28-01,D28-02 | - | unknown | - |
 | D28-R3 | 20261028T1820Z_s0_p15_gate_d_r3_response.txt | GPT | ACCEPT | ACCEPT | D28-01,D28-02 | fa3387d | Cursor-S1 (Grok 4.6) P-S0-15 | - |
+
+Per-item PASS marks in a file do not give its overall verdict; the table uses the overall verdict as read.
