@@ -115,13 +115,24 @@ sys.exit(1)
 fi
 }
 
-# Audit tracked changes: reject D/R outside scope (R4-08)
+# Audit tracked changes: reject D/R/C outside scope (R4-08, N7-01)
+# For renames/copies, BOTH source (path1) and destination (path2) must be allowed.
 while IFS=$'\t' read -r status path1 path2; do
     [[ -z "$status" ]] && continue
     case "$status" in
-        D*|R*)
+        D*)
             if ! is_allowed_stage2_path "$path1"; then
-                echo "FAIL: S2-R13: Forbidden deletion or rename outside Stage 2 scope ($status): $path1 ${path2:-}"
+                echo "FAIL: S2-R13: Forbidden deletion outside Stage 2 scope ($status): $path1"
+                exit 1
+            fi
+            ;;
+        R*|C*)
+            if ! is_allowed_stage2_path "$path1"; then
+                echo "FAIL: S2-R13: Forbidden rename/copy source outside Stage 2 scope ($status): $path1"
+                exit 1
+            fi
+            if [[ -z "${path2:-}" ]] || ! is_allowed_stage2_path "$path2"; then
+                echo "FAIL: S2-R13: Forbidden rename/copy destination outside Stage 2 scope ($status): $path1 -> ${path2:-}"
                 exit 1
             fi
             ;;
