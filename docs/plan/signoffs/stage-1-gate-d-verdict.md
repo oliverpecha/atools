@@ -172,12 +172,12 @@ Newest ledger: 20261029T1734Z_gate_d_answers_ledger.txt. Verdict column is the f
 
 | Round | File | Reviewer | Verdict | ledger_token (heuristic) | Blockers named | Closing commit | Reviewed-delta author | Flag |
 |---|---|---|---|---|---|---|---|---|
-| R5-GPT | 20261027T1453Z_s1_gate_d_r5_gpt_response.txt | GPT | NOT READY | REJECT | GD-01,GD-06,P-S1-27 | - | unknown | DISAGREE_VERDICT |
+| R5-GPT | 20261027T1453Z_s1_gate_d_r5_gpt_response.txt | GPT | REJECT | REJECT | GD-01,GD-06,P-S1-27 | - | unknown | - |
 | R6-Argon | 20261027T1744Z_s1_preflight_r6_argon_response.txt | Argon 4 High | REJECT | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02 | e614697 | Cursor-S1 (Grok 4.6) | - |
 | R6-GPT | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | GPT | NOT READY | READY | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | b14a0a8 | Cursor-S1 (Grok 4.6) | - |
 | R7-GPT | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | - |
-| R8-Argon | 20261027T2152Z_s1_preflight_r8_argon_response.txt | Argon 4 High | REJECT | PASS | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | - |
-| R9-Argon | 20261027T2217Z_s1_preflight_r9_argon_response.txt | Argon 4 High | REJECT | PASS | GD-04a,GD-04b | e163c7f | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R8-Argon | 20261027T2152Z_s1_preflight_r8_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | DISAGREE_VERDICT |
+| R9-Argon | 20261027T2217Z_s1_preflight_r9_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-04b | e163c7f | Cursor-S1 (Grok 4.6) | - |
 | R9-GPT | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | - |
 | R10-Argon | 20261027T2312Z_s1_preflight_r10_argon_response.txt | Argon 4 High | PASS | PASS | GD-04a,GD-01 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
 | R10-GPT | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | GPT | REJECT | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | - |
