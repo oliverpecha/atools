@@ -44,8 +44,17 @@ local log="proof/out/${name}.log" rc
 echo -n "Running ${name}... "
 "$@" > "$log" 2>&1; rc=$?
 if (( rc == 0 )); then
+# N7-02: rc 0 with a FAIL: line is INCONSISTENT (do not count as PASS)
+if grep -q '^FAIL:' "$log"; then
+local last_fail
+last_fail="$(grep '^FAIL:' "$log" | tail -n1)"
+echo "[INCONSISTENT] (see $log)"
+echo "    $last_fail"
+FAIL=$((FAIL+1))
+else
 echo "[PASS]"
 PASS=$((PASS+1))
+fi
 elif (( rc == 4 )); then
 echo "[ENV] (see $log)"
 ENVERR=$((ENVERR+1))
