@@ -66,6 +66,53 @@ def test_repair_confidentiality_and_candidate_details(tmp_path: Path, monkeypatc
     assert secret_canary not in repair_text, "SECURITY LEAK: secret oracle token leaked into repair.txt!"
 
 
+def test_confidentiality_error_codes_canary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """R4-04: Oracle canary redaction across search/patch diagnostic error codes.
+
+    Code aliases from the R8 runbook map to the INTERFACES vocabulary:
+    E_SEARCH_ZERO -> E_SEARCH_NOMATCH, E_PATCH_REJECTED -> E_PATCH_APPLY,
+    E_AMBIGUOUS_HUNK -> E_SEARCH_MULTI.
+    """
+    try:
+        from actl import cli
+        import actl.repair  # noqa: F401
+        import actl.unpack  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R7: actl.repair or actl.unpack missing: {e}")
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+
+    secret_canary = "SUPER_SECRET_ORACLE_TOKEN_ERROR_CODES_112233"
+    oracle_dir = layout.sprint_dir(TAG) / "oracle-003"
+    oracle_dir.mkdir(parents=True, exist_ok=True)
+    (oracle_dir / "secret_oracle_data.txt").write_text(secret_canary, encoding="utf-8")
+
+    cases = [
+        ("E_SEARCH_MULTI", "bad_search_multi.txt"),       # E_AMBIGUOUS_HUNK
+        ("E_SEARCH_NOMATCH", "bad_search_nomatch.txt"),   # E_SEARCH_ZERO
+        ("E_PATCH_APPLY", "bad_patch_apply.txt"),         # E_PATCH_REJECTED
+    ]
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+    for code, fixture in cases:
+        for f in ("response.txt", "unpack.json", "repair.txt"):
+            p = turn_dir / f
+            if p.exists():
+                p.unlink()
+        rc = cli.main([
+            "unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1",
+            "-f", str(GOLDEN_DIR / "responses" / fixture), "--json",
+        ])
+        assert rc == 2, f"{code}: unpack must fail"
+        repair_file = turn_dir / "repair.txt"
+        assert repair_file.is_file(), f"{code}: repair.txt missing"
+        repair_text = repair_file.read_text(encoding="utf-8")
+        unpack_doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
+        assert unpack_doc["errors"][0]["code"] == code, f"expected {code}, got {unpack_doc['errors'][0]['code']}"
+        assert code in repair_text, f"{code} must appear in repair diagnostics"
+        assert secret_canary not in repair_text, f"SECURITY LEAK under {code}: canary in repair.txt"
+
+
 def test_p13_non_execution_canary_across_unpack_replay_promote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
