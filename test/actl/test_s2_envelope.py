@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -224,7 +225,16 @@ def test_p03_all_six_adjacent_precedence_pairs(tmp_path: Path, monkeypatch: pyte
         cli.main(["unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1", "-f", str(tmp_path / "in.txt"), "--json"])
         return json.loads((td / "unpack.json").read_text(encoding="utf-8"))["errors"][0]["code"]
 
-    # Pair 1 (Stage 1 Framing > Stage 2 Bundle Mismatch)
+    # Pair 1 (framing-versus-bundle mismatch): valid 8-hex prefix != real prefix (R4-05).
+    # Real architect-1 golden prefix is 1f13e141; deadbeef is valid hex and unequal.
+    _mismatch_prefix = "deadbeef"
+    assert re.fullmatch(r"[0-9a-fA-F]{8}", _mismatch_prefix)
+    assert _mismatch_prefix.lower() != "1f13e141"
+    assert _eval(
+        '<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n'
+        f'<<<END_RESPONSE bundle="{_mismatch_prefix}">>>\n'
+    ) == "E_BUNDLE_MISMATCH"
+    # Separate framing-only fault (invalid non-hex sentinel) still yields E_SYNTAX_MARKER.
     assert _eval('<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n<<<END_RESPONSE bundle=badprefix>>>\n') == "E_SYNTAX_MARKER"
     # Pair 2 (Stage 2 Bundle Mismatch > Stage 3 Path Bounds)
     assert _eval('<<<FILE path="../escape.txt">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="00000000">>>\n') == "E_BUNDLE_MISMATCH"
