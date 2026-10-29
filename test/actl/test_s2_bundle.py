@@ -56,8 +56,8 @@ def test_p10_bundle_order_limits_and_safety(
         rc_sym = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--include", "sym_outside.py", "--json"])
         capsys.readouterr()
         assert rc_sym == 2, "bundle --include on escaping symlink must fail with exit 2"
-    except OSError:
-        pass
+    except OSError as e:
+        pytest.fail(f"FAIL: unexpected OSError in test execution: {e}")
 
 
 def test_bundle_clipboard_helpers_and_osc52(

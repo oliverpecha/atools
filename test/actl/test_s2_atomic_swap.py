@@ -99,5 +99,5 @@ def test_atomic_swap_spy_path_restriction(tmp_path: Path):
     try:
         _spy_replace(str(staging), str(outbox))
         assert False, "Expected OSError on target outbox"
-    except OSError:
-        pass
+    except OSError as e:
+        pytest.fail(f"FAIL: unexpected OSError in test execution: {e}")
