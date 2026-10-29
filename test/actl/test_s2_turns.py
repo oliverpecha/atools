@@ -95,3 +95,12 @@ def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert len(drawers) == 1
     assert "__target-repo__2026-10-16_public-profiles__architect-1__architect-intake" in drawers[0].name
     assert (drawers[0] / "bundle.txt").is_file()
+
+def test_s2_r34_proposal_filename_contract():
+    """R4-01: Both sprint-proposal.toml and sprint.toml accepted; others rejected."""
+    from actl import turns
+    for v in ("sprint-proposal.toml", "sprint.toml"):
+        assert turns.is_valid_proposal_filename(v) is True
+    for inv in ("sprint_proposal.toml", "proposal.toml", "sprint.yaml", "sprint.json"):
+        assert turns.is_valid_proposal_filename(inv) is False
+
