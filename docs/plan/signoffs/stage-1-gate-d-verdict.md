@@ -3,7 +3,7 @@
 Date: 2026-10-28. Branch: wip/author-s1. Accept SHA: a968d9d7ae7c86157630ca1ca3f5dab5bb456e2b.
 Author (this session): Cursor-S1 (Grok 4.6), model family Grok / xAI.
 Challenger: GPT-6 (OpenAI), Gate D round 15. Verdict: ACCEPT, zero BLOCKERS.
-Preflight reviews only (not challenger): Flash R8; Argon R12.
+Preflight reviews, not Gate D: Argon 4 High (Gemini; Owner-attested) on R6, R8, R9, R10, R11, R12, R13, R15.
 PB-9: Owner-APPROVED 2026-10-27. Spec/proof author family (Grok) differs from
 the challenger family (OpenAI). Implementation has not started.
 
@@ -38,11 +38,11 @@ the challenger family (OpenAI). Implementation has not started.
 | Round | Kind | Blockers raised | Closing commit |
 |---|---|---|---|
 | R7 | GPT | GD-04a, GD-04b, NEW-01, P-S1-27 | c73274c |
-| R8 | Flash preflight only | P-S1-24 path-only fsync; unscoped pre-replace fsync | ff6fc22 |
+| R8 | Argon 4 High preflight only | P-S1-24 path-only fsync; unscoped pre-replace fsync | ff6fc22 |
 | R9 | GPT | GD-04a different-inode fsync; GD-01 SETUP mislabel | e163c7f |
 | R10 | GPT | symlink via realpath/stat; first-replace-only | aee7d79 |
 | R11 | GPT | write-after-last-fsync; other verification dest | 6958c65 |
-| R12 | Argon preflight only | NEW-04-LIVE live seq / verification-006.json | 68263cd |
+| R12 | Argon 4 High preflight only | NEW-04-LIVE live seq / verification-006.json | 68263cd |
 | R13 | GPT | NEW-03 dest-mutate-after-replace | 2f04433 |
 | R14 | GPT | NEW-03 B1 AttributeError (Owner-refuted); B2 Path.write_bytes | 24bf10a |
 | R15 | GPT | none; NEW-03 B2 CLOSED; ACCEPT | a968d9d7ae7c86157630ca1ca3f5dab5bb456e2b |
@@ -126,3 +126,63 @@ test/actl/test_s0_gap5_doctor.py
 test/actl/test_session_s1.py
 test/actl/test_verify_s1.py
 tools/mutate.py
+
+## Authorship and independence (PB-9)
+
+Owner-attested 2026-10-29. Commit messages that say Flash (including e163c7f) stay; this signoff states the correction.
+
+| Role | Identity | Commit range | Count |
+|---|---|---|---|
+| Author (Serra-S1) | Gemini Flash 3.8 (Gemini UI label: 3.1 Pro) | 4e16cc3..9001494 | 7 (git rev-list count 7) |
+| Author (Cursor-S1) | Grok 4.6 | 59cc0fc..a968d9d | 14 (git rev-list count 14) |
+| Gate D challenger | GPT (OpenAI web). Self-reports GPT-6; declines GPT 6.1 Sol High | n/a | n/a |
+| Preflight | Argon 4 High (Gemini) on R6, R8, R9, R10, R11, R12, R13, R15 | reviewed Cursor-S1-era commits | n/a |
+
+Preflight credit is cross-family relative to the Grok author. Preflights are not Gate D. R8 payload and e163c7f say Flash; the reviewer was Argon 4 High. R15 payload said SKIP ARGON; Owner ran it through Argon 4 High; the body names no model.
+
+Header note: 36 of the 40 S1 authoring files carry "Authored-by: Gemini 3.1 Pro" (Serra-S1 UI label). Those headers are intentionally unchanged because editing proofs after the pin would invalidate it.
+
+Same-family note: Serra-S1 text is Gemini family, as is INTERFACES.md by Argon 4 High. Mitigated by GPT's cross-family Gate D.
+Owner decision: PENDING
+
+### Line authorship (git blame)
+
+Range counted as Cursor-S1: commits 59cc0fc^..a968d9d (14 SHAs). Other blamed SHAs count as earlier.
+
+Totals over 40 S1 files: lines=5953 cursor_s1=2575 earlier=3378 cursor_pct=43.3
+
+Ten largest files by line count:
+
+| rank | file | lines | cursor_s1_lines | earlier_lines | cursor_pct |
+|---|---|---|---|---|---|
+| 1 | proof/stage1/P-S1-24.sh | 1106 | 1035 | 71 | 93.6 |
+| 2 | test/actl/test_verify_s1.py | 385 | 162 | 223 | 42.1 |
+| 3 | proof/stage1/P-S1-02.sh | 383 | 201 | 182 | 52.5 |
+| 4 | proof/stage1/run_standins.sh | 369 | 369 | 0 | 100.0 |
+| 5 | docs/plan/spec-S1.md | 310 | 34 | 276 | 11.0 |
+| 6 | proof/stage1/P-S1-18.sh | 237 | 88 | 149 | 37.1 |
+| 7 | test/actl/test_next_phase3.py | 197 | 53 | 144 | 26.9 |
+| 8 | test/actl/test_guards_s1.py | 160 | 9 | 151 | 5.6 |
+| 9 | proof/stage1/P-S1-16.sh | 141 | 35 | 106 | 24.8 |
+| 10 | proof/stage1/P-S1-28.sh | 139 | 43 | 96 | 30.9 |
+
+## Round-table audit versus Sync originals
+
+Cite Sync file names. R5..R15 and P-S0-15 D-28.
+
+| Round | File | Verdict | Blockers named | Closing commit | Reviewed-delta author | Flag |
+|---|---|---|---|---|---|---|
+| R5 | 20261026T2110Z_s1_gate_d_bundle_response.txt | REJECT | GD-01 | - | unknown | MISSING_ROW |
+| R6 | 20261027T2021Z_s1_gate_d_r6_gpt_response.txt | NOT READY | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | - | unknown | MISSING_ROW |
+| R7 | 20261027T2045Z_s1_gate_d_r7_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | c73274c | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R8 | 20261027T2152Z_s1_preflight_r8_argon_response.txt | REJECT | GD-04a,GD-04b,NEW-01,P-S1-27 | ff6fc22 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R9 | 20261027T2252Z_s1_gate_d_r9_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,P-S1-27 | e163c7f | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R10 | 20261027T2312Z_s1_gate_d_r10_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,P-S1-27 | aee7d79 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R11 | 20261028T2244Z_s1_gate_d_r11_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04,NEW-05,P-S1-27 | 6958c65 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R12 | 20261027T2359Z_s1_preflight_r12_argon_response.txt | REJECT | GD-04b,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 68263cd | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R13 | 20261028T0021Z_s1_gate_d_r13_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05 | 2f04433 | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R14 | 20261028T2243Z_s1_gate_d_r14_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | 24bf10a | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| R15 | 20261028T1018Z_s1_gate_d_r15_gpt_response.txt | REJECT | GD-04a,GD-04b,GD-01,GD-06,NEW-01,NEW-02,NEW-03,NEW-04-LIVE,NEW-04,NEW-05,P-S1-27,B1,B2 | a968d9d7ae7c86157630ca1ca3f5dab5bb456e2b | Cursor-S1 (Grok 4.6) | NOT_IN_LEDGER |
+| D28-R1 | MISSING | n/a | - | - | n/a | MISSING_FILE |
+| D28-R2 | 20261028T1806Z_s0_p15_d28_r2_delta.txt | REJECT | D28-01,B2 | - | unknown | MISSING_ROW |
+| D28-R3 | 20261028T1820Z_s0_p15_d28_r3_delta.txt | REJECT | D28-01,D28-02,B2 | - | unknown | MISSING_ROW |
