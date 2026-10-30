@@ -66,6 +66,65 @@ def test_p10_bundle_order_limits_and_safety(
         pytest.fail(f"FAIL: unexpected OSError in test execution: {e}")
 
 
+def test_p11_sentinel_hash_and_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """P-S2-11 / R4-07: sentinel == bundle_sha256[:8]; foreign sentinel rejected (D-44)."""
+    try:
+        from actl import cli
+        import actl.bundle  # noqa: F401
+        import actl.envelope  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R2/S2-R3: actl.bundle or actl.envelope missing: {e}")
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+
+    capsys.readouterr()
+    rc = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--json"])
+    cap = capsys.readouterr()
+    assert rc == 0, "bundle must succeed"
+    doc = json.loads(cap.out)
+    bundle_sha = doc["bundle_sha256"]
+    assert isinstance(bundle_sha, str) and len(bundle_sha) == 64
+    want_prefix = bundle_sha[:8].lower()
+    sentinel = doc.get("sentinel") or f'<<<END_RESPONSE bundle="{want_prefix}">>>'
+    assert want_prefix in sentinel, "CLI sentinel must carry bundle_sha256[:8]"
+
+    turn_dir = Path(doc["turn_dir"])
+    bundle_txt = (turn_dir / "bundle.txt").read_text(encoding="utf-8")
+    assert bundle_txt.rstrip("\n").endswith(f'<<<END_RESPONSE bundle="{want_prefix}">>>'), (
+        "bundle.txt final sentinel must equal bundle_sha256[:8]"
+    )
+    # Body hash excludes the sentinel line (S2-R2.4).
+    body = bundle_txt[: bundle_txt.rfind("<<<END_RESPONSE")]
+    assert hashlib.sha256(body.encode("utf-8")).hexdigest() == bundle_sha
+
+    # Foreign / wrong prefix must be rejected as E_BUNDLE_MISMATCH on unpack.
+    bad_prefix = "deadbeef" if want_prefix != "deadbeef" else "cafebabe"
+    assert bad_prefix != want_prefix
+    # Reuse a minimal FILE body with the wrong sentinel against this turn's bundle.
+    for turn_name in ("architect-1",):
+        td = layout.turns_dir(TAG) / turn_name
+        for f in ("response.txt", "unpack.json", "repair.txt"):
+            p = td / f
+            if p.exists():
+                p.unlink()
+        payload = (
+            '<<<FILE path="sprint.toml">>>\nlive_run="none"\n<<<END_FILE>>>\n'
+            f'<<<END_RESPONSE bundle="{bad_prefix}">>>\n'
+        )
+        inp = tmp_path / "bad_sent.txt"
+        inp.write_text(payload, encoding="utf-8")
+        rc_u = cli.main([
+            "unpack", "architect-intake", "--sprint", TAG, "--turn", turn_name,
+            "-f", str(inp), "--json",
+        ])
+        assert rc_u == 2
+        unpack = json.loads((td / "unpack.json").read_text(encoding="utf-8"))
+        assert unpack["errors"][0]["code"] == "E_BUNDLE_MISMATCH"
+
+
 def test_bundle_clipboard_helpers_and_osc52(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):

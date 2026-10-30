@@ -198,3 +198,31 @@ def test_r407_active_contract_decide_next_red_on_evaluate_only():
     # The fixed test requires decide_next action NOT in phase12_actions.
     with pytest.raises(AssertionError):
         assert broken_decide_action not in phase12_actions
+
+
+def test_traceability_matrix_names_match_delivered_tests():
+    """R4-07: every test_* name cited in the S2 traceability matrix must exist."""
+    import re
+
+    spec = (REPO_ROOT / "docs" / "plan" / "spec-S2.md").read_text(encoding="utf-8")
+    start = spec.index("## 2. Traceability and Three-Stand-In Vacuity Matrix")
+    end = spec.index("## 3. Ambiguity Register")
+    cited = re.findall(r"`(test_[a-z0-9_]+)`", spec[start:end])
+    assert cited, "matrix must cite at least one test_* name"
+
+    delivered: set[str] = set()
+    for path in (REPO_ROOT / "test" / "actl").glob("test_s2_*.py"):
+        delivered.update(
+            re.findall(r"^def (test_[a-z0-9_]+)\b", path.read_text(encoding="utf-8"), re.M)
+        )
+    missing = sorted(set(cited) - delivered)
+    assert not missing, "traceability matrix cites nonexistent tests: " + ", ".join(missing)
+    for required in (
+        "test_courier_drawer_creation",
+        "test_promote_immutable_frozen_fields",
+        "test_next_rules_active_contract_bypass",
+        "test_p01_good_architect_intake_unpack_and_proof_preview",
+        "test_p11_sentinel_hash_and_mismatch",
+    ):
+        assert required in cited, f"matrix must cite {required}"
+        assert required in delivered, f"delivered tests must include {required}"
