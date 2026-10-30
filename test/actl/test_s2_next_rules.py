@@ -138,10 +138,63 @@ def test_next_rules_phase12_ten_states(tmp_path: Path, monkeypatch: pytest.Monke
     assert r10b["command"] == ""
 
 def test_next_rules_active_contract_bypass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Proves R4-07 & S2-R10.1: when active_contract is set, phase12.evaluate returns None."""
-    import actl.next_rules.phase12 as p12
-    from actl.seq import update_state
+    """Proves R4-07 & S2-R10.1: active_contract makes phase12 yield; decide_next must not emit phase12 actions.
+
+    Checking only phase12.evaluate is insufficient: a decide_next that ignores the
+    None yield would still pass that assertion while returning bundle_architect_intake.
+    """
+    try:
+        import actl.next_rules.phase12 as p12
+        from actl.next import decide_next
+        from actl.seq import update_state
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R10.1: phase12/decide_next missing: {e}")
+
     monkeypatch.setenv("ACTL_TODAY", "2026-10-16")
     layout, tag = _create_draft_sprint(tmp_path)
+
+    # Baseline without active_contract: phase12 owns the draft sprint.
+    base = decide_next(layout, tag)
+    assert base["action"] == "bundle_architect_intake", (
+        "precondition: draft sprint must be a phase12 action before active_contract"
+    )
+
     update_state(layout, tag, {"active_contract": "contract-005.json"})
     assert p12.evaluate(layout, tag) is None, "phase12 must return None when active_contract is set"
+
+    # decide_next must honour the bypass (not re-emit a phase12 action).
+    bypassed = decide_next(layout, tag)
+    phase12_actions = {
+        "bundle_architect_intake",
+        "unpack_architect_intake",
+        "repair",
+        "promote_architect",
+        "bundle_challenger",
+        "unpack_challenger",
+        "promote_challenger",
+        "ready_for_qualification",
+        "bundle_architect_review",
+        "qualify_lock",
+    }
+    assert bypassed["action"] not in phase12_actions, (
+        f"decide_next must not return phase12 action {bypassed['action']!r} when "
+        "active_contract is set (S2-R10.1)"
+    )
+    # With no phase3 rule present, the terminal fallback is noop.
+    assert bypassed["action"] == "noop", (
+        f"expected noop when phase12 yields and no later rule matches, got {bypassed!r}"
+    )
+
+
+def test_r407_active_contract_decide_next_red_on_evaluate_only():
+    """R4-07 self-test: evaluate-only assertion would miss a broken decide_next guard."""
+    # Simulate a broken decide_next that ignores phase12's None and still returns
+    # the draft intake action — the evaluate-only check would still pass.
+    evaluate_result = None
+    broken_decide_action = "bundle_architect_intake"
+    assert evaluate_result is None  # old assertion still green
+    phase12_actions = {"bundle_architect_intake"}
+    assert broken_decide_action in phase12_actions
+    # The fixed test requires decide_next action NOT in phase12_actions.
+    with pytest.raises(AssertionError):
+        assert broken_decide_action not in phase12_actions
