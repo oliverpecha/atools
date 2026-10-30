@@ -48,7 +48,7 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     # N13-01: "not just ... but also" is the same affirmative correlative as
     # "not only"; carve out "just" beside "only".
     # N13-02: "may under no circumstances edit" (and like absolute-ban phrases)
-    # are prohibitions; skip allow tokens followed by those phrases.
+    # are prohibitions; do not treat allow tokens followed by those phrases as grants.
     ban = (
         r"(?:never|under\s+no\s+circumstances|in\s+no\s+(?:way|event)|"
         r"on\s+no\s+account|under\s+no\s+conditions?)"
@@ -466,7 +466,7 @@ def test_n13_02_under_no_circumstances_red_on_old_immediate_guard():
     """N13-02 self-test: old immediate not/never guard treats ban phrases as grants.
 
     Fails on the pre-ban-phrase regex (matches may...edit across 'under no
-    circumstances'); passes after skipping absolute-ban phrases. Conforming
+    circumstances'); passes after excluding absolute-ban phrases. Conforming
     prohibitions must return True.
     """
     named = (
