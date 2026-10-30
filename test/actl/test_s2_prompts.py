@@ -22,14 +22,18 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
 
     Verb list includes alter/change/create/delete/revise/rewrite (not only
     edit/modify/...) so plurals like "mutant patches" still match via
-    \\bpatches?\\b. Allowance phrases include "is free to" (R4-06).
+    \\bpatches?\\b. Allowance phrases include "is free to" and "has the right to"
+    (R4-06).
     """
     low = text.lower()
     if topics and not all(t.lower() in low for t in topics):
         return False
     allow = (
         r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to)"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
     )
     verb = (
         r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
@@ -143,6 +147,36 @@ def test_prompt_prohibition_negative_controls():
             "architect",
             "Never escalate. Architects are free to revise proof scripts and rewrite a mutant patch.",
         ),
+        # R4-06 r11 named: "has the right to" + edit/change.
+        (
+            "architect",
+            "Never discuss proof or mutant. The architect has the right to edit "
+            "proof scripts and change mutant patches.",
+        ),
+        # Paraphrase: have the right to + alter (plural).
+        (
+            "architect",
+            "Never discuss proof or mutant. Architects have the right to alter "
+            "proof scripts and mutant patches.",
+        ),
+        # Paraphrase: is entitled to + rewrite.
+        (
+            "architect",
+            "Never discuss proof or mutant. The architect is entitled to rewrite "
+            "proofs and revise mutant patches.",
+        ),
+        # Paraphrase: is permitted to + create.
+        (
+            "architect",
+            "Never discuss proof or mutant. The architect is permitted to create "
+            "proof scripts and change a mutant patch.",
+        ),
+        # Paraphrase: is authorized to + modify (US spelling).
+        (
+            "architect",
+            "Never discuss proof or mutant. The architect is authorized to modify "
+            "proof scripts and write mutant patches.",
+        ),
     ]
     for persona, text in weakened:
         assert persona_prohibitions_ok(persona, text) is False, (
@@ -185,3 +219,22 @@ def test_r406_alter_patches_reversal_red_on_old_verb_whitelist():
     assert _has_prohibition(free_to, "proof") and _has_prohibition(free_to, "mutant")
     assert _has_reversed_permission(free_to, "proof", "mutant") is True
     assert persona_prohibitions_ok("architect", free_to) is False
+
+    # R4-06 r11: "has the right to" missed by the pre-fix allow list.
+    right_to = (
+        "Never discuss proof or mutant. The architect has the right to edit "
+        "proof scripts and change mutant patches."
+    )
+    old_right = bool(
+        re.search(
+            r"\b(may|can|should|are allowed to|is allowed to|feel free to|"
+            r"is free to|are free to|free to)\b.{0,80}"
+            r"\b(edit|modify|author|alter|change|create|delete|touch|accept|write|"
+            r"revise|rewrite|revised|rewritten|patch(?:es)?)\b",
+            right_to.lower(),
+        )
+    )
+    assert old_right is False, "sanity: old whitelist must miss 'has the right to'"
+    assert _has_prohibition(right_to, "proof") and _has_prohibition(right_to, "mutant")
+    assert _has_reversed_permission(right_to, "proof", "mutant") is True
+    assert persona_prohibitions_ok("architect", right_to) is False
