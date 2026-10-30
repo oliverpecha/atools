@@ -45,8 +45,11 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     # N12-01: "may not only ... but also" is an affirmative correlative grant;
     # do not treat the "not" inside "not only" as a negation.
     # N12-02: "may never edit" is a prohibition; treat never like not / n't.
+    # N13-01: "not just ... but also" is the same affirmative correlative as
+    # "not only"; carve out "just" beside "only".
     allow_then_verb = (
-        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
+        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+(?:only|just)\b))"
+        rf".{{0,80}}\b{verb}\b"
     )
     return bool(
         re.search(allow_then_verb, low)
@@ -402,3 +405,52 @@ def test_n12_02_may_never_polarity_red_on_old_not_guard():
         "and touch mutant patches."
     )
     assert persona_prohibitions_ok("architect", grant) is False
+
+
+def test_n13_01_not_just_grant_red_on_old_only_carveout():
+    """N13-01 self-test: old only-carveout misses 'not just ... but also' grants.
+
+    Fails on the N12-01 guard that exempts only 'not only'; passes after carving
+    out 'not just' too. Affirmative correlative grants must return False.
+    """
+    named = (
+        "Never edit proof scripts or mutant patches. The architect is permitted "
+        "to not just edit proof scripts but also touch mutant patches."
+    )
+    allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
+    )
+    verb = (
+        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
+    )
+    # Pre-N13-01 guard: N12-02 never + only-carveout, no just.
+    old_guard = (
+        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
+    )
+    old_hit = bool(re.search(old_guard, named.lower()))
+    assert old_hit is False, "sanity: old only-carveout must miss 'not just' grant"
+    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
+    assert _has_reversed_permission(named, "proof", "mutant") is True
+    assert persona_prohibitions_ok("architect", named) is False
+
+    # Paraphrased affirmative correlative grants (other allow+verb / plural).
+    grants = [
+        "Never edit proof scripts or mutant patches. The architect may not just "
+        "modify proof scripts but also alter mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect can not just "
+        "rewrite proofs but also revise mutant patches.",
+        "Never edit proof scripts or mutant patches. Architects should not just "
+        "touch proof scripts but also write mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect is allowed to "
+        "not just create a proof script but also delete a mutant patch.",
+        "Never edit proof scripts or mutant patches. The architect is authorized "
+        "to not just author proof scripts but also change mutant patches.",
+    ]
+    for text in grants:
+        assert _has_reversed_permission(text, "proof", "mutant") is True, text
+        assert persona_prohibitions_ok("architect", text) is False, text
