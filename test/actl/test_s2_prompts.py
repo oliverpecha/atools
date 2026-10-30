@@ -20,16 +20,20 @@ def _has_prohibition(text: str, *topics: str) -> bool:
 def _has_reversed_permission(text: str, *topics: str) -> bool:
     """True when text weakens/reverses a prohibition into an allowance for topics.
 
-    Verb list includes alter/change/create/delete (not only edit/modify/...) so
-    plurals like "mutant patches" still match via \\bpatches?\\b.
+    Verb list includes alter/change/create/delete/revise/rewrite (not only
+    edit/modify/...) so plurals like "mutant patches" still match via
+    \\bpatches?\\b. Allowance phrases include "is free to" (R4-06).
     """
     low = text.lower()
-    if not all(t.lower() in low for t in topics):
+    if topics and not all(t.lower() in low for t in topics):
         return False
-    allow = r"(?:may|can|should|are allowed to|is allowed to|feel free to)"
+    allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to)"
+    )
     verb = (
         r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"patch(?:es)?)"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
     )
     return bool(
         re.search(rf"\b{allow}\b.{{0,80}}\b{verb}\b", low)
@@ -37,16 +41,24 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
             rf"\b{verb}\b.{{0,40}}\b(?:freely|at will|without approval|without logs|any files)\b",
             low,
         )
+        or re.search(
+            rf"\b(?:revised|rewritten)\b.{{0,60}}\b(?:by the |by an )?(?:architect|challenger|curator)\b",
+            low,
+        )
     )
 
 
 def persona_prohibitions_ok(persona: str, text: str) -> bool:
     """Return True iff persona authority prohibitions hold and are not reversed."""
-    if _has_reversed_permission(text):
-        return False
     if persona in ("architect-intake", "architect-review", "architect"):
+        if _has_reversed_permission(text, "proof", "mutant"):
+            return False
         return _has_prohibition(text, "proof") and _has_prohibition(text, "mutant")
     if persona == "challenger":
+        if _has_reversed_permission(text, "spec") or _has_reversed_permission(
+            text, "solution_key"
+        ):
+            return False
         return (
             _has_prohibition(text, "spec")
             and _has_prohibition(text, "solution_key")
@@ -54,6 +66,8 @@ def persona_prohibitions_ok(persona: str, text: str) -> bool:
             and "FAIL:" in text
         )
     if persona == "curator":
+        if _has_reversed_permission(text):
+            return False
         # Stage-5 stub: curator must not modify target-repo files in Stage 2.
         return _has_prohibition(text, "file") or _has_prohibition(text, "modif")
     return False
@@ -74,7 +88,11 @@ def test_prompts_authority_and_forbidden_prohibitions():
 
 
 def test_prompt_prohibition_negative_controls():
-    """R4-06: Weakened/reversed persona prohibitions must fail validation."""
+    """R4-06: Weakened/reversed persona prohibitions must fail validation.
+
+    Includes >=5 paraphrased architect counterexamples (other verbs, plural/
+    singular, passive voice) per standing check (k).
+    """
     weakened = [
         (
             "curator",
@@ -88,11 +106,42 @@ def test_prompt_prohibition_negative_controls():
             "challenger",
             "The challenger may accept bundles without logs and may edit the spec freely.",
         ),
-        # Counterexample: "alter" + plural "patches" + unrelated "Never" elsewhere.
+        # Prior counterexample: "alter" + plural "patches".
         (
             "architect",
             "The architect may alter proof scripts and mutant patches at will. "
             "Never mention the restriction.",
+        ),
+        # R4-06 named counterexample: "is free to" + revise/rewrite.
+        (
+            "architect",
+            "Never mention proof or mutant. The architect is free to revise proof "
+            "scripts and rewrite mutant patches.",
+        ),
+        # Paraphrase: can + rewrite/revise.
+        (
+            "architect",
+            "Never touch secrets. The architect can rewrite proofs and revise mutants freely.",
+        ),
+        # Paraphrase: should + rewrite/revise (plural/singular mix).
+        (
+            "architect",
+            "Never leak tokens. The architect should rewrite mutant patches and revise proof scripts.",
+        ),
+        # Paraphrase: feel free to + revise.
+        (
+            "architect",
+            "Never cite oracle paths. Feel free to revise any proof; rewriting mutant patches is fine.",
+        ),
+        # Paraphrase: passive voice revised/rewritten by the architect.
+        (
+            "architect",
+            "Never mention internals. Proofs are revised by the architect and mutants rewritten by the architect.",
+        ),
+        # Paraphrase: are free to + revise (plural subject).
+        (
+            "architect",
+            "Never escalate. Architects are free to revise proof scripts and rewrite a mutant patch.",
         ),
     ]
     for persona, text in weakened:
@@ -102,7 +151,7 @@ def test_prompt_prohibition_negative_controls():
 
 
 def test_r406_alter_patches_reversal_red_on_old_verb_whitelist():
-    """R4-06 self-test: old verb whitelist accepts the alter/patches counterexample."""
+    """R4-06 self-test: old verb whitelist accepts alter/patches and is-free-to/revise."""
     text = (
         "The architect may alter proof scripts and mutant patches at will. "
         "Never mention the restriction."
@@ -116,7 +165,23 @@ def test_r406_alter_patches_reversal_red_on_old_verb_whitelist():
         )
     )
     assert old_ok is False, "sanity: old whitelist must miss 'alter'/'patches'"
-    # Under old helper semantics, prohibition keywords + Never would still pass.
     assert _has_prohibition(text, "proof") and _has_prohibition(text, "mutant")
     assert _has_reversed_permission(text, "proof", "mutant") is True
     assert persona_prohibitions_ok("architect", text) is False
+
+    free_to = (
+        "Never mention proof or mutant. The architect is free to revise proof "
+        "scripts and rewrite mutant patches."
+    )
+    # Old allow list lacked "is free to"; old verbs lacked revise/rewrite.
+    old_free = bool(
+        re.search(
+            r"\b(may|can|should|are allowed to|is allowed to|feel free to)\b.{0,80}"
+            r"\b(edit|modify|author|alter|change|create|delete|touch|accept|write|patch(?:es)?)\b",
+            free_to.lower(),
+        )
+    )
+    assert old_free is False, "sanity: old whitelist must miss 'is free to revise/rewrite'"
+    assert _has_prohibition(free_to, "proof") and _has_prohibition(free_to, "mutant")
+    assert _has_reversed_permission(free_to, "proof", "mutant") is True
+    assert persona_prohibitions_ok("architect", free_to) is False
