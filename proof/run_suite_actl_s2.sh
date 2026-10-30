@@ -28,6 +28,58 @@ bash "$REPO_DIR/fixtures/golden/make_responses.sh" >/dev/null 2>&1 || true
 fi
 fi
 
+# R4-03: wrappers must preserve pytest exit 4 so run_check can classify ENV.
+# Static: reject the collapsing `if ! python3 -m pytest` pattern.
+# Functional: good pattern exits 4 under a python3 shim; old pattern exits 1.
+_r403_wrapper_env_selftest() {
+local w base tmp grc brc
+for w in "$REPO_DIR"/proof/stage2/P-S2-*.sh; do
+base=$(basename "$w")
+[[ "$base" == "P-S2-18.sh" ]] && continue
+if grep -Eq 'if ![[:space:]]+python3 -m pytest' "$w"; then
+echo "FAIL: R4-03: $base collapses pytest statuses via 'if !'; ENV (rc 4) unreachable"
+exit 1
+fi
+if ! grep -Eq '\(\([[:space:]]*rc == 4[[:space:]]*\)\)' "$w"; then
+echo "FAIL: R4-03: $base does not propagate pytest exit 4 as exit 4"
+exit 1
+fi
+done
+tmp=$(mktemp -d /tmp/actl-r403.XXXXXX)
+printf '#!/bin/sh\nexit 4\n' > "$tmp/python3"
+chmod +x "$tmp/python3"
+cat > "$tmp/good.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+rc=0
+python3 -m pytest /dev/null -q || rc=$?
+if (( rc == 4 )); then exit 4
+elif (( rc != 0 )); then exit 1
+fi
+EOS
+cat > "$tmp/bad.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+if ! python3 -m pytest /dev/null -q; then
+echo "FAIL: collapsed"
+exit 1
+fi
+EOS
+chmod +x "$tmp/good.sh" "$tmp/bad.sh"
+grc=0; PATH="$tmp:$PATH" bash "$tmp/good.sh" >/dev/null 2>&1 || grc=$?
+brc=0; PATH="$tmp:$PATH" bash "$tmp/bad.sh" >/dev/null 2>&1 || brc=$?
+rm -rf "$tmp"
+if (( grc != 4 )); then
+echo "FAIL: R4-03 self-test: good wrapper pattern returned $grc, want 4"
+exit 1
+fi
+if (( brc != 1 )); then
+echo "FAIL: R4-03 self-test: bad (old) wrapper pattern returned $brc, want 1"
+exit 1
+fi
+}
+_r403_wrapper_env_selftest
+
 selected() {
 [[ -z "${ONLY:-}" ]] && return 0
 local s; IFS=, read -ra _o <<<"$ONLY"
