@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -86,7 +87,10 @@ def test_patch_synthesis_exact_matching_and_difflib_candidate(
     doc_multi = json.loads((turn_arch / "unpack.json").read_text(encoding="utf-8"))
     assert doc_multi["errors"][0]["code"] == "E_SEARCH_MULTI"
     detail_multi = str(doc_multi["errors"][0].get("detail") or "") + doc_multi["errors"][0]["message"]
-    assert "19" in detail_multi and "23" in detail_multi, f"Line numbers 19/23 missing: {detail_multi}"
+    # Whole-number match: substring "19" must not pass via "119" (standing h / R4-04 class).
+    assert re.search(r"(?<!\d)19(?!\d)", detail_multi) and re.search(
+        r"(?<!\d)23(?!\d)", detail_multi
+    ), f"Line numbers 19/23 missing as whole numbers: {detail_multi}"
 
     turn_chal = layout.turns_dir(TAG) / "challenger-1"
     good_chal_text = (GOLDEN_DIR / "responses" / "good_challenger.txt").read_text(encoding="utf-8")
@@ -100,7 +104,6 @@ def test_patch_synthesis_exact_matching_and_difflib_candidate(
         ">>>>>>> REPLACE\n"
         "<<<END_PATCH>>>"
     )
-    import re
     chal_with_patch = re.sub(
         r'<<<FILE path="oracle-draft/mutants/contact_leak\.patch">>>.*?<<<END_FILE>>>',
         patch_block,
