@@ -67,10 +67,26 @@ def test_repair_confidentiality_and_candidate_details(tmp_path: Path, monkeypatc
     assert secret_canary not in repair_text, "SECURITY LEAK: secret oracle token leaked into repair.txt!"
 
 
-def _assert_repair_entry_structure(code: str, repair_text: str, err: dict) -> None:
+def _search_snippets_from_response(response_text: str) -> list[str]:
+    """Extract SEARCH hunk bodies from a response (offending snippets for S2-R7.2)."""
+    return re.findall(
+        r"<{4,}\s*SEARCH\r?\n(.*?)={4,}\r?\n",
+        response_text,
+        flags=re.S,
+    )
+
+
+def _assert_repair_entry_structure(
+    code: str,
+    repair_text: str,
+    err: dict,
+    *,
+    response_text: str | None = None,
+) -> None:
     """S2-R7.2: each repair entry needs code, path, message; search errors need candidates.
 
-    A code-only renderer (the R4-04 false-green) fails these checks.
+    A code-only renderer, or one that relies on the substring SEARCH inside
+    E_SEARCH_* / the word multi inside E_SEARCH_MULTI, fails these checks.
     """
     assert code in repair_text, f"{code} must appear in repair diagnostics"
     path = err.get("path")
@@ -78,48 +94,90 @@ def _assert_repair_entry_structure(code: str, repair_text: str, err: dict) -> No
     assert isinstance(path, str) and path, f"{code}: errors[].path required"
     assert isinstance(message, str) and message, f"{code}: errors[].message required"
     assert path in repair_text, f"{code}: path {path!r} must appear in repair.txt"
-    assert message in repair_text or any(
-        tok and tok in repair_text for tok in message.replace(":", " ").split()
-    ), f"{code}: message content must appear in repair.txt (not code-only)"
-    # Numbered entry marker (1. / 1) / #1) somewhere near the code
-    assert re.search(rf"(?m)^\s*\d+[.)]\s*.*{re.escape(code)}|{re.escape(code)}", repair_text), (
+    assert message in repair_text, f"{code}: exact message must appear in repair.txt"
+    assert re.search(rf"(?m)^\s*\d+[.)]\s+", repair_text), (
         f"{code}: numbered repair entry missing"
     )
     if code in ("E_SEARCH_NOMATCH", "E_SEARCH_MULTI"):
         detail = err.get("detail")
         assert detail is not None and str(detail), f"{code}: detail with candidate/line required"
-        # SEARCH snippet from the response hunk must be reflected
-        assert "SEARCH" in repair_text or "search" in repair_text.lower(), (
-            f"{code}: offending SEARCH snippet missing from repair.txt"
-        )
-        # Candidate window / line number from detail must appear
         detail_s = str(detail)
-        assert any(tok and tok in repair_text for tok in re.findall(r"\d+", detail_s)), (
-            f"{code}: candidate line number from detail must appear in repair.txt"
-        )
-        if code == "E_SEARCH_NOMATCH":
-            assert "def get_user" in repair_text or "candidate" in repair_text.lower() or "nearest" in repair_text.lower(), (
-                f"{code}: nearest candidate window missing"
+        nums = re.findall(r"\d+", detail_s)
+        assert nums, f"{code}: detail must contain candidate line number(s)"
+        # Every candidate line from detail must appear (one number is not enough for MULTI).
+        for n in nums:
+            assert n in repair_text, (
+                f"{code}: candidate line {n} from detail missing in repair.txt"
             )
         if code == "E_SEARCH_MULTI":
-            # Multiple match line numbers expected in detail / repair
-            nums = re.findall(r"\d+", detail_s)
-            assert len(nums) >= 2 or "multi" in repair_text.lower() or "," in detail_s, (
-                f"{code}: multi-match candidate details missing"
+            assert len(nums) >= 2, f"{code}: detail must list at least two candidate lines"
+        # Offending SEARCH snippet: require response hunk body text, not the code token.
+        # Strip error codes so "SEARCH" inside E_SEARCH_MULTI cannot satisfy the check.
+        body_wo_codes = repair_text
+        for c in ("E_SEARCH_MULTI", "E_SEARCH_NOMATCH", "E_PATCH_APPLY"):
+            body_wo_codes = body_wo_codes.replace(c, "")
+        snippets = _search_snippets_from_response(response_text or "")
+        if snippets:
+            found_snip = False
+            for snip in snippets:
+                for line in snip.splitlines():
+                    s = line.strip()
+                    if len(s) >= 3 and s in repair_text:
+                        found_snip = True
+                        break
+                if found_snip:
+                    break
+            assert found_snip, (
+                f"{code}: offending SEARCH snippet text from response missing in repair.txt"
+            )
+        else:
+            assert re.search(r"(?i)(?<!E_)search\s*[:\n]", body_wo_codes) or "<<<<<<<" in repair_text, (
+                f"{code}: offending SEARCH snippet missing from repair.txt"
+            )
+        if code == "E_SEARCH_NOMATCH":
+            # Nearest candidate window content (not the bare word "candidate").
+            assert "def get_user" in repair_text, (
+                f"{code}: nearest candidate window missing (expected def get_user)"
             )
     if code == "E_PATCH_APPLY":
-        assert err.get("detail") is not None or "apply" in repair_text.lower() or "patch" in repair_text.lower(), (
-            f"{code}: patch-apply diagnostic fields missing"
+        assert err.get("detail") is not None and str(err.get("detail")), (
+            f"{code}: patch-apply detail required"
         )
 
 
 def test_repair_structure_rejects_code_only_renderer():
-    """R4-04 self-test: code-only repair entries fail S2-R7.2 structure checks."""
+    """R4-04 self-test: code-only and one-line MULTI renderers fail structure checks."""
     for code in ("E_SEARCH_MULTI", "E_SEARCH_NOMATCH", "E_PATCH_APPLY"):
         fake = f"1. {code}\n"
         fake_err = {"code": code, "path": "", "message": "", "detail": None}
         with pytest.raises(AssertionError):
             _assert_repair_entry_structure(code, fake, fake_err)
+
+    # Counterexample: code/path/message + one detail number; E_SEARCH_MULTI supplies
+    # the substrings SEARCH and multi, so the old keyword checks were green.
+    multi_fake = (
+        "1. E_SEARCH_MULTI\n"
+        "path: api/users.py\n"
+        "message: ambiguous match\n"
+        "line 12\n"
+    )
+    multi_err = {
+        "code": "E_SEARCH_MULTI",
+        "path": "api/users.py",
+        "message": "ambiguous match",
+        "detail": "12,19",
+    }
+    resp = (
+        "<<<<<<< SEARCH\n"
+        "UNIQUE_OFFENDING_SNIPPET_R404\n"
+        "=======\n"
+        "replacement\n"
+        ">>>>>>> REPLACE\n"
+    )
+    with pytest.raises(AssertionError):
+        _assert_repair_entry_structure(
+            "E_SEARCH_MULTI", multi_fake, multi_err, response_text=resp
+        )
 
 
 def test_confidentiality_error_codes_canary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -168,7 +226,10 @@ def test_confidentiality_error_codes_canary(tmp_path: Path, monkeypatch: pytest.
         err = unpack_doc["errors"][0]
         assert err["code"] == code, f"expected {code}, got {err['code']}"
         assert secret_canary not in repair_text, f"SECURITY LEAK under {code}: canary in repair.txt"
-        _assert_repair_entry_structure(code, repair_text, err)
+        response_text = (GOLDEN_DIR / "responses" / fixture).read_text(encoding="utf-8")
+        _assert_repair_entry_structure(
+            code, repair_text, err, response_text=response_text
+        )
 
 
 def test_p13_non_execution_canary_across_unpack_replay_promote(
