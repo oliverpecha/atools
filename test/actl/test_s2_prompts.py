@@ -42,7 +42,9 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     )
     # N11-01: reject polarity false positives - "may not edit" / "shouldn't edit"
     # are prohibitions, not allowances. Skip allow tokens followed by not / n't.
-    allow_then_verb = rf"\b{allow}\b(?!n't\b|\s+not\b).{{0,80}}\b{verb}\b"
+    # N12-01: "may not only ... but also" is an affirmative correlative grant;
+    # do not treat the "not" inside "not only" as a negation.
+    allow_then_verb = rf"\b{allow}\b(?!n't\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
     return bool(
         re.search(allow_then_verb, low)
         or re.search(
@@ -297,3 +299,49 @@ def test_n11_01_may_not_polarity_red_on_old_allow_regex():
         "and touch mutant patches."
     )
     assert persona_prohibitions_ok("architect", grant) is False
+
+
+def test_n12_01_may_not_only_grant_red_on_old_not_guard():
+    """N12-01 self-test: old (?!...|\\s+not\\b) misses 'may not only' grants.
+
+    Fails on the blanket not-guard (treats not-only as prohibition); passes after
+    excluding 'not only'. Affirmative correlative grants must return False.
+    """
+    named = (
+        "Never edit proof scripts or mutant patches. The architect may not only "
+        "edit proof scripts but also touch mutant patches."
+    )
+    allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
+    )
+    verb = (
+        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
+    )
+    old_guard = rf"\b{allow}\b(?!n't\b|\s+not\b).{{0,80}}\b{verb}\b"
+    old_hit = bool(re.search(old_guard, named.lower()))
+    assert old_hit is False, "sanity: old blanket not-guard must miss 'may not only'"
+    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
+    assert _has_reversed_permission(named, "proof", "mutant") is True
+    assert persona_prohibitions_ok("architect", named) is False
+
+    # Paraphrased affirmative correlative grants (other allow+verb / plural).
+    grants = [
+        "Never edit proof scripts or mutant patches. The architect can not only "
+        "modify proof scripts but also alter mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect should not only "
+        "rewrite proofs but also revise mutant patches.",
+        "Never edit proof scripts or mutant patches. Architects may not only "
+        "touch proof scripts but also write mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect may not only "
+        "create a proof script but also delete a mutant patch.",
+        "Never edit proof scripts or mutant patches. The architect is permitted to "
+        "not only author proof scripts but also change mutant patches.",
+    ]
+    for text in grants:
+        assert _has_reversed_permission(text, "proof", "mutant") is True, text
+        assert persona_prohibitions_ok("architect", text) is False, text
