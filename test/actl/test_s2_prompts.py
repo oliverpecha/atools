@@ -44,7 +44,10 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     # are prohibitions, not allowances. Skip allow tokens followed by not / n't.
     # N12-01: "may not only ... but also" is an affirmative correlative grant;
     # do not treat the "not" inside "not only" as a negation.
-    allow_then_verb = rf"\b{allow}\b(?!n't\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
+    # N12-02: "may never edit" is a prohibition; treat never like not / n't.
+    allow_then_verb = (
+        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
+    )
     return bool(
         re.search(allow_then_verb, low)
         or re.search(
@@ -345,3 +348,57 @@ def test_n12_01_may_not_only_grant_red_on_old_not_guard():
     for text in grants:
         assert _has_reversed_permission(text, "proof", "mutant") is True, text
         assert persona_prohibitions_ok("architect", text) is False, text
+
+
+def test_n12_02_may_never_polarity_red_on_old_not_guard():
+    """N12-02 self-test: old not/n't guard treats 'may never edit' as a grant.
+
+    Fails on the pre-never regex (matches may...edit across 'never'); passes after
+    adding \\s+never. Conforming never-prohibitions must return True.
+    """
+    named = (
+        "Never edit proof scripts or mutant patches. The architect may never "
+        "edit proof scripts or touch mutant patches."
+    )
+    allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
+    )
+    verb = (
+        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
+    )
+    # Pre-N12-02 guard: N12-01 not-only carve-out but no never.
+    old_guard = rf"\b{allow}\b(?!n't\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
+    old_hit = bool(re.search(old_guard, named.lower()))
+    assert old_hit is True, "sanity: old guard without never must match 'may never edit'"
+    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
+    assert _has_reversed_permission(named, "proof", "mutant") is False
+    assert persona_prohibitions_ok("architect", named) is True
+
+    # Paraphrased conforming never-prohibitions (other allow+verb / plural).
+    conforming = [
+        "Never edit proof scripts or mutant patches. The architect should never "
+        "modify proof scripts or alter mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect can never "
+        "rewrite proofs or revise mutant patches.",
+        "Never edit proof scripts or mutant patches. Architects may never "
+        "touch proof scripts or write mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect is permitted to "
+        "never create proof scripts or delete mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect should never "
+        "author a proof or change a mutant patch.",
+    ]
+    for text in conforming:
+        assert _has_reversed_permission(text, "proof", "mutant") is False, text
+        assert persona_prohibitions_ok("architect", text) is True, text
+
+    # Affirmative grant still rejected (negative control).
+    grant = (
+        "Never mention the restriction. The architect may edit proof scripts "
+        "and touch mutant patches."
+    )
+    assert persona_prohibitions_ok("architect", grant) is False
