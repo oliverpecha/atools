@@ -4,6 +4,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 
@@ -93,8 +94,22 @@ def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert rc == 0
     drawers = list(courier_dir.iterdir())
     assert len(drawers) == 1
-    assert "__target-repo__2026-10-16_public-profiles__architect-1__architect-intake" in drawers[0].name
+    # S2-R1.5: stamp is UTC YYYYMMDDTHHMMZ; substring checks accept BADSTAMP__.
+    assert re.fullmatch(
+        r"\d{8}T\d{4}Z__target-repo__2026-10-16_public-profiles__architect-1__architect-intake",
+        drawers[0].name,
+    ), f"courier drawer name must use UTC YYYYMMDDTHHMMZ stamp, got {drawers[0].name!r}"
     assert (drawers[0] / "bundle.txt").is_file()
+
+
+def test_courier_stamp_rejects_bad_prefix():
+    """R4-07 self-test: arbitrary prefix must not satisfy the stamp fullmatch."""
+    bad = "BADSTAMP__target-repo__2026-10-16_public-profiles__architect-1__architect-intake"
+    assert "__target-repo__2026-10-16_public-profiles__architect-1__architect-intake" in bad
+    assert re.fullmatch(
+        r"\d{8}T\d{4}Z__target-repo__2026-10-16_public-profiles__architect-1__architect-intake",
+        bad,
+    ) is None
 
 
 def test_s2_r34_proposal_filename_contract():
