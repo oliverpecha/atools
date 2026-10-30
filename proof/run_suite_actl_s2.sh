@@ -29,19 +29,28 @@ fi
 fi
 
 # R4-03: wrappers must preserve pytest exit 4 so run_check can classify ENV.
-# Static: reject the collapsing `if ! python3 -m pytest` pattern.
-# Functional: good pattern exits 4 under a python3 shim; old pattern exits 1.
+# Static: reject `if ! python3 -m pytest` and reject rc!=0-before-rc==4 ordering.
+# Functional: execute EACH real pytest wrapper under a python3 shim that exits 4;
+# synthetic good/bad/wrong-order patterns prove the scanner distinctions.
 _r403_wrapper_env_selftest() {
-local w base tmp grc brc
+local w base tmp grc brc orc wrc rc4_line rcnz_line
 for w in "$REPO_DIR"/proof/stage2/P-S2-*.sh; do
 base=$(basename "$w")
 [[ "$base" == "P-S2-18.sh" ]] && continue
+grep -q 'python3 -m pytest' "$w" || continue
 if grep -Eq 'if ![[:space:]]+python3 -m pytest' "$w"; then
 echo "FAIL: R4-03: $base collapses pytest statuses via 'if !'; ENV (rc 4) unreachable"
 exit 1
 fi
 if ! grep -Eq '\(\([[:space:]]*rc == 4[[:space:]]*\)\)' "$w"; then
 echo "FAIL: R4-03: $base does not propagate pytest exit 4 as exit 4"
+exit 1
+fi
+# Counterexample ordering: rc!=0 exit 1 BEFORE rc==4 still contains the rc==4 token.
+rc4_line=$(grep -nE '\(\([[:space:]]*rc == 4[[:space:]]*\)\)' "$w" | head -1 | cut -d: -f1)
+rcnz_line=$(grep -nE '\(\([[:space:]]*rc != 0[[:space:]]*\)\)' "$w" | head -1 | cut -d: -f1 || true)
+if [[ -n "${rcnz_line:-}" && -n "${rc4_line:-}" ]] && (( rcnz_line < rc4_line )); then
+echo "FAIL: R4-03: $base checks rc!=0 (line $rcnz_line) before rc==4 (line $rc4_line); ENV collapsed to FAIL"
 exit 1
 fi
 done
@@ -65,18 +74,44 @@ echo "FAIL: collapsed"
 exit 1
 fi
 EOS
-chmod +x "$tmp/good.sh" "$tmp/bad.sh"
+# Wrong order: has rc==4 token and no `if !`, but collapses ENV to 1 (R4-03 counterexample).
+cat > "$tmp/wrong_order.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+rc=0
+python3 -m pytest /dev/null -q || rc=$?
+if (( rc != 0 )); then exit 1; fi
+if (( rc == 4 )); then exit 4; fi
+EOS
+chmod +x "$tmp/good.sh" "$tmp/bad.sh" "$tmp/wrong_order.sh"
 grc=0; PATH="$tmp:$PATH" bash "$tmp/good.sh" >/dev/null 2>&1 || grc=$?
 brc=0; PATH="$tmp:$PATH" bash "$tmp/bad.sh" >/dev/null 2>&1 || brc=$?
-rm -rf "$tmp"
+orc=0; PATH="$tmp:$PATH" bash "$tmp/wrong_order.sh" >/dev/null 2>&1 || orc=$?
 if (( grc != 4 )); then
 echo "FAIL: R4-03 self-test: good wrapper pattern returned $grc, want 4"
-exit 1
+rm -rf "$tmp"; exit 1
 fi
 if (( brc != 1 )); then
 echo "FAIL: R4-03 self-test: bad (old) wrapper pattern returned $brc, want 1"
-exit 1
+rm -rf "$tmp"; exit 1
 fi
+if (( orc != 1 )); then
+echo "FAIL: R4-03 self-test: wrong-order pattern returned $orc, want 1 (ENV collapsed)"
+rm -rf "$tmp"; exit 1
+fi
+# Execute every real pytest-backed proof wrapper under the exit-4 shim.
+for w in "$REPO_DIR"/proof/stage2/P-S2-*.sh; do
+base=$(basename "$w")
+[[ "$base" == "P-S2-18.sh" ]] && continue
+grep -q 'python3 -m pytest' "$w" || continue
+wrc=0
+PATH="$tmp:$PATH" ACTL_REPO="$REPO_DIR" bash "$w" >/dev/null 2>&1 || wrc=$?
+if (( wrc != 4 )); then
+echo "FAIL: R4-03: real wrapper $base returned $wrc under python3-exit-4 shim, want 4 (ENV)"
+rm -rf "$tmp"; exit 1
+fi
+done
+rm -rf "$tmp"
 }
 _r403_wrapper_env_selftest
 
