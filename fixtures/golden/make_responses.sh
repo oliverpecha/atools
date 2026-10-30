@@ -335,6 +335,9 @@ bad_cases = {
     ),
     # N15-02: architect PATCH.file must not address proofs/mutants/oracle-draft (E_PATH).
     # new="true" so missing-file E_PATH cannot false-green before the segment ban exists.
+    # Cover BOTH architect-intake and architect-review (S2-R3.4 names both purposes).
+    # Review shape: FILE oracle-decision.json + PATCH out=solution_key.patch so the
+    # output-prefix allowlist cannot reject before the target-path segment ban.
     "bad_patch_file_proofs": (
         f'<<<FILE path="sprint.toml">>>\n{sprint_toml_content}<<<END_FILE>>>\n'
         f'<<<PATCH out="solution_key.patch" file="proofs/01.sh" new="true">>>\n'
@@ -372,6 +375,45 @@ bad_cases = {
         f'<<<END_RESPONSE bundle="{s_arch1}">>>\n',
         "architect-intake",
         "architect-1",
+        "E_PATH",
+    ),
+    "bad_patch_file_review_proofs": (
+        f'<<<FILE path="oracle-decision.json">>>\n{dec_lock}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="proofs/01.sh" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_proof = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch2}">>>\n',
+        "architect-review",
+        "architect-2",
+        "E_PATH",
+    ),
+    "bad_patch_file_review_mutants": (
+        f'<<<FILE path="oracle-decision.json">>>\n{dec_lock}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="Mutants/x.patch" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_mutant = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch2}">>>\n',
+        "architect-review",
+        "architect-2",
+        "E_PATH",
+    ),
+    "bad_patch_file_review_oracle_draft": (
+        f'<<<FILE path="oracle-decision.json">>>\n{dec_lock}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="a/oracle-draft/x" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_oracle = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch2}">>>\n',
+        "architect-review",
+        "architect-2",
         "E_PATH",
     ),
 }

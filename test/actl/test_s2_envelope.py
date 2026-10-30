@@ -40,6 +40,40 @@ def _bad_response_cases() -> list[tuple[str, dict]]:
     return [(k, v) for k, v in sorted(expected.items()) if k.startswith("bad_")]
 
 
+def test_p03_n15_02_patch_file_ban_covers_architect_review():
+    """N15-02 self-test: S2-R3.4 segment ban fixtures must cover architect-review, not only intake.
+
+    Old corpus (intake-only bad_patch_file_*) fails this assertion. An intake-only
+    purpose gate would still pass the intake matrix while accepting the review
+    counterexample (FILE oracle-decision.json + PATCH out=solution_key.patch
+    file=proofs/01.sh new=true).
+    """
+    expected = load_expected(GOLDEN_DIR / "expected.d")["responses"]
+    patch_file_cases = {
+        k: v for k, v in expected.items() if k.startswith("bad_patch_file_")
+    }
+    assert patch_file_cases, "expected bad_patch_file_* E_PATH fixtures"
+    purposes = {v["purpose"] for v in patch_file_cases.values()}
+    assert "architect-intake" in purposes
+    assert "architect-review" in purposes, (
+        "N15-02: bad_patch_file_* fixtures must include architect-review "
+        "(S2-R3.4 applies proofs/mutants/oracle-draft segment ban to both purposes)"
+    )
+    for name, meta in patch_file_cases.items():
+        assert meta["expect"]["exit"] == 2
+        assert meta["expect"]["error_code"] == "E_PATH"
+        assert meta["expect"]["output_hashes"] == {}
+        body = (GOLDEN_DIR / "responses" / f"{name}.txt").read_text(encoding="utf-8")
+        assert 'out="solution_key.patch"' in body
+        assert 'new="true"' in body
+        if meta["purpose"] == "architect-review":
+            assert meta["turn"] == "architect-2"
+            assert 'path="oracle-decision.json"' in body
+        else:
+            assert meta["purpose"] == "architect-intake"
+            assert meta["turn"] == "architect-1"
+
+
 @pytest.mark.parametrize("case_name,meta", _bad_response_cases())
 def test_p03_all_bad_responses_matrix(
     case_name: str, meta: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
