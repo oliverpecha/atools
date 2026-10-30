@@ -34,7 +34,7 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     return bool(
         re.search(rf"\b{allow}\b.{{0,80}}\b{verb}\b", low)
         or re.search(
-            rf"\b{verb}\b.{{0,40}}\b(?:freely|without approval|without logs|any files)\b",
+            rf"\b{verb}\b.{{0,40}}\b(?:freely|at will|without approval|without logs|any files)\b",
             low,
         )
     )
