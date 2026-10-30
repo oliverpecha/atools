@@ -333,6 +333,47 @@ bad_cases = {
         "architect-1",
         "E_EXISTS",
     ),
+    # N15-02: architect PATCH.file must not address proofs/mutants/oracle-draft (E_PATH).
+    # new="true" so missing-file E_PATH cannot false-green before the segment ban exists.
+    "bad_patch_file_proofs": (
+        f'<<<FILE path="sprint.toml">>>\n{sprint_toml_content}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="proofs/01.sh" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_proof = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch1}">>>\n',
+        "architect-intake",
+        "architect-1",
+        "E_PATH",
+    ),
+    "bad_patch_file_mutants": (
+        f'<<<FILE path="sprint.toml">>>\n{sprint_toml_content}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="Mutants/x.patch" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_mutant = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch1}">>>\n',
+        "architect-intake",
+        "architect-1",
+        "E_PATH",
+    ),
+    "bad_patch_file_oracle_draft": (
+        f'<<<FILE path="sprint.toml">>>\n{sprint_toml_content}<<<END_FILE>>>\n'
+        f'<<<PATCH out="solution_key.patch" file="a/oracle-draft/x" new="true">>>\n'
+        f"<<<<<<< SEARCH\n"
+        f"=======\n"
+        f"forbidden_oracle = 1\n"
+        f">>>>>>> REPLACE\n"
+        f"<<<END_PATCH>>>\n"
+        f'<<<END_RESPONSE bundle="{s_arch1}">>>\n',
+        "architect-intake",
+        "architect-1",
+        "E_PATH",
+    ),
 }
 
 for name, (body, purpose, turn, err_code) in bad_cases.items():

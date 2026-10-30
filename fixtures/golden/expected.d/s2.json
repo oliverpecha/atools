@@ -231,6 +231,33 @@
         "output_hashes": {}
       }
     },
+    "bad_patch_file_proofs": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_PATH",
+        "output_hashes": {}
+      }
+    },
+    "bad_patch_file_mutants": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_PATH",
+        "output_hashes": {}
+      }
+    },
+    "bad_patch_file_oracle_draft": {
+      "purpose": "architect-intake",
+      "turn": "architect-1",
+      "expect": {
+        "exit": 2,
+        "error_code": "E_PATH",
+        "output_hashes": {}
+      }
+    },
     "bad_size": {
       "purpose": "architect-intake",
       "turn": "architect-1",
