@@ -1,5 +1,5 @@
-# Authored-by: R15 method change - Cursor Agent, tier auto (underlying model not disclosed);
-# prior rounds: Gemini Flash 3.8 (Google; Owner-attested 2026-10-28), model family: Gemini
+# Authored-by: R16 N15-01/N15-02 - Cursor Agent, tier auto (underlying model not disclosed);
+# prior rounds: R15 method change; Gemini Flash 3.8 (Google; Owner-attested 2026-10-28)
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,7 +16,12 @@ _NEXT_H2 = re.compile(r"(?m)^##\s+")
 _CANON_LINE = re.compile(
     r"^(ARCHITECT|CHALLENGER)\s*\([^)]*\):\s*(.*)$"
 )
-_MD_EMPHASIS = re.compile(r"[`*_]+")
+# Path/identifier tokens whose single-char deletion must break canonical match (N15-01).
+_PATH_ID_TOKEN = re.compile(
+    r"(?:proofs/\*\.sh|mutants/\*\.patch|solution_key\.patch|ACTL_TARGET_CMD|"
+    r"spec-draft\.md|sprint-proposal\.toml|oracle-decision\.json|"
+    r"oracle-draft/\{[^}]+\}|oracle-critique\.md|coverage\.md|scope\.txt|probe\.sh)"
+)
 
 
 def _has_prohibition(text: str, *topics: str) -> bool:
@@ -28,8 +33,8 @@ def _has_prohibition(text: str, *topics: str) -> bool:
 
 
 def _normalize_authority_body(text: str) -> str:
-    """Whitespace-insensitive; markdown backticks and emphasis ignored."""
-    cleaned = _MD_EMPHASIS.sub("", text)
+    """Collapse whitespace runs; strip ends; delete backticks only (S2-R11.2)."""
+    cleaned = text.replace("`", "")
     return " ".join(cleaned.split())
 
 
@@ -360,3 +365,66 @@ def test_n14_01_n14_02_closed_by_canonical_match():
         assert persona_prohibitions_ok("architect", text) is False, text
 
     assert persona_prohibitions_ok("architect", _minimal_prompt("architect")) is True
+
+
+def test_n15_01_star_underscore_preserved_in_normalization():
+    """N15-01: deleting * or _ must not make a weakened path compare equal."""
+    # Reviewer reproduction (Owner R16): proofs/.sh and solutionkey.patch must be False.
+    p_repro = (
+        _minimal_prompt("architect")
+        .replace("proofs/*.sh", "proofs/.sh")
+        .replace("solution_key.patch", "solutionkey.patch")
+    )
+    assert persona_prohibitions_ok("architect", p_repro) is False
+
+    for persona_key, label_old, label_new in (
+        ("architect", "proofs/*.sh", "proofs/.sh"),
+        ("architect", "mutants/*.patch", "mutants/.patch"),
+        ("architect", "solution_key.patch", "solutionkey.patch"),
+        ("challenger", "ACTL_TARGET_CMD", "ACTL_TARGETCMD"),
+        ("challenger", "solution_key.patch", "solutionkey.patch"),
+        ("challenger", "mutants/*.patch", "mutants/.patch"),
+        ("challenger", "proofs/*.sh", "proofs/.sh"),
+    ):
+        body = _load_canonical_authority()[persona_key]
+        assert label_old in body, label_old
+        mutated = body.replace(label_old, label_new)
+        assert mutated != body
+        text = f"## Authority\n\n{mutated}\n"
+        assert persona_prohibitions_ok(persona_key, text) is False, (
+            f"{persona_key}: {label_old} -> {label_new}"
+        )
+
+    # One-character deletion of every path/identifier token must return False.
+    for persona_key in ("architect", "challenger"):
+        body = _load_canonical_authority()[persona_key]
+        tokens = _PATH_ID_TOKEN.findall(body)
+        assert tokens, f"no path/id tokens in {persona_key} canonical"
+        for tok in tokens:
+            assert len(tok) >= 2, tok
+            for i in range(len(tok)):
+                weakened = tok[:i] + tok[i + 1 :]
+                mutated = body.replace(tok, weakened, 1)
+                assert mutated != body
+                text = f"## Authority\n\n{mutated}\n"
+                assert persona_prohibitions_ok(persona_key, text) is False, (
+                    f"{persona_key}: delete {tok!r}[{i}] -> {weakened!r}"
+                )
+
+    # Backticks alone still normalize away (positive control for backtick-only rule).
+    body = _load_canonical_authority()["architect"]
+    with_ticks = body.replace("proofs/*.sh", "`proofs/*.sh`")
+    assert with_ticks != body
+    assert persona_prohibitions_ok(
+        "architect", f"## Authority\n\n{with_ticks}\n"
+    ) is True
+
+
+def test_n15_02_text_outside_authority_not_checked_by_p_s2_17():
+    """N15-02 / Owner R16: extra sections do not defeat exact Authority match."""
+    p = (
+        _minimal_prompt("architect")
+        + "\n## Additional instructions\n"
+        + "The Architect MAY author and edit proof scripts and mutant patches.\n"
+    )
+    assert persona_prohibitions_ok("architect", p) is True
