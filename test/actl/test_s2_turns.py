@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 import re
@@ -76,6 +77,29 @@ def test_turns_ledger_allocation_and_resolution(tmp_path: Path):
         resolve_turn(layout, TAG, "architect-99")
 
 
+def _assert_courier_stamp_utc(
+    stamp: str,
+    utc_before: datetime,
+    utc_after: datetime,
+) -> None:
+    """S2-R1.5: stamp must be UTC YYYYMMDDTHHMMZ inside the observed UTC window.
+
+    Format-only fullmatch accepts local wall-clock values mislabeled with Z
+    (e.g. Europe/Madrid datetime.now().strftime(...Z)); this checks the stamp
+    against real UTC bounds.
+    """
+    assert re.fullmatch(r"\d{8}T\d{4}Z", stamp), (
+        f"courier stamp must match YYYYMMDDTHHMMZ, got {stamp!r}"
+    )
+    parsed = datetime.strptime(stamp, "%Y%m%dT%H%MZ").replace(tzinfo=timezone.utc)
+    before_m = utc_before.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    after_m = utc_after.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    assert before_m <= parsed <= after_m, (
+        f"courier stamp {stamp!r} is not UTC within "
+        f"[{before_m.strftime('%Y%m%dT%H%MZ')}, {after_m.strftime('%Y%m%dT%H%MZ')}]"
+    )
+
+
 def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Proves R4-07 & S2-R1.5: ACTL_COURIER_DIR creates outgoing drawer with bundle.txt."""
     try:
@@ -90,7 +114,9 @@ def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     courier_dir.mkdir()
     monkeypatch.setenv("ACTL_COURIER_DIR", str(courier_dir))
 
+    utc_before = datetime.now(timezone.utc) - timedelta(minutes=1)
     rc = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--json"])
+    utc_after = datetime.now(timezone.utc) + timedelta(minutes=1)
     assert rc == 0
     drawers = list(courier_dir.iterdir())
     assert len(drawers) == 1
@@ -99,6 +125,8 @@ def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         r"\d{8}T\d{4}Z__target-repo__2026-10-16_public-profiles__architect-1__architect-intake",
         drawers[0].name,
     ), f"courier drawer name must use UTC YYYYMMDDTHHMMZ stamp, got {drawers[0].name!r}"
+    stamp = drawers[0].name.split("__", 1)[0]
+    _assert_courier_stamp_utc(stamp, utc_before, utc_after)
     assert (drawers[0] / "bundle.txt").is_file()
 
 
@@ -110,6 +138,20 @@ def test_courier_stamp_rejects_bad_prefix():
         r"\d{8}T\d{4}Z__target-repo__2026-10-16_public-profiles__architect-1__architect-intake",
         bad,
     ) is None
+
+
+def test_courier_stamp_rejects_local_clock_with_z_suffix():
+    """R4-07 self-test: format-only Z stamp must not pass when it is not UTC."""
+    # Europe/Madrid can be UTC+1/+2; a local now().strftime(...Z) still fullmatches.
+    utc_now = datetime(2026, 10, 30, 14, 27, tzinfo=timezone.utc)
+    local_mislabel = "20261030T1527Z"  # UTC+1 wall clock stamped with Z
+    assert re.fullmatch(r"\d{8}T\d{4}Z", local_mislabel), (
+        "sanity: format-only check accepts local-clock-with-Z (old green)"
+    )
+    with pytest.raises(AssertionError):
+        _assert_courier_stamp_utc(local_mislabel, utc_now, utc_now)
+    # True UTC minute in the same window must pass.
+    _assert_courier_stamp_utc("20261030T1427Z", utc_now, utc_now)
 
 
 _SPRINT_PROPOSAL_BODY = (
