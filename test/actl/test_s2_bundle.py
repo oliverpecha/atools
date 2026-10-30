@@ -47,15 +47,21 @@ def test_p10_bundle_order_limits_and_safety(
     doc = json.loads(cap.out)
     assert doc["turn_id"] == "architect-1"
 
-    # F-03: Real symlink inside target_repo escaping repository
+    # F-03 / R4-02: Real symlink inside target_repo escaping repository
     sym = layout.target_repo / "sym_outside.py"
     if sym.is_symlink() or sym.exists():
         sym.unlink()
     try:
+        (tmp_path / "outside.txt").write_text("escape\n", encoding="utf-8")
         sym.symlink_to(tmp_path / "outside.txt")
+        assert sym.is_symlink(), "precondition: sym_outside.py must be a symlink"
         rc_sym = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--include", "sym_outside.py", "--json"])
         capsys.readouterr()
         assert rc_sym == 2, "bundle --include on escaping symlink must fail with exit 2"
+        # Negative control: include of a regular in-repo file must succeed (not false E_PATH)
+        rc_ok = cli.main(["bundle", "architect-intake", "--sprint", TAG, "--include", "api/users.py", "--json"])
+        capsys.readouterr()
+        assert rc_ok == 0, "regular in-repo --include must succeed (symlink case must be distinct)"
     except OSError as e:
         pytest.fail(f"FAIL: unexpected OSError in test execution: {e}")
 
