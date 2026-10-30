@@ -104,3 +104,84 @@ def test_s2_r34_proposal_filename_contract():
     for inv in ("sprint_proposal.toml", "proposal.toml", "sprint.yaml", "sprint.json"):
         assert turns.is_valid_proposal_filename(inv) is False
 
+
+def _architect_intake_required_status(output_names: set[str]) -> str | None:
+    """Normative S2-R3.4/D-51 policy-output rule used as the R4-01 oracle.
+
+    Returns None when required outputs are satisfied, otherwise the expected
+    error code. Either policy alias alone counts; both together conflict.
+    """
+    has_key = "solution_key.patch" in output_names
+    has_spec = "spec-draft.md" in output_names
+    has_prop = "sprint-proposal.toml" in output_names
+    has_alias = "sprint.toml" in output_names
+    if has_prop and has_alias:
+        return "E_DUPLICATE"
+    if not has_prop and not has_alias:
+        return "E_MISSING_REQUIRED"
+    if not has_key or not has_spec:
+        return "E_MISSING_REQUIRED"
+    return None
+
+
+def test_s2_r34_alias_only_and_conflict_policy_outputs():
+    """R4-01: alias-only OK; both omitted / both present are not.
+
+    Self-test: a checker that still required the literal name
+    sprint-proposal.toml would reject the alias-only set below.
+    """
+    alias_only = {"sprint.toml", "solution_key.patch", "spec-draft.md"}
+    canonical = {"sprint-proposal.toml", "solution_key.patch", "spec-draft.md"}
+    omitted = {"solution_key.patch", "spec-draft.md"}
+    conflicting = {
+        "sprint.toml",
+        "sprint-proposal.toml",
+        "solution_key.patch",
+        "spec-draft.md",
+    }
+
+    # Old contradictory required-output clause (literal sprint-proposal.toml only)
+    def _old_literal_required(names: set[str]) -> str | None:
+        if "sprint-proposal.toml" not in names:
+            return "E_MISSING_REQUIRED"
+        if "solution_key.patch" not in names or "spec-draft.md" not in names:
+            return "E_MISSING_REQUIRED"
+        return None
+
+    assert _old_literal_required(alias_only) == "E_MISSING_REQUIRED", (
+        "red-on-old: alias-only must fail the pre-fix literal required clause"
+    )
+    assert _architect_intake_required_status(alias_only) is None
+    assert _architect_intake_required_status(canonical) is None
+    assert _architect_intake_required_status(omitted) == "E_MISSING_REQUIRED"
+    assert _architect_intake_required_status(conflicting) == "E_DUPLICATE"
+
+    # Implementation helper must agree with the normative oracle when present.
+    try:
+        from actl import turns
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R3.4: actl.turns missing: {e}")
+    check = getattr(turns, "architect_intake_required_status", None)
+    assert callable(check), (
+        "FAIL: S2-R3.4: turns.architect_intake_required_status missing; "
+        "alias-only / omit-both / conflict cases are unenforced"
+    )
+    assert check(alias_only) is None
+    assert check(canonical) is None
+    assert check(omitted) == "E_MISSING_REQUIRED"
+    assert check(conflicting) == "E_DUPLICATE"
+
+
+def test_s2_r34_spec_text_either_alias_satisfies_required():
+    """R4-01: normative S2-R3.4 text must not require only sprint-proposal.toml."""
+    text = (REPO_ROOT / "docs" / "plan" / "spec-S2.md").read_text(encoding="utf-8")
+    # Pin the architect-intake required-outputs sentence.
+    marker = "`architect-intake`: allowed outputs"
+    start = text.index(marker)
+    chunk = text[start : start + 700]
+    assert "either name alone satisfies the single policy-output requirement" in chunk
+    assert "E_MISSING_REQUIRED" in chunk and "E_DUPLICATE" in chunk
+    # Must not still say Required outputs: ... `sprint-proposal.toml`, and ...
+    # without the either-alias satisfaction clause.
+    assert "Required outputs: `solution_key.patch`, `sprint-proposal.toml`, and" not in chunk
+
