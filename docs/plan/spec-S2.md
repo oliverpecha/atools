@@ -475,9 +475,12 @@ new_content()
 
 * S2-R11.1 Files in `prompts/`: `architect-intake.md`, `architect-review.md`, `challenger.md`, `curator.md` (Stage 5 stub), and `prompts/_output_contract.md`.
 * S2-R11.2 Authority and boundary statements (Design §3.2):
-* `architect-intake.md` and `architect-review.md`: state that the Architect authors `spec-draft.md`, `solution_key.patch`, `sprint-proposal.toml`, and `oracle-decision.json`, and MUST NOT author or edit `proofs/*.sh` or `mutants/*.patch`.
-* `challenger.md`: states that the Challenger authors `oracle-draft/{proofs/*.sh, probe.sh, scope.txt, coverage.md, oracle-critique.md, mutants/*.patch}`, states the proof contract (exit `0` pass, exit `1` fail with `FAIL:` line, target invoked via `ACTL_TARGET_CMD`), and MUST NOT edit the spec or `solution_key.patch`.
-
+  Each of `architect-intake.md`, `architect-review.md`, and `challenger.md` has exactly one section headed `## Authority` whose body equals the canonical text for its persona below (whitespace-insensitive; markdown backticks and emphasis ignored). Authority is defined only there. `curator.md` remains the Stage 5 stub described in S2-R11.1 (no canonical Authority block).
+```
+<!-- s2-r11-canonical -->
+ARCHITECT (architect-intake.md and architect-review.md): The Architect authors spec-draft.md, solution_key.patch, sprint-proposal.toml and oracle-decision.json. The Architect MUST NOT author or edit proofs/*.sh or mutants/*.patch.
+CHALLENGER (challenger.md): The Challenger authors oracle-draft/{proofs/*.sh, probe.sh, scope.txt, coverage.md, oracle-critique.md, mutants/*.patch}. The Challenger MUST NOT edit the spec or solution_key.patch. A proof exits 0 on pass and exits 1 on fail with a FAIL: line. The target is invoked via ACTL_TARGET_CMD.
+```
 
 * S2-R11.3 Single-source output contract: `prompts/_output_contract.md` defines the `<<<FILE...>>>`, `<<<PATCH...>>>`, `fence="N"`, and `<<<END_RESPONSE bundle="...">>>` grammar. None of the persona `.md` files duplicate `<<<END_RESPONSE`; `actl bundle` appends `prompts/_output_contract.md` dynamically.
 
@@ -521,7 +524,7 @@ Every requirement `S2-R1`..`S2-R13` maps to executable proofs, and every proof `
 | S2-R10 | P-S2-14 | `proof/stage2/P-S2-14.sh` -> `test/actl/test_s2_next_rules.py` (`test_next_rules_phase12_ten_states`, `test_next_rules_active_contract_bypass`) | FAIL (`ImportError`) | FAIL (`evaluate` returns `None` or `0` instead of exact 10-state action/command table; `active_contract` bypass ignored by `decide_next`) | FAIL (`RuntimeError` on `decide_next`) | `PRIORITY != 10`, repair precedence below bundle, wrong CLI command string, `active_contract` guard removed |
 | S2-R6 | P-S2-15 | `proof/stage2/P-S2-15.sh` -> `test/actl/test_s2_postparse.py` | FAIL (`ImportError`) | FAIL (accepts bad shell syntax, bad `scope.txt`, unmapped `R3` in `coverage.md`) | FAIL (rejects valid `good_challenger.txt`) | `bash -n` skipped, `chmod 0o755` omitted, `coverage.md` bijection check skipped |
 | S2-R6, S2-R12 | P-S2-16 | `proof/stage2/P-S2-16.sh` -> `test/actl/test_s2_postparse.py` (`test_p16_stage0_module_reuse`) | FAIL (modules missing) | FAIL (spy on `actl.scope.validate` / `actl.seq.state_lock` not called, or `cli.py` modified) | FAIL (calls fail) | duplicate scope parser written, `cli.py`/`next.py` modified directly |
-| S2-R11 | P-S2-17 | `proof/stage2/P-S2-17.sh` -> `test/actl/test_s2_prompts.py` | FAIL (files missing) | FAIL (empty prompt files lack required persona authority & contract strings) | FAIL (check fails) | missing persona prohibition, `_output_contract.md` duplicated or omitted |
+| S2-R11 | P-S2-17 | `proof/stage2/P-S2-17.sh` -> `test/actl/test_s2_prompts.py` | FAIL (files missing / empty file -> FAIL) | FAIL (Authority section absent) | FAIL (check fails) | missing or non-canonical `## Authority`, `_output_contract.md` duplicated or omitted |
 | S2-R13 | P-S2-18 | `proof/stage2/P-S2-18.sh` (git diff additions gate) | FAIL (not git / missing files) | FAIL (fails if not a git repo, or if frozen PB-2 path is dirty, or implementation missing) | FAIL (exits 1) | modified `INTERFACES.md` or `proof/stage0/`, untracked/disallowed file edits |
 
 ---
