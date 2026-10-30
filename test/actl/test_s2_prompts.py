@@ -23,7 +23,8 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     Verb list includes alter/change/create/delete/revise/rewrite (not only
     edit/modify/...) so plurals like "mutant patches" still match via
     \\bpatches?\\b. Allowance phrases include "is free to" and "has the right to"
-    (R4-06).
+    (R4-06). Negated allowances ("may not", "shouldn't") are not reversals
+    (N11-01).
     """
     low = text.lower()
     if topics and not all(t.lower() in low for t in topics):
@@ -39,8 +40,11 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
         r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
         r"revise|rewrite|revised|rewritten|patch(?:es)?)"
     )
+    # N11-01: reject polarity false positives — "may not edit" / "shouldn't edit"
+    # are prohibitions, not allowances. Skip allow tokens followed by not / n't.
+    allow_then_verb = rf"\b{allow}\b(?!n't\b|\s+not\b).{{0,80}}\b{verb}\b"
     return bool(
-        re.search(rf"\b{allow}\b.{{0,80}}\b{verb}\b", low)
+        re.search(allow_then_verb, low)
         or re.search(
             rf"\b{verb}\b.{{0,40}}\b(?:freely|at will|without approval|without logs|any files)\b",
             low,
@@ -238,3 +242,58 @@ def test_r406_alter_patches_reversal_red_on_old_verb_whitelist():
     assert _has_prohibition(right_to, "proof") and _has_prohibition(right_to, "mutant")
     assert _has_reversed_permission(right_to, "proof", "mutant") is True
     assert persona_prohibitions_ok("architect", right_to) is False
+
+
+def test_n11_01_may_not_polarity_red_on_old_allow_regex():
+    """N11-01 self-test: old allow.{0,80}verb treats 'may not edit' as a reversal.
+
+    Fails on the pre-fix regex (matches may...edit across 'not'); passes after
+    the (?!n't|\\s+not) guard. Compliant prompts must be accepted as True.
+    """
+    # Owner-named counterexample (conforming prohibition).
+    named = (
+        "Never edit proof scripts or mutant patches. The architect may not edit "
+        "proof scripts or touch mutant patches."
+    )
+    old_allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
+    )
+    old_verb = (
+        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
+    )
+    old_hit = bool(
+        re.search(rf"\b{old_allow}\b.{{0,80}}\b{old_verb}\b", named.lower())
+    )
+    assert old_hit is True, "sanity: old polarity-blind regex must match 'may not edit'"
+    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
+    assert _has_reversed_permission(named, "proof", "mutant") is False
+    assert persona_prohibitions_ok("architect", named) is True
+
+    # Paraphrased conforming prohibitions (other allow+verb pairs / plural).
+    conforming = [
+        "Never edit proof scripts or mutant patches. The architect should not "
+        "modify proof scripts or alter mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect can not "
+        "rewrite proofs or revise mutant patches.",
+        "Never edit proof scripts or mutant patches. Architects shouldn't "
+        "touch proof scripts or write mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect may not "
+        "create proof scripts or delete mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect should not "
+        "author a proof or change a mutant patch.",
+    ]
+    for text in conforming:
+        assert _has_reversed_permission(text, "proof", "mutant") is False, text
+        assert persona_prohibitions_ok("architect", text) is True, text
+
+    # Affirmative grant still rejected (negative control).
+    grant = (
+        "Never mention the restriction. The architect may edit proof scripts "
+        "and touch mutant patches."
+    )
+    assert persona_prohibitions_ok("architect", grant) is False
