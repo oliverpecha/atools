@@ -40,7 +40,7 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
         r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
         r"revise|rewrite|revised|rewritten|patch(?:es)?)"
     )
-    # N11-01: reject polarity false positives — "may not edit" / "shouldn't edit"
+    # N11-01: reject polarity false positives - "may not edit" / "shouldn't edit"
     # are prohibitions, not allowances. Skip allow tokens followed by not / n't.
     allow_then_verb = rf"\b{allow}\b(?!n't\b|\s+not\b).{{0,80}}\b{verb}\b"
     return bool(
