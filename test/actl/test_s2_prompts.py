@@ -47,8 +47,14 @@ def _has_reversed_permission(text: str, *topics: str) -> bool:
     # N12-02: "may never edit" is a prohibition; treat never like not / n't.
     # N13-01: "not just ... but also" is the same affirmative correlative as
     # "not only"; carve out "just" beside "only".
+    # N13-02: "may under no circumstances edit" (and like absolute-ban phrases)
+    # are prohibitions; skip allow tokens followed by those phrases.
+    ban = (
+        r"(?:never|under\s+no\s+circumstances|in\s+no\s+(?:way|event)|"
+        r"on\s+no\s+account|under\s+no\s+conditions?)"
+    )
     allow_then_verb = (
-        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+(?:only|just)\b))"
+        rf"\b{allow}\b(?!n't\b|\s+{ban}\b|\s+not\b(?!\s+(?:only|just)\b))"
         rf".{{0,80}}\b{verb}\b"
     )
     return bool(
@@ -454,3 +460,63 @@ def test_n13_01_not_just_grant_red_on_old_only_carveout():
     for text in grants:
         assert _has_reversed_permission(text, "proof", "mutant") is True, text
         assert persona_prohibitions_ok("architect", text) is False, text
+
+
+def test_n13_02_under_no_circumstances_red_on_old_immediate_guard():
+    """N13-02 self-test: old immediate not/never guard treats ban phrases as grants.
+
+    Fails on the pre-ban-phrase regex (matches may...edit across 'under no
+    circumstances'); passes after skipping absolute-ban phrases. Conforming
+    prohibitions must return True.
+    """
+    named = (
+        "Never edit proof scripts or mutant patches. The architect may under no "
+        "circumstances edit proof scripts or touch mutant patches."
+    )
+    allow = (
+        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
+        r"is free to|are free to|free to|"
+        r"has the right to|have the right to|has a right to|have a right to|"
+        r"is entitled to|are entitled to|is permitted to|are permitted to|"
+        r"is authorised to|are authorised to|is authorized to|are authorized to)"
+    )
+    verb = (
+        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
+        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
+    )
+    # Pre-N13-02 guard: N13-01 just-carveout but no absolute-ban phrases.
+    old_guard = (
+        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+(?:only|just)\b))"
+        rf".{{0,80}}\b{verb}\b"
+    )
+    old_hit = bool(re.search(old_guard, named.lower()))
+    assert old_hit is True, (
+        "sanity: old immediate guard must match 'may under no circumstances edit'"
+    )
+    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
+    assert _has_reversed_permission(named, "proof", "mutant") is False
+    assert persona_prohibitions_ok("architect", named) is True
+
+    # Paraphrased conforming absolute-ban prohibitions (other allow+verb / plural).
+    conforming = [
+        "Never edit proof scripts or mutant patches. The architect should under "
+        "no circumstances modify proof scripts or alter mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect can in no way "
+        "rewrite proofs or revise mutant patches.",
+        "Never edit proof scripts or mutant patches. Architects may on no account "
+        "touch proof scripts or write mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect is permitted to "
+        "under no conditions create proof scripts or delete mutant patches.",
+        "Never edit proof scripts or mutant patches. The architect should in no "
+        "event author a proof or change a mutant patch.",
+    ]
+    for text in conforming:
+        assert _has_reversed_permission(text, "proof", "mutant") is False, text
+        assert persona_prohibitions_ok("architect", text) is True, text
+
+    # Affirmative grant still rejected (negative control).
+    grant = (
+        "Never mention the restriction. The architect may edit proof scripts "
+        "and touch mutant patches."
+    )
+    assert persona_prohibitions_ok("architect", grant) is False
