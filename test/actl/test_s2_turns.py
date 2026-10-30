@@ -96,6 +96,7 @@ def test_courier_drawer_creation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "__target-repo__2026-10-16_public-profiles__architect-1__architect-intake" in drawers[0].name
     assert (drawers[0] / "bundle.txt").is_file()
 
+
 def test_s2_r34_proposal_filename_contract():
     """R4-01: Both sprint-proposal.toml and sprint.toml accepted; others rejected."""
     from actl import turns
@@ -124,12 +125,35 @@ def _architect_intake_required_status(output_names: set[str]) -> str | None:
     return None
 
 
-def test_s2_r34_alias_only_and_conflict_policy_outputs():
-    """R4-01: alias-only OK; both omitted / both present are not.
+_SPRINT_PROPOSAL_BODY = (
+    'live_run = "none"\n'
+    'approval_live_run = "architect"\n'
+    'solution_key_exposure = "full"\n'
+    "min_attempts_before_block = 2\n"
+    "max_epochs = 3\n"
+    "\n"
+    "[max_attempts]\n"
+    "oracle = 3\n"
+    "implementer = 2\n"
+    "live = 2\n"
+    "curator = 2\n"
+    "\n"
+    "[hard_cap.implementer]\n"
+    'wall_clock = "45m"\n'
+    "turns = 60\n"
+)
 
-    Self-test: a checker that still required the literal name
-    sprint-proposal.toml would reject the alias-only set below.
+
+def test_s2_r34_alias_only_and_conflict_policy_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """R4-01: unpack parser accepts alias-only; omit-both / both-present fail.
+
+    Drives actl unpack (not only a helper). Self-test: a literal-name-only
+    required clause rejects alias-only; the unpack path must not.
     """
+    import json
+
     alias_only = {"sprint.toml", "solution_key.patch", "spec-draft.md"}
     canonical = {"sprint-proposal.toml", "solution_key.patch", "spec-draft.md"}
     omitted = {"solution_key.patch", "spec-draft.md"}
@@ -140,7 +164,6 @@ def test_s2_r34_alias_only_and_conflict_policy_outputs():
         "spec-draft.md",
     }
 
-    # Old contradictory required-output clause (literal sprint-proposal.toml only)
     def _old_literal_required(names: set[str]) -> str | None:
         if "sprint-proposal.toml" not in names:
             return "E_MISSING_REQUIRED"
@@ -156,20 +179,70 @@ def test_s2_r34_alias_only_and_conflict_policy_outputs():
     assert _architect_intake_required_status(omitted) == "E_MISSING_REQUIRED"
     assert _architect_intake_required_status(conflicting) == "E_DUPLICATE"
 
-    # Implementation helper must agree with the normative oracle when present.
     try:
-        from actl import turns
+        from actl import cli
+        import actl.unpack  # noqa: F401
+        import actl.turns  # noqa: F401
     except ImportError as e:
-        pytest.fail(f"FAIL: S2-R3.4: actl.turns missing: {e}")
-    check = getattr(turns, "architect_intake_required_status", None)
-    assert callable(check), (
-        "FAIL: S2-R3.4: turns.architect_intake_required_status missing; "
-        "alias-only / omit-both / conflict cases are unenforced"
+        pytest.fail(f"FAIL: S2-R3.4: actl.unpack/turns missing: {e}")
+
+    check = getattr(__import__("actl.turns", fromlist=["*"]), "architect_intake_required_status", None)
+    if callable(check):
+        assert check(alias_only) is None
+        assert check(canonical) is None
+        assert check(omitted) == "E_MISSING_REQUIRED"
+        assert check(conflicting) == "E_DUPLICATE"
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+    key_body = (GOLDEN_DIR / "sprint" / "solution_key.patch").read_text(encoding="utf-8")
+    spec_body = "# R4-01 alias policy draft\n"
+
+    def _file_block(path: str, body: str) -> str:
+        return f'<<<FILE path="{path}">>>\n{body}<<<END_FILE>>>\n'
+
+    def _run_unpack(names: set[str]) -> tuple[int, dict]:
+        for f in ("response.txt", "unpack.json", "repair.txt"):
+            p = turn_dir / f
+            if p.exists():
+                p.unlink()
+        parts: list[str] = []
+        for name in sorted(names):
+            if name in ("sprint.toml", "sprint-proposal.toml"):
+                parts.append(_file_block(name, _SPRINT_PROPOSAL_BODY))
+            elif name == "solution_key.patch":
+                parts.append(_file_block(name, key_body))
+            elif name == "spec-draft.md":
+                parts.append(_file_block(name, spec_body))
+        parts.append('<<<END_RESPONSE bundle="1f13e141">>>\n')
+        payload = "".join(parts)
+        inp = tmp_path / "r401_in.txt"
+        inp.write_text(payload, encoding="utf-8")
+        rc = cli.main([
+            "unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1",
+            "-f", str(inp), "--json",
+        ])
+        doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
+        return rc, doc
+
+    # Alias-only through the real unpack parser (not a helper-only check).
+    rc_alias, doc_alias = _run_unpack(alias_only)
+    assert rc_alias == 0, (
+        f"alias-only sprint.toml+key+spec-draft must unpack ok, got rc={rc_alias} "
+        f"errors={doc_alias.get('errors')}"
     )
-    assert check(alias_only) is None
-    assert check(canonical) is None
-    assert check(omitted) == "E_MISSING_REQUIRED"
-    assert check(conflicting) == "E_DUPLICATE"
+    assert doc_alias.get("ok") is True
+    err_codes_alias = [e["code"] for e in doc_alias.get("errors") or []]
+    assert "E_MISSING_REQUIRED" not in err_codes_alias
+
+    rc_omit, doc_omit = _run_unpack(omitted)
+    assert rc_omit == 2
+    assert doc_omit["errors"][0]["code"] == "E_MISSING_REQUIRED"
+
+    rc_both, doc_both = _run_unpack(conflicting)
+    assert rc_both == 2
+    assert doc_both["errors"][0]["code"] == "E_DUPLICATE"
 
 
 def test_s2_r34_spec_text_either_alias_satisfies_required():
@@ -184,4 +257,26 @@ def test_s2_r34_spec_text_either_alias_satisfies_required():
     # Must not still say Required outputs: ... `sprint-proposal.toml`, and ...
     # without the either-alias satisfaction clause.
     assert "Required outputs: `solution_key.patch`, `sprint-proposal.toml`, and" not in chunk
+
+    # Selector gap self-test: P-S2-01 -k must collect the matrix-named r34 cases.
+    import subprocess
+    r = subprocess.run(
+        [
+            "python3", "-m", "pytest",
+            str(REPO_ROOT / "test/actl/test_s2_turns.py"),
+            str(REPO_ROOT / "test/actl/test_s2_unpack.py"),
+            "-k", "test_turns or test_courier or test_p01 or test_s2_r34",
+            "--collect-only", "-q",
+        ],
+        capture_output=True, text=True, cwd=str(REPO_ROOT),
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+    )
+    collected = r.stdout + r.stderr
+    for name in (
+        "test_s2_r34_alias_only_and_conflict_policy_outputs",
+        "test_s2_r34_proposal_filename_contract",
+        "test_courier_drawer_creation",
+        "test_p01_good_architect_intake_unpack_and_proof_preview",
+    ):
+        assert name in collected, f"P-S2-01 filter must collect {name}"
 

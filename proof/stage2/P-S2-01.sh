@@ -9,7 +9,9 @@ REPO_DIR="${ACTL_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export PYTHONPATH="$REPO_DIR/src:${PYTHONPATH:-}"
 
 rc=0
-python3 -m pytest "$REPO_DIR/test/actl/test_s2_turns.py" "$REPO_DIR/test/actl/test_s2_unpack.py" -k "test_turns or test_courier or test_p01" -q -rf || rc=$?
+# Include test_s2_r34_* so matrix-named alias/conflict policy tests are collected (R4-01).
+python3 -m pytest "$REPO_DIR/test/actl/test_s2_turns.py" "$REPO_DIR/test/actl/test_s2_unpack.py" \
+  -k "test_turns or test_courier or test_p01 or test_s2_r34" -q -rf || rc=$?
 if (( rc == 4 )); then echo "FAIL: pytest reported environment error (exit 4)"; exit 4;
 elif (( rc != 0 )); then
 echo "FAIL: S2-R1/S2-R4: P-S2-01 turn ledger or good architect-intake unpack failed"
