@@ -230,8 +230,15 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
 
     # 2. Syntax / bound attacks on output paths (NUL, backslash, absolute, overlong, empty/dot)
     overlong_seg = "x" * 101
-    overlong_total = "oracle-draft/" + ("a" * 250) + ".sh"
-    assert len(overlong_total) > 255
+    # Per-segment overlong (caught by the 100-char segment cap alone).
+    overlong_seg_path = f"oracle-draft/{overlong_seg}.sh"
+    # Total-length >255 with EVERY segment <=100 so a segment-only validator cannot catch it (R4-02).
+    seg90_a = "a" * 90
+    seg90_b = "b" * 90
+    seg90_c = "c" * 90
+    overlong_total_independent = f"oracle-draft/{seg90_a}/{seg90_b}/{seg90_c}.sh"
+    assert len(overlong_total_independent) > 255
+    assert all(len(s) <= 100 for s in overlong_total_independent.split("/"))
     bad_paths = (
         "../escape.sh",
         "/etc/passwd",
@@ -240,14 +247,17 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
         "oracle-draft/proofs/",
         "oracle-draft/proofs/bad\x00path.sh",
         "oracle-draft\\01.sh",
-        f"oracle-draft/{overlong_seg}.sh",
-        overlong_total,
+        overlong_seg_path,
+        overlong_total_independent,
     )
     for bad in bad_paths:
         rc, doc = _run_chal(f'<<<FILE path="{bad}">>>\ndata\n<<<END_FILE>>>\n<<<END_RESPONSE bundle="b7eb659a">>>\n')
         assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"Path {bad!r} must fail with E_PATH"
 
     # 3. Target-file attacks: case-insensitive .git, NUL, backslash, absolute, overlong, case-collision dup
+    overlong_file_total = f"api/{seg90_a}/{seg90_b}/{seg90_c}.py"
+    assert len(overlong_file_total) > 255
+    assert all(len(s) <= 100 for s in overlong_file_total.split("/"))
     bad_files = (
         "../escape.py",
         "/etc/passwd",
@@ -260,7 +270,7 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
         "api/.GIT/config",
         "api/.Git/hooks/x",
         f"api/{overlong_seg}.py",
-        "api/" + ("b" * 250) + ".py",
+        overlong_file_total,
     )
     for bad_file in bad_files:
         rc, doc = _run_chal(
@@ -270,15 +280,28 @@ def test_p05_path_attacks_and_symlinks(tmp_path: Path, monkeypatch: pytest.Monke
         )
         assert rc == 2 and doc["errors"][0]["code"] == "E_PATH", f"File {bad_file!r} must fail with E_PATH"
 
-    # Case-collision duplicates on output paths (same path ignoring case) -> E_DUPLICATE or E_PATH
+    # Case-collision duplicates on output paths -> exact E_DUPLICATE (S2-R3; not E_PATH).
     rc_cc, doc_cc = _run_chal(
         '<<<FILE path="oracle-draft/Proofs/01.sh">>>\n#!/bin/sh\necho ok\n<<<END_FILE>>>\n'
         '<<<FILE path="oracle-draft/proofs/01.sh">>>\n#!/bin/sh\necho ok\n<<<END_FILE>>>\n'
         '<<<END_RESPONSE bundle="b7eb659a">>>\n'
     )
-    assert rc_cc == 2 and doc_cc["errors"][0]["code"] in ("E_DUPLICATE", "E_PATH"), (
-        f"case-collision duplicate paths must be rejected, got {doc_cc['errors'][0]['code']}"
+    assert rc_cc == 2 and doc_cc["errors"][0]["code"] == "E_DUPLICATE", (
+        f"case-collision duplicate paths must yield E_DUPLICATE, got {doc_cc['errors'][0]['code']}"
     )
+
+
+def test_r402_total_length_independent_of_segment_cap():
+    """R4-02 self-test: old single-segment overlong is caught by the 100-char cap alone."""
+    old_overlong_total = "oracle-draft/" + ("a" * 250) + ".sh"
+    assert len(old_overlong_total) > 255
+    # The sole non-root segment is 254 chars (>100), so segment-only validation rejects it.
+    segs = old_overlong_total.split("/")
+    assert any(len(s) > 100 for s in segs), "sanity: old corpus is not segment-independent"
+    # Independent corpus: every segment <=100, total >255.
+    independent = "oracle-draft/" + ("a" * 90) + "/" + ("b" * 90) + "/" + ("c" * 90) + ".sh"
+    assert len(independent) > 255
+    assert all(len(s) <= 100 for s in independent.split("/"))
 
 def test_p03_all_six_adjacent_precedence_pairs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Proves normative linear pipeline precedence across all 6 adjacent stage pairs (S2-R4.6)."""
