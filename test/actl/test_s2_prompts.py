@@ -1,12 +1,22 @@
-# Authored-by: Gemini Flash 3.8 (Google; accessed via the Gemini web interface; Owner-attested 2026-10-28), model family: Gemini
+# Authored-by: R15 method change - Cursor Agent, tier auto (underlying model not disclosed);
+# prior rounds: Gemini Flash 3.8 (Google; Owner-attested 2026-10-28), model family: Gemini
 from __future__ import annotations
 
 from pathlib import Path
 import re
-import pytest
+import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = REPO_ROOT / "prompts"
+SPEC_PATH = REPO_ROOT / "docs" / "plan" / "spec-S2.md"
+
+_CANONICAL_MARKER = "<!-- s2-r11-canonical -->"
+_AUTH_HEADING = re.compile(r"(?m)^## Authority\s*$")
+_NEXT_H2 = re.compile(r"(?m)^##\s+")
+_CANON_LINE = re.compile(
+    r"^(ARCHITECT|CHALLENGER)\s*\([^)]*\):\s*(.*)$"
+)
+_MD_EMPHASIS = re.compile(r"[`*_]+")
 
 
 def _has_prohibition(text: str, *topics: str) -> bool:
@@ -17,104 +27,151 @@ def _has_prohibition(text: str, *topics: str) -> bool:
     return all(t.lower() in low for t in topics)
 
 
-def _has_reversed_permission(text: str, *topics: str) -> bool:
-    """True when text weakens/reverses a prohibition into an allowance for topics.
+def _normalize_authority_body(text: str) -> str:
+    """Whitespace-insensitive; markdown backticks and emphasis ignored."""
+    cleaned = _MD_EMPHASIS.sub("", text)
+    return " ".join(cleaned.split())
 
-    Verb list includes alter/change/create/delete/revise/rewrite (not only
-    edit/modify/...) so plurals like "mutant patches" still match via
-    \\bpatches?\\b. Allowance phrases include "is free to" and "has the right to"
-    (R4-06). Negated allowances ("may not", "shouldn't") are not reversals
-    (N11-01).
-    """
-    low = text.lower()
-    if topics and not all(t.lower() in low for t in topics):
+
+def _load_canonical_authority() -> dict[str, str]:
+    """Read ARCHITECT/CHALLENGER bodies from the spec fenced canonical block."""
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+    m = re.search(
+        rf"```[^\n]*\n{_CANONICAL_MARKER}\n(.*?)```",
+        spec,
+        re.S,
+    )
+    if not m:
+        raise AssertionError(
+            f"missing {_CANONICAL_MARKER!r} fenced block in {SPEC_PATH}"
+        )
+    out: dict[str, str] = {}
+    for line in m.group(1).splitlines():
+        lm = _CANON_LINE.match(line.strip())
+        if not lm:
+            continue
+        key = "architect" if lm.group(1) == "ARCHITECT" else "challenger"
+        out[key] = lm.group(2).strip()
+    if "architect" not in out or "challenger" not in out:
+        raise AssertionError("canonical block missing ARCHITECT or CHALLENGER line")
+    return out
+
+
+def _authority_bodies(text: str) -> list[str]:
+    """Bodies of every section headed exactly '## Authority'."""
+    bodies: list[str] = []
+    for m in _AUTH_HEADING.finditer(text):
+        start = m.end()
+        nxt = _NEXT_H2.search(text, start)
+        end = nxt.start() if nxt else len(text)
+        bodies.append(text[start:end])
+    return bodies
+
+
+def _authority_matches(text: str, persona_key: str) -> bool:
+    bodies = _authority_bodies(text)
+    if len(bodies) != 1:
         return False
-    allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    # N11-01: reject polarity false positives - "may not edit" / "shouldn't edit"
-    # are prohibitions, not allowances. Skip allow tokens followed by not / n't.
-    # N12-01: "may not only ... but also" is an affirmative correlative grant;
-    # do not treat the "not" inside "not only" as a negation.
-    # N12-02: "may never edit" is a prohibition; treat never like not / n't.
-    # N13-01: "not just ... but also" is the same affirmative correlative as
-    # "not only"; carve out "just" beside "only".
-    # N13-02: "may under no circumstances edit" (and like absolute-ban phrases)
-    # are prohibitions; do not treat allow tokens followed by those phrases as grants.
-    ban = (
-        r"(?:never|under\s+no\s+circumstances|in\s+no\s+(?:way|event)|"
-        r"on\s+no\s+account|under\s+no\s+conditions?)"
-    )
-    allow_then_verb = (
-        rf"\b{allow}\b(?!n't\b|\s+{ban}\b|\s+not\b(?!\s+(?:only|just)\b))"
-        rf".{{0,80}}\b{verb}\b"
-    )
-    return bool(
-        re.search(allow_then_verb, low)
-        or re.search(
-            rf"\b{verb}\b.{{0,40}}\b(?:freely|at will|without approval|without logs|any files)\b",
-            low,
-        )
-        or re.search(
-            rf"\b(?:revised|rewritten)\b.{{0,60}}\b(?:by the |by an )?(?:architect|challenger|curator)\b",
-            low,
-        )
-    )
+    canonical = _load_canonical_authority()[persona_key]
+    return _normalize_authority_body(bodies[0]) == _normalize_authority_body(canonical)
 
 
 def persona_prohibitions_ok(persona: str, text: str) -> bool:
-    """Return True iff persona authority prohibitions hold and are not reversed."""
+    """Return True iff persona authority requirements hold.
+
+    Architect/challenger: exactly one ## Authority section whose normalized body
+    equals the canonical text from docs/plan/spec-S2.md (S2-R11.2).
+    Curator: Stage-5 stub still checked via _has_prohibition only.
+    """
     if persona in ("architect-intake", "architect-review", "architect"):
-        if _has_reversed_permission(text, "proof", "mutant"):
-            return False
-        return _has_prohibition(text, "proof") and _has_prohibition(text, "mutant")
+        return _authority_matches(text, "architect")
     if persona == "challenger":
-        if _has_reversed_permission(text, "spec") or _has_reversed_permission(
-            text, "solution_key"
-        ):
-            return False
-        return (
-            _has_prohibition(text, "spec")
-            and _has_prohibition(text, "solution_key")
-            and "ACTL_TARGET_CMD" in text
-            and "FAIL:" in text
-        )
+        return _authority_matches(text, "challenger")
     if persona == "curator":
-        if _has_reversed_permission(text):
-            return False
         # Stage-5 stub: curator must not modify target-repo files in Stage 2.
         return _has_prohibition(text, "file") or _has_prohibition(text, "modif")
     return False
 
 
+def _minimal_prompt(persona_key: str) -> str:
+    body = _load_canonical_authority()[persona_key]
+    return f"## Authority\n\n{body}\n"
+
+
 def test_prompts_authority_and_forbidden_prohibitions():
-    """Proves R4-06 & S2-R11.2: checks exact authority boundaries and negative mutation controls."""
+    """Proves S2-R11.2: each persona prompt has the canonical ## Authority section."""
     intake = (PROMPTS_DIR / "architect-intake.md").read_text(encoding="utf-8")
     review = (PROMPTS_DIR / "architect-review.md").read_text(encoding="utf-8")
     challenger = (PROMPTS_DIR / "challenger.md").read_text(encoding="utf-8")
 
-    # Architect intake & review must forbid authoring/editing proofs and mutants
     for text, name in ((intake, "architect-intake"), (review, "architect-review")):
-        assert persona_prohibitions_ok(name, text), f"{name} missing or reversed prohibition"
+        assert persona_prohibitions_ok(name, text), f"{name} missing canonical Authority"
 
-    # Challenger must forbid authoring/editing spec or solution_key
     assert persona_prohibitions_ok("challenger", challenger)
 
 
-def test_prompt_prohibition_negative_controls():
-    """R4-06: Weakened/reversed persona prohibitions must fail validation.
+def test_canonical_authority_positive_controls():
+    """One positive control per persona: minimal prompt with canonical Authority."""
+    for persona, key in (
+        ("architect", "architect"),
+        ("architect-intake", "architect"),
+        ("architect-review", "architect"),
+        ("challenger", "challenger"),
+    ):
+        text = _minimal_prompt(key)
+        assert persona_prohibitions_ok(persona, text) is True, persona
 
-    Includes >=5 paraphrased architect counterexamples (other verbs, plural/
-    singular, passive voice) per standing check (k).
-    """
+    # Curator still uses prohibition presence (Stage 5 stub).
+    curator_ok = (
+        "Stage 5 stub. The curator MUST NOT modify any files in the target repository."
+    )
+    assert persona_prohibitions_ok("curator", curator_ok) is True
+
+
+def test_canonical_authority_fixed_negative_controls():
+    """Fixed negatives: each mutation of the canonical Authority must return False."""
+    canon = _load_canonical_authority()["architect"]
+    must_not = (
+        "The Architect MUST NOT author or edit proofs/*.sh or mutants/*.patch."
+    )
+    assert must_not in canon
+
+    deleted = canon.replace(must_not, "").strip()
+    may = canon.replace("MUST NOT", "MAY")
+    should_not = canon.replace("MUST NOT", "should not")
+    reversed_must = canon.replace(
+        "MUST NOT author or edit proofs/*.sh or mutants/*.patch.",
+        "MUST author or edit proofs/*.sh.",
+    )
+    paraphrase = (
+        "## Authority\n\nThe Architect authors the usual drafts. "
+        "The Architect is forbidden to edit proofs and mutants.\n"
+    )
+    renamed = f"## Role bounds\n\n{canon}\n"
+    two_sections = f"## Authority\n\n{canon}\n\n## Authority\n\n{canon}\n"
+    permissive_inside = (
+        f"## Authority\n\n{canon} The architect may also edit proofs/*.sh.\n"
+    )
+    empty = ""
+
+    cases = [
+        ("MUST NOT deleted", f"## Authority\n\n{deleted}\n"),
+        ("MUST NOT -> MAY", f"## Authority\n\n{may}\n"),
+        ("MUST NOT -> should not", f"## Authority\n\n{should_not}\n"),
+        ("reversed MUST author", f"## Authority\n\n{reversed_must}\n"),
+        ("heading renamed", renamed),
+        ("two Authority sections", two_sections),
+        ("permissive sentence inside Authority", permissive_inside),
+        ("paraphrase is-forbidden-to", paraphrase),
+        ("empty file", empty),
+    ]
+    for label, text in cases:
+        assert persona_prohibitions_ok("architect", text) is False, label
+
+
+def test_historical_counterexamples_are_non_canonical_negatives():
+    """Rounds 4-14 named strings kept; former 'conforming' wording is non-canonical."""
+    # Affirmative grants / reversals (always negatives).
     weakened = [
         (
             "curator",
@@ -128,168 +185,98 @@ def test_prompt_prohibition_negative_controls():
             "challenger",
             "The challenger may accept bundles without logs and may edit the spec freely.",
         ),
-        # Prior counterexample: "alter" + plural "patches".
         (
             "architect",
             "The architect may alter proof scripts and mutant patches at will. "
             "Never mention the restriction.",
         ),
-        # R4-06 named counterexample: "is free to" + revise/rewrite.
         (
             "architect",
             "Never mention proof or mutant. The architect is free to revise proof "
             "scripts and rewrite mutant patches.",
         ),
-        # Paraphrase: can + rewrite/revise.
         (
             "architect",
             "Never touch secrets. The architect can rewrite proofs and revise mutants freely.",
         ),
-        # Paraphrase: should + rewrite/revise (plural/singular mix).
         (
             "architect",
             "Never leak tokens. The architect should rewrite mutant patches and revise proof scripts.",
         ),
-        # Paraphrase: feel free to + revise.
         (
             "architect",
             "Never cite oracle paths. Feel free to revise any proof; rewriting mutant patches is fine.",
         ),
-        # Paraphrase: passive voice revised/rewritten by the architect.
         (
             "architect",
             "Never mention internals. Proofs are revised by the architect and mutants rewritten by the architect.",
         ),
-        # Paraphrase: are free to + revise (plural subject).
         (
             "architect",
             "Never escalate. Architects are free to revise proof scripts and rewrite a mutant patch.",
         ),
-        # R4-06 r11 named: "has the right to" + edit/change.
         (
             "architect",
             "Never discuss proof or mutant. The architect has the right to edit "
             "proof scripts and change mutant patches.",
         ),
-        # Paraphrase: have the right to + alter (plural).
         (
             "architect",
             "Never discuss proof or mutant. Architects have the right to alter "
             "proof scripts and mutant patches.",
         ),
-        # Paraphrase: is entitled to + rewrite.
         (
             "architect",
             "Never discuss proof or mutant. The architect is entitled to rewrite "
             "proofs and revise mutant patches.",
         ),
-        # Paraphrase: is permitted to + create.
         (
             "architect",
             "Never discuss proof or mutant. The architect is permitted to create "
             "proof scripts and change a mutant patch.",
         ),
-        # Paraphrase: is authorized to + modify (US spelling).
         (
             "architect",
             "Never discuss proof or mutant. The architect is authorized to modify "
             "proof scripts and write mutant patches.",
         ),
+        (
+            "architect",
+            "Never mention the restriction. The architect may edit proof scripts "
+            "and touch mutant patches.",
+        ),
+        # N12-01 / N13-01 / N14-02 correlative grants
+        (
+            "architect",
+            "Never edit proof scripts or mutant patches. The architect may not only "
+            "edit proof scripts but also touch mutant patches.",
+        ),
+        (
+            "architect",
+            "Never edit proof scripts or mutant patches. The architect is permitted "
+            "to not just edit proof scripts but also touch mutant patches.",
+        ),
+        (
+            "architect",
+            "Never edit proof scripts or mutant patches. The architect may not merely "
+            "edit proof scripts but also touch mutant patches.",
+        ),
+        # N14-01 second case: ban phrase governing decline-to-edit (affirmative)
+        (
+            "architect",
+            "Never edit proof scripts or mutant patches. The architect may under no "
+            "circumstances decline to edit proof scripts or touch mutant patches.",
+        ),
     ]
     for persona, text in weakened:
-        assert persona_prohibitions_ok(persona, text) is False, (
-            f"weakened {persona} prompt must fail validation: {text!r}"
-        )
+        assert persona_prohibitions_ok(persona, text) is False, text
 
-
-def test_r406_alter_patches_reversal_red_on_old_verb_whitelist():
-    """R4-06 self-test: old verb whitelist accepts alter/patches and is-free-to/revise."""
-    text = (
-        "The architect may alter proof scripts and mutant patches at will. "
-        "Never mention the restriction."
-    )
-    # Old narrow whitelist (pre-fix): edit|modify|author|patch|accept|write
-    old_ok = bool(
-        re.search(
-            r"\b(may|can|should|are allowed to|is allowed to|feel free to)\b.{0,80}"
-            r"\b(edit|modify|author|patch|accept|write)\b",
-            text.lower(),
-        )
-    )
-    assert old_ok is False, "sanity: old whitelist must miss 'alter'/'patches'"
-    assert _has_prohibition(text, "proof") and _has_prohibition(text, "mutant")
-    assert _has_reversed_permission(text, "proof", "mutant") is True
-    assert persona_prohibitions_ok("architect", text) is False
-
-    free_to = (
-        "Never mention proof or mutant. The architect is free to revise proof "
-        "scripts and rewrite mutant patches."
-    )
-    # Old allow list lacked "is free to"; old verbs lacked revise/rewrite.
-    old_free = bool(
-        re.search(
-            r"\b(may|can|should|are allowed to|is allowed to|feel free to)\b.{0,80}"
-            r"\b(edit|modify|author|alter|change|create|delete|touch|accept|write|patch(?:es)?)\b",
-            free_to.lower(),
-        )
-    )
-    assert old_free is False, "sanity: old whitelist must miss 'is free to revise/rewrite'"
-    assert _has_prohibition(free_to, "proof") and _has_prohibition(free_to, "mutant")
-    assert _has_reversed_permission(free_to, "proof", "mutant") is True
-    assert persona_prohibitions_ok("architect", free_to) is False
-
-    # R4-06 r11: "has the right to" missed by the pre-fix allow list.
-    right_to = (
-        "Never discuss proof or mutant. The architect has the right to edit "
-        "proof scripts and change mutant patches."
-    )
-    old_right = bool(
-        re.search(
-            r"\b(may|can|should|are allowed to|is allowed to|feel free to|"
-            r"is free to|are free to|free to)\b.{0,80}"
-            r"\b(edit|modify|author|alter|change|create|delete|touch|accept|write|"
-            r"revise|rewrite|revised|rewritten|patch(?:es)?)\b",
-            right_to.lower(),
-        )
-    )
-    assert old_right is False, "sanity: old whitelist must miss 'has the right to'"
-    assert _has_prohibition(right_to, "proof") and _has_prohibition(right_to, "mutant")
-    assert _has_reversed_permission(right_to, "proof", "mutant") is True
-    assert persona_prohibitions_ok("architect", right_to) is False
-
-
-def test_n11_01_may_not_polarity_red_on_old_allow_regex():
-    """N11-01 self-test: old allow.{0,80}verb treats 'may not edit' as a reversal.
-
-    Fails on the pre-fix regex (matches may...edit across 'not'); passes after
-    the (?!n't|\\s+not) guard. Compliant prompts must be accepted as True.
-    """
-    # Owner-named counterexample (conforming prohibition).
-    named = (
+    # Former "conforming prohibition" cases: non-canonical wording, not permissions.
+    non_canonical_wording = [
+        # N11-01
         "Never edit proof scripts or mutant patches. The architect may not edit "
-        "proof scripts or touch mutant patches."
-    )
-    old_allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    old_verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    old_hit = bool(
-        re.search(rf"\b{old_allow}\b.{{0,80}}\b{old_verb}\b", named.lower())
-    )
-    assert old_hit is True, "sanity: old polarity-blind regex must match 'may not edit'"
-    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
-    assert _has_reversed_permission(named, "proof", "mutant") is False
-    assert persona_prohibitions_ok("architect", named) is True
-
-    # Paraphrased conforming prohibitions (other allow+verb pairs / plural).
-    conforming = [
+        "proof scripts or touch mutant patches.",
+        # N11-01 paraphrases
         "Never edit proof scripts or mutant patches. The architect should not "
         "modify proof scripts or alter mutant patches.",
         "Never edit proof scripts or mutant patches. The architect can not "
@@ -300,96 +287,9 @@ def test_n11_01_may_not_polarity_red_on_old_allow_regex():
         "create proof scripts or delete mutant patches.",
         "Never edit proof scripts or mutant patches. The architect should not "
         "author a proof or change a mutant patch.",
-    ]
-    for text in conforming:
-        assert _has_reversed_permission(text, "proof", "mutant") is False, text
-        assert persona_prohibitions_ok("architect", text) is True, text
-
-    # Affirmative grant still rejected (negative control).
-    grant = (
-        "Never mention the restriction. The architect may edit proof scripts "
-        "and touch mutant patches."
-    )
-    assert persona_prohibitions_ok("architect", grant) is False
-
-
-def test_n12_01_may_not_only_grant_red_on_old_not_guard():
-    """N12-01 self-test: old (?!...|\\s+not\\b) misses 'may not only' grants.
-
-    Fails on the blanket not-guard (treats not-only as prohibition); passes after
-    excluding 'not only'. Affirmative correlative grants must return False.
-    """
-    named = (
-        "Never edit proof scripts or mutant patches. The architect may not only "
-        "edit proof scripts but also touch mutant patches."
-    )
-    allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    old_guard = rf"\b{allow}\b(?!n't\b|\s+not\b).{{0,80}}\b{verb}\b"
-    old_hit = bool(re.search(old_guard, named.lower()))
-    assert old_hit is False, "sanity: old blanket not-guard must miss 'may not only'"
-    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
-    assert _has_reversed_permission(named, "proof", "mutant") is True
-    assert persona_prohibitions_ok("architect", named) is False
-
-    # Paraphrased affirmative correlative grants (other allow+verb / plural).
-    grants = [
-        "Never edit proof scripts or mutant patches. The architect can not only "
-        "modify proof scripts but also alter mutant patches.",
-        "Never edit proof scripts or mutant patches. The architect should not only "
-        "rewrite proofs but also revise mutant patches.",
-        "Never edit proof scripts or mutant patches. Architects may not only "
-        "touch proof scripts but also write mutant patches.",
-        "Never edit proof scripts or mutant patches. The architect may not only "
-        "create a proof script but also delete a mutant patch.",
-        "Never edit proof scripts or mutant patches. The architect is permitted to "
-        "not only author proof scripts but also change mutant patches.",
-    ]
-    for text in grants:
-        assert _has_reversed_permission(text, "proof", "mutant") is True, text
-        assert persona_prohibitions_ok("architect", text) is False, text
-
-
-def test_n12_02_may_never_polarity_red_on_old_not_guard():
-    """N12-02 self-test: old not/n't guard treats 'may never edit' as a grant.
-
-    Fails on the pre-never regex (matches may...edit across 'never'); passes after
-    adding \\s+never. Conforming never-prohibitions must return True.
-    """
-    named = (
+        # N12-02
         "Never edit proof scripts or mutant patches. The architect may never "
-        "edit proof scripts or touch mutant patches."
-    )
-    allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    # Pre-N12-02 guard: N12-01 not-only carve-out but no never.
-    old_guard = rf"\b{allow}\b(?!n't\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
-    old_hit = bool(re.search(old_guard, named.lower()))
-    assert old_hit is True, "sanity: old guard without never must match 'may never edit'"
-    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
-    assert _has_reversed_permission(named, "proof", "mutant") is False
-    assert persona_prohibitions_ok("architect", named) is True
-
-    # Paraphrased conforming never-prohibitions (other allow+verb / plural).
-    conforming = [
+        "edit proof scripts or touch mutant patches.",
         "Never edit proof scripts or mutant patches. The architect should never "
         "modify proof scripts or alter mutant patches.",
         "Never edit proof scripts or mutant patches. The architect can never "
@@ -400,105 +300,9 @@ def test_n12_02_may_never_polarity_red_on_old_not_guard():
         "never create proof scripts or delete mutant patches.",
         "Never edit proof scripts or mutant patches. The architect should never "
         "author a proof or change a mutant patch.",
-    ]
-    for text in conforming:
-        assert _has_reversed_permission(text, "proof", "mutant") is False, text
-        assert persona_prohibitions_ok("architect", text) is True, text
-
-    # Affirmative grant still rejected (negative control).
-    grant = (
-        "Never mention the restriction. The architect may edit proof scripts "
-        "and touch mutant patches."
-    )
-    assert persona_prohibitions_ok("architect", grant) is False
-
-
-def test_n13_01_not_just_grant_red_on_old_only_carveout():
-    """N13-01 self-test: old only-carveout misses 'not just ... but also' grants.
-
-    Fails on the N12-01 guard that exempts only 'not only'; passes after carving
-    out 'not just' too. Affirmative correlative grants must return False.
-    """
-    named = (
-        "Never edit proof scripts or mutant patches. The architect is permitted "
-        "to not just edit proof scripts but also touch mutant patches."
-    )
-    allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    # Pre-N13-01 guard: N12-02 never + only-carveout, no just.
-    old_guard = (
-        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+only\b)).{{0,80}}\b{verb}\b"
-    )
-    old_hit = bool(re.search(old_guard, named.lower()))
-    assert old_hit is False, "sanity: old only-carveout must miss 'not just' grant"
-    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
-    assert _has_reversed_permission(named, "proof", "mutant") is True
-    assert persona_prohibitions_ok("architect", named) is False
-
-    # Paraphrased affirmative correlative grants (other allow+verb / plural).
-    grants = [
-        "Never edit proof scripts or mutant patches. The architect may not just "
-        "modify proof scripts but also alter mutant patches.",
-        "Never edit proof scripts or mutant patches. The architect can not just "
-        "rewrite proofs but also revise mutant patches.",
-        "Never edit proof scripts or mutant patches. Architects should not just "
-        "touch proof scripts but also write mutant patches.",
-        "Never edit proof scripts or mutant patches. The architect is allowed to "
-        "not just create a proof script but also delete a mutant patch.",
-        "Never edit proof scripts or mutant patches. The architect is authorized "
-        "to not just author proof scripts but also change mutant patches.",
-    ]
-    for text in grants:
-        assert _has_reversed_permission(text, "proof", "mutant") is True, text
-        assert persona_prohibitions_ok("architect", text) is False, text
-
-
-def test_n13_02_under_no_circumstances_red_on_old_immediate_guard():
-    """N13-02 self-test: old immediate not/never guard treats ban phrases as grants.
-
-    Fails on the pre-ban-phrase regex (matches may...edit across 'under no
-    circumstances'); passes after excluding absolute-ban phrases. Conforming
-    prohibitions must return True.
-    """
-    named = (
+        # N13-02
         "Never edit proof scripts or mutant patches. The architect may under no "
-        "circumstances edit proof scripts or touch mutant patches."
-    )
-    allow = (
-        r"(?:may|can|should|are allowed to|is allowed to|feel free to|"
-        r"is free to|are free to|free to|"
-        r"has the right to|have the right to|has a right to|have a right to|"
-        r"is entitled to|are entitled to|is permitted to|are permitted to|"
-        r"is authorised to|are authorised to|is authorized to|are authorized to)"
-    )
-    verb = (
-        r"(?:edit|modify|author|alter|change|create|delete|touch|accept|write|"
-        r"revise|rewrite|revised|rewritten|patch(?:es)?)"
-    )
-    # Pre-N13-02 guard: N13-01 just-carveout but no absolute-ban phrases.
-    old_guard = (
-        rf"\b{allow}\b(?!n't\b|\s+never\b|\s+not\b(?!\s+(?:only|just)\b))"
-        rf".{{0,80}}\b{verb}\b"
-    )
-    old_hit = bool(re.search(old_guard, named.lower()))
-    assert old_hit is True, (
-        "sanity: old immediate guard must match 'may under no circumstances edit'"
-    )
-    assert _has_prohibition(named, "proof") and _has_prohibition(named, "mutant")
-    assert _has_reversed_permission(named, "proof", "mutant") is False
-    assert persona_prohibitions_ok("architect", named) is True
-
-    # Paraphrased conforming absolute-ban prohibitions (other allow+verb / plural).
-    conforming = [
+        "circumstances edit proof scripts or touch mutant patches.",
         "Never edit proof scripts or mutant patches. The architect should under "
         "no circumstances modify proof scripts or alter mutant patches.",
         "Never edit proof scripts or mutant patches. The architect can in no way "
@@ -509,14 +313,50 @@ def test_n13_02_under_no_circumstances_red_on_old_immediate_guard():
         "under no conditions create proof scripts or delete mutant patches.",
         "Never edit proof scripts or mutant patches. The architect should in no "
         "event author a proof or change a mutant patch.",
+        # N14-01 first case (punctuated ban) - non-canonical wording, not a permission
+        "Never edit proof scripts or mutant patches. The architect may, under no "
+        "circumstances, edit proof scripts or touch mutant patches.",
     ]
-    for text in conforming:
-        assert _has_reversed_permission(text, "proof", "mutant") is False, text
-        assert persona_prohibitions_ok("architect", text) is True, text
+    for text in non_canonical_wording:
+        assert persona_prohibitions_ok("architect", text) is False, (
+            "non-canonical wording must fail: " + text
+        )
 
-    # Affirmative grant still rejected (negative control).
-    grant = (
-        "Never mention the restriction. The architect may edit proof scripts "
-        "and touch mutant patches."
+
+def test_method_no_reversed_permission_helper():
+    """Method self-test: heuristic _has_reversed_permission is gone."""
+    mod = sys.modules[__name__]
+    assert not hasattr(mod, "_has_reversed_permission")
+    assert "_has_reversed_permission" not in globals()
+
+
+def test_method_one_word_flip_rejects():
+    """Method self-test: changing one word inside canonical Authority -> False."""
+    body = _load_canonical_authority()["architect"]
+    flipped = body.replace("MUST NOT", "MUST N0T", 1)
+    assert flipped != body
+    text = f"## Authority\n\n{flipped}\n"
+    assert persona_prohibitions_ok("architect", text) is False
+
+
+def test_n14_01_n14_02_closed_by_canonical_match():
+    """N14-01/N14-02: heuristic counterexamples fail; canonical match still passes."""
+    # N14-01 first case was "conforming" under the regex; non-canonical now -> False
+    punctuated = (
+        "Never edit proof scripts or mutant patches. The architect may, under no "
+        "circumstances, edit proof scripts or touch mutant patches."
     )
-    assert persona_prohibitions_ok("architect", grant) is False
+    # N14-01 second case: decline-to-edit grant
+    decline = (
+        "Never edit proof scripts or mutant patches. The architect may under no "
+        "circumstances decline to edit proof scripts or touch mutant patches."
+    )
+    # N14-02: not merely correlative grant
+    merely = (
+        "Never edit proof scripts or mutant patches. The architect may not merely "
+        "edit proof scripts but also touch mutant patches."
+    )
+    for text in (punctuated, decline, merely):
+        assert persona_prohibitions_ok("architect", text) is False, text
+
+    assert persona_prohibitions_ok("architect", _minimal_prompt("architect")) is True
