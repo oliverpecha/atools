@@ -104,10 +104,11 @@ def _assert_repair_entry_structure(
         detail_s = str(detail)
         nums = re.findall(r"\d+", detail_s)
         assert nums, f"{code}: detail must contain candidate line number(s)"
-        # Every candidate line from detail must appear (one number is not enough for MULTI).
+        # Every candidate line from detail must appear as a whole number
+        # (substring "12" in "112" / "19" in "190" must not pass).
         for n in nums:
-            assert n in repair_text, (
-                f"{code}: candidate line {n} from detail missing in repair.txt"
+            assert re.search(rf"(?<!\d){re.escape(n)}(?!\d)", repair_text), (
+                f"{code}: candidate line {n} from detail missing as whole number in repair.txt"
             )
         if code == "E_SEARCH_MULTI":
             assert len(nums) >= 2, f"{code}: detail must list at least two candidate lines"
@@ -118,18 +119,17 @@ def _assert_repair_entry_structure(
             body_wo_codes = body_wo_codes.replace(c, "")
         snippets = _search_snippets_from_response(response_text or "")
         if snippets:
-            found_snip = False
+            # Every substantial SEARCH line must appear (one line of a multi-line
+            # hunk is not enough).
             for snip in snippets:
-                for line in snip.splitlines():
-                    s = line.strip()
-                    if len(s) >= 3 and s in repair_text:
-                        found_snip = True
-                        break
-                if found_snip:
-                    break
-            assert found_snip, (
-                f"{code}: offending SEARCH snippet text from response missing in repair.txt"
-            )
+                substantial = [ln.strip() for ln in snip.splitlines() if len(ln.strip()) >= 3]
+                assert substantial, (
+                    f"{code}: SEARCH hunk from response has no substantial lines"
+                )
+                for s in substantial:
+                    assert s in repair_text, (
+                        f"{code}: SEARCH line {s!r} from response missing in repair.txt"
+                    )
         else:
             assert re.search(r"(?i)(?<!E_)search\s*[:\n]", body_wo_codes) or "<<<<<<<" in repair_text, (
                 f"{code}: offending SEARCH snippet missing from repair.txt"
@@ -178,6 +178,35 @@ def test_repair_structure_rejects_code_only_renderer():
         _assert_repair_entry_structure(
             "E_SEARCH_MULTI", multi_fake, multi_err, response_text=resp
         )
+
+    # R4-04 r11: substring "12"/"19" inside "112"/"190" plus only one SEARCH line
+    # must not pass (old membership + any-one-line checks were green).
+    multi_substr = (
+        "1. E_SEARCH_MULTI\n"
+        "path: api/users.py\n"
+        "message: ambiguous match\n"
+        "candidate lines: 112, 190\n"
+        "common source line\n"
+    )
+    resp_multi = (
+        "<<<<<<< SEARCH\n"
+        "common source line\n"
+        "second distinct line\n"
+        "=======\n"
+        "replacement\n"
+        ">>>>>>> REPLACE\n"
+    )
+    with pytest.raises(AssertionError):
+        _assert_repair_entry_structure(
+            "E_SEARCH_MULTI",
+            multi_substr,
+            multi_err,
+            response_text=resp_multi,
+        )
+    # Sanity: old substring membership would accept 12/19 via 112/190.
+    assert "12" in multi_substr and "19" in multi_substr
+    assert not re.search(r"(?<!\d)12(?!\d)", multi_substr)
+    assert not re.search(r"(?<!\d)19(?!\d)", multi_substr)
 
 
 def test_confidentiality_error_codes_canary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
