@@ -112,13 +112,68 @@ def test_courier_stamp_rejects_bad_prefix():
     ) is None
 
 
-def test_s2_r34_proposal_filename_contract():
-    """R4-01: Both sprint-proposal.toml and sprint.toml accepted; others rejected."""
-    from actl import turns
+_SPRINT_PROPOSAL_BODY = (
+    'live_run = "none"\n'
+    'approval_live_run = "architect"\n'
+    'solution_key_exposure = "full"\n'
+    "min_attempts_before_block = 2\n"
+    "max_epochs = 3\n"
+    "\n"
+    "[max_attempts]\n"
+    "oracle = 3\n"
+    "implementer = 2\n"
+    "live = 2\n"
+    "curator = 2\n"
+    "\n"
+    "[hard_cap.implementer]\n"
+    'wall_clock = "45m"\n'
+    "turns = 60\n"
+)
+
+def test_s2_r34_proposal_filename_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """R4-01: Both sprint-proposal.toml and sprint.toml accepted; others rejected.
+
+    Drives unpack once with an invalid policy filename so a helper-only
+    is_valid_proposal_filename stub cannot be the sole coverage (standing i).
+    """
+    import json
+
+    try:
+        from actl import turns
+        from actl import cli
+        import actl.unpack  # noqa: F401
+    except ImportError as e:
+        pytest.fail(f"FAIL: S2-R3.4: actl.turns/unpack missing: {e}")
     for v in ("sprint-proposal.toml", "sprint.toml"):
         assert turns.is_valid_proposal_filename(v) is True
     for inv in ("sprint_proposal.toml", "proposal.toml", "sprint.yaml", "sprint.json"):
         assert turns.is_valid_proposal_filename(inv) is False
+
+    layout = _setup_sprint(tmp_path)
+    monkeypatch.setenv("ACTL_ROOT", str(layout.root))
+    turn_dir = layout.turns_dir(TAG) / "architect-1"
+    key_body = (GOLDEN_DIR / "sprint" / "solution_key.patch").read_text(encoding="utf-8")
+    payload = (
+        '<<<FILE path="sprint_proposal.toml">>>\n'
+        f"{_SPRINT_PROPOSAL_BODY}"
+        "<<<END_FILE>>>\n"
+        f'<<<FILE path="solution_key.patch">>>\n{key_body}<<<END_FILE>>>\n'
+        '<<<FILE path="spec-draft.md">>>\n# draft\n<<<END_FILE>>>\n'
+        '<<<END_RESPONSE bundle="1f13e141">>>\n'
+    )
+    inp = tmp_path / "r34_bad_name.txt"
+    inp.write_text(payload, encoding="utf-8")
+    rc = cli.main([
+        "unpack", "architect-intake", "--sprint", TAG, "--turn", "architect-1",
+        "-f", str(inp), "--json",
+    ])
+    assert rc == 2
+    doc = json.loads((turn_dir / "unpack.json").read_text(encoding="utf-8"))
+    # Invalid policy name is not an accepted alias; unpack must not succeed.
+    assert doc.get("ok") is False
+    assert doc["errors"], "expected at least one unpack error for invalid policy filename"
 
 
 def _architect_intake_required_status(output_names: set[str]) -> str | None:
@@ -139,24 +194,6 @@ def _architect_intake_required_status(output_names: set[str]) -> str | None:
         return "E_MISSING_REQUIRED"
     return None
 
-
-_SPRINT_PROPOSAL_BODY = (
-    'live_run = "none"\n'
-    'approval_live_run = "architect"\n'
-    'solution_key_exposure = "full"\n'
-    "min_attempts_before_block = 2\n"
-    "max_epochs = 3\n"
-    "\n"
-    "[max_attempts]\n"
-    "oracle = 3\n"
-    "implementer = 2\n"
-    "live = 2\n"
-    "curator = 2\n"
-    "\n"
-    "[hard_cap.implementer]\n"
-    'wall_clock = "45m"\n'
-    "turns = 60\n"
-)
 
 
 def test_s2_r34_alias_only_and_conflict_policy_outputs(
