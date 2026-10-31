@@ -1,0 +1,11 @@
+{
+  "turn_id": "challenger-1",
+  "role": "challenger",
+  "purpose": "challenger",
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "solution_key_sha256": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2",
+  "files": [],
+  "bundle_sha256": "b7eb659a2c0a68dc9aa0dab2683181072d89b7ac582f140cb4abd6244a2215ad",
+  "created": "2026-10-16T00:00:00+00:00",
+  "model_hint": "auto"
+}

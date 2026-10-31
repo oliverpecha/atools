@@ -1,0 +1,4 @@
+<<<FILE path="oracle-decision.json">>>
+{"decision": invalid_json
+<<<END_FILE>>>
+<<<END_RESPONSE bundle="06784a4e">>>

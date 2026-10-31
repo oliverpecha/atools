@@ -1,0 +1,7 @@
+<<<FILE path="oracle-decision.json">>>
+{
+  "decision": "revise_oracle",
+  "feedback": "Avatar check needs tightening."
+}
+<<<END_FILE>>>
+<<<END_RESPONSE bundle="06784a4e">>>

@@ -1,0 +1,6 @@
+# Turn challenger-1 prompt bundle
+role: challenger
+purpose: challenger
+base_sha: 01d880bc3176cdd8f31d72e67bb3eba54d634378
+sprint_tag: 2026-10-16_public-profiles
+<<<END_RESPONSE bundle="b7eb659a">>>

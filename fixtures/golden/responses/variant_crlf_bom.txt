@@ -1,0 +1,7 @@
+﻿<<<FILE path="oracle-decision.json">>>
+{
+  "decision": "lock_oracle",
+  "feedback": "All requirements verified."
+}
+<<<END_FILE>>>
+<<<END_RESPONSE bundle="06784a4e">>>

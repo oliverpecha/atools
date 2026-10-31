@@ -1,0 +1,24 @@
+<<<FILE path="sprint.toml">>>
+live_run = "none"
+approval_live_run = "architect"
+solution_key_exposure = "full"
+min_attempts_before_block = 2
+max_epochs = 3
+
+[max_attempts]
+oracle = 3
+implementer = 2
+live = 2
+curator = 2
+
+[hard_cap.implementer]
+wall_clock = "45m"
+turns = 60
+<<<END_FILE>>>
+<<<PATCH out="solution_key.patch" file="api/users.py" new="true">>>
+<<<<<<< SEARCH
+=======
+new_content = 1
+>>>>>>> REPLACE
+<<<END_PATCH>>>
+<<<END_RESPONSE bundle="1f13e141">>>

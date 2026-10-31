@@ -1,0 +1,11 @@
+{
+  "turn_id": "architect-2",
+  "role": "architect",
+  "purpose": "architect-review",
+  "base_sha": "01d880bc3176cdd8f31d72e67bb3eba54d634378",
+  "solution_key_sha256": "4269a285f1b73b03c46cfa6152731112cd00d15bffc81bdda7916063a02893b2",
+  "files": [],
+  "bundle_sha256": "06784a4e9e1bbe9b2b89ee71b883f283aa68895fc27975a5960a222299fea557",
+  "created": "2026-10-16T00:00:00+00:00",
+  "model_hint": "auto"
+}
